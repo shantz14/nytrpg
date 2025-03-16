@@ -1,0 +1,26 @@
+* {
+	margin: 0px;
+	padding: 0px;
+	box-sizing: border-box;
+}
+
+html, body {
+    overflow: hidden;
+    image-rendering: pixelated;
+}
+
+#container {
+    image-rendering: pixelated;
+}
+
+#canvas-container {
+    height: 100%;
+    width: 100%;
+    align-self: center;
+}
+
+canvas {
+    position: absolute;
+    user-select: none;
+	touch-action: none;
+}
