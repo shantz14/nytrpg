@@ -1,4 +1,4 @@
-import { Vector2D } from "./vector2d.js"
+import { Vector2D } from "./vector2D.js"
 
 export class GameState {
     charVec: Vector2D;

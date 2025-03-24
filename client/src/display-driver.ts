@@ -1,5 +1,5 @@
 import { GameState } from "./game-objects.js";
-import { Vector2D } from "./vector2d.js";
+import { Vector2D } from "./vector2D.js";
 
 export class DisplayDriver {
     ctx: CanvasRenderingContext2D;
