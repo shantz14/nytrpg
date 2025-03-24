@@ -1,12 +1,20 @@
 import { GameState } from "./game-objects.js";
+import { Vector2D } from "./vector2d.js";
 
 export class DisplayDriver {
     ctx: CanvasRenderingContext2D;
     canvas: HTMLCanvasElement;
+    state: GameState;
 
-    constructor(ctx: CanvasRenderingContext2D, state: GameState) {
+    constructor(ctx: CanvasRenderingContext2D, startState: GameState) {
         this.ctx = ctx;
         this.canvas = ctx.canvas;
+        
+        this.state = startState;
+
+        this.scaleCanvas();
+
+        this.draw();
     }
 
     public draw() {
@@ -21,7 +29,6 @@ export class DisplayDriver {
         const ctx = this.ctx;
 
         image.src = "./assets/background.jpg";
-        console.log("Loading the image");
         image.onload = function() {
             ctx.drawImage(image, 0, 0);
         }
@@ -29,6 +36,19 @@ export class DisplayDriver {
     }
 
     private drawCharacter() {
+        const image = new Image();
+        const ctx = this.ctx;
 
+        const charVec = this.state.charVec;
+
+        image.src = "./assets/Skoobyuboo.png";
+        image.onload = function() {
+            ctx.drawImage(image, charVec.x, charVec.y);
+        }
+    }
+
+    private scaleCanvas() {
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
     }
 }
