@@ -1,31 +1,22 @@
+import { Vector2D } from "./vector2D.js";
 import { GameState } from "./game-objects.js";
 
 export class InputDriver {
     state: GameState;
+    keysPressed: Set<string>;
 
     constructor(state: GameState) {
         this.state = state;
+        this.keysPressed = new Set();
 
-        let key: string;
-        let me = this;
-        document.addEventListener('keydown', function(event) {
-            key = event.key;
-            me.handleKeyboardInput(key);
+        document.addEventListener('keydown', (event) => {
+            const key = event.key.toLowerCase();
+            this.keysPressed.add(key);
         });
-    }
 
-    private handleKeyboardInput(key: string) {
-        if (key.toLowerCase() == "w") {
-            this.state.charVec.y -= 15;
-        }
-        else if (key.toLowerCase() == "s") {
-            this.state.charVec.y += 15;
-        }
-        else if (key.toLowerCase() == "a") {
-            this.state.charVec.x -= 15;
-        }
-        else if (key.toLowerCase() == "d") {
-            this.state.charVec.x += 15;
-        }
+        document.addEventListener('keyup', (event) => {
+            const key = event.key.toLowerCase();
+            this.keysPressed.delete(key);
+        });
     }
 }
