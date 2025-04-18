@@ -3,13 +3,19 @@ import { InputDriver } from "./input-driver.js";
 import { GameState } from "./game-objects.js";
 import { Vector2D } from "./vector2D.js";
 
+const SERVER_URL = "http://localhost:8080/ws";
+
 export class Game {
+    sock: WebSocket;
     displayDriver: DisplayDriver;
     inputDriver: InputDriver;
     state: GameState;
 
     constructor(ctx: CanvasRenderingContext2D) {
         const canvas = ctx.canvas;
+
+        // WebSocket or WebSocketStream?
+        this.sock = new WebSocket(SERVER_URL);
 
         this.state = new GameState();
 
