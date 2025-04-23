@@ -16,7 +16,7 @@ func main() {
     static := http.Dir("client/static")
 
 	hub := newHub()
-	//go hub.run()
+	go hub.run()
 
     http.Handle("/", http.FileServer(static))
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {

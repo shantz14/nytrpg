@@ -1,19 +1,20 @@
 package main
 
 type Vector2D struct {
-	x, y float64
+	X float64 `msgpack:"x"`
+	Y float64 `msgpack:"y"`
 }
 
 func (vec Vector2D) add(otherVec Vector2D) {
-	vec.x += otherVec.x
-	vec.y += otherVec.y
+	vec.X += otherVec.X
+	vec.Y += otherVec.Y
 }
 
 func (vec Vector2D) subtract(otherVec Vector2D) {
-	vec.x -= otherVec.x
-	vec.y -= otherVec.y
+	vec.X -= otherVec.X
+	vec.Y -= otherVec.Y
 }
 
 func (vec Vector2D) equals(otherVec Vector2D) bool {
-	return (vec.x == otherVec.x && vec.y == otherVec.y)
+	return (vec.X == otherVec.X && vec.Y == otherVec.Y)
 }

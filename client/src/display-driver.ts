@@ -25,6 +25,7 @@ export class DisplayDriver {
 
         this.drawBackground();
         this.drawCharacter();
+        this.drawOtherChars();
     }
 
     private drawBackground() {
@@ -39,10 +40,21 @@ export class DisplayDriver {
     private drawCharacter() {
         const charVec = this.state.charVec;
 
-        const character = this.images.get("character") as HTMLImageElement;
+        const sprite = this.images.get("character") as HTMLImageElement;
 
-        if (character) {
-            this.ctx.drawImage(character, charVec.x, charVec.y);
+        if (sprite) {
+            this.ctx.drawImage(sprite, charVec.x, charVec.y);
+        }
+    }
+
+    private drawOtherChars() {
+        for (const id in this.state.otherChars) {
+            const charVec = this.state.otherChars[id].pos;
+            const sprite = this.images.get(String(id)) as HTMLImageElement;
+
+            if (sprite) {
+                this.ctx.drawImage(sprite, charVec.x, charVec.y);
+            }
         }
     }
 
@@ -57,7 +69,7 @@ export class DisplayDriver {
         this.loadImage("bg", "background.jpg");
     }
 
-    private loadImage(key: string, filename: string) {
+    public loadImage(key: string, filename: string) {
         const path: string = "./assets/" + filename;
 
         const image = new Image();

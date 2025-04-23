@@ -13,13 +13,10 @@ var upgrader = websocket.Upgrader{
 }
 
 type Player struct {
-	loc Vector2D
+	id int
 
 	conn *websocket.Conn
 
-	in chan[]byte
-
-	out chan[]byte
 }
 
 func handleWS(h *Hub, w http.ResponseWriter, r *http.Request) {
@@ -32,8 +29,12 @@ func handleWS(h *Hub, w http.ResponseWriter, r *http.Request) {
 	fmt.Println("New connection coming from: ", conn.RemoteAddr())
 
 	// Add new conn to set
-	newPlayer := Player{loc: Vector2D{x: 0, y:0}, conn: conn}
+	h.numPlayers += 1
+	newPlayer := Player{id: h.numPlayers, conn: conn}
 	h.players[&newPlayer] = true
+
+	// Add pos to gamestate
+	h.state.Players[newPlayer.id] = &PlayerData{ID: newPlayer.id, Pos: Vector2D{X: 0, Y: 0}}
 
 	go h.handlePlayer(&newPlayer)
 }
