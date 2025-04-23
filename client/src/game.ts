@@ -45,12 +45,17 @@ export class Game {
                 rawMsg = e.data;
             }
             const msg = decode(new Uint8Array(rawMsg)) as UpdateState;
-            console.log(msg);
 
             for (const id in msg.players) {
                 const newState = msg.players[id];
-                
-                this.state.otherChars[Number(id)] = structuredClone(newState);
+                if (newState.me) {
+                    // This is the players own data
+
+                } else {
+                    // Another players data
+                    this.state.otherChars[Number(id)] = structuredClone(newState);
+                }
+
             }
         }
     }

@@ -11,6 +11,9 @@ import (
 type PlayerData struct {
 	ID int `msgpack:"id"`
 	Pos Vector2D `msgpack:"pos"`
+	
+	// True when this is the data of the player being sent to
+	Me bool `msgpack:"me"`
 }
 
 type GameState struct {
@@ -62,16 +65,26 @@ func (h *Hub) handlePlayer(p *Player) {
 				fmt.Println("Error unpacking data: ", err)
 			}
 
-			// Assign their id, where SHOULD THIS be?
+			// Assign their id
 			inData.ID = p.id
 
-			// SEND TO IN CHAN
 			h.in <- inData
 		}
 
 		// Write
 		var outData GameState
 		outData = *h.state
+
+		// Set players own data ME flag
+		// TODO: Consolidate these 2 id values
+		outData.Players[p.id].Me = true
+		// SOMEWHERE all players are being set to Me
+		// TODO: Find where this is happening and remove this loop
+		for k := range outData.Players {
+			if k != p.id {
+				outData.Players[k].Me = false
+			}
+		}
 
 		outBuff, err := msgpack.Marshal(outData)
 		if err := p.conn.WriteMessage(websocket.BinaryMessage, outBuff); err != nil {
