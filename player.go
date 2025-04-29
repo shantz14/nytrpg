@@ -44,19 +44,30 @@ func handleWS(h *Hub, w http.ResponseWriter, r *http.Request) {
 	h.players[&newPlayer] = true
 
 	// Add pos to gamestate
-	h.state.Players[newPlayer.id] = &PlayerData{ID: newPlayer.id, Pos: Vector2D{X: 0, Y: 0}}
+	h.state.Players[newPlayer.id] = &PlayerData{ID: newPlayer.id, Pos: Vector2D{X: 0, Y: 0}, Me: false}
 
 	go newPlayer.handlePlayer(h)
 }
 
 func (p *Player) handlePlayer(h *Hub) {
+	// TODO Need to do more cleanup, remove from state and Players.  Probably 
+	// using chan because other threads may be accessing the data.
+	// Also need to remove the character on the client side.
+	defer func() {
+		p.conn.Close()
+	}()
+
 	updateInterval := time.Second / 30
 
 	for range time.Tick(updateInterval) {
 		// Read
 		_, inBuff, err := p.conn.ReadMessage() // No use for msg type yet
 		if err != nil {
-			fmt.Println("Error reading msg from player: ", err)
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				fmt.Println("Error reading msg from player: ", err)
+			}
+			break
+
 		} else {
 			var inData PlayerData
 			if err := msgpack.Unmarshal(inBuff, &inData); err != nil {
@@ -71,20 +82,32 @@ func (p *Player) handlePlayer(h *Hub) {
 
 		// Write
 		var outData GameState
-		outData = *h.state
+		outData.Players = make(map[int]*PlayerData)
 
-		// Set players own data ME flag
-		// TODO: Consolidate these 2 id values
-		outData.Players[p.id].Me = true
-		// SOMEWHERE all players are being set to Me
-		// TODO: Find where this is happening and remove this loop
-		for k := range outData.Players {
-			if k != p.id {
-				outData.Players[k].Me = false
+		// TODO: I think just making one new PlayerData and swapping just that reference in outData would be better
+		for id, player := range h.state.Players {
+			var newPlayer PlayerData
+			newPlayer.ID = id
+			newPlayer.Pos = player.Pos
+
+			if (id == p.id) {
+				newPlayer.Me = true
+			} else {
+				newPlayer.Me = false
 			}
+
+			outData.Players[id] = &newPlayer
 		}
+		
+		// Set players own data ME flag
+		// TODO: Maybe Consolidate these 2 id values
+		outData.Players[p.id].Me = true
 
 		outBuff, err := msgpack.Marshal(outData)
+		if err != nil {
+			fmt.Println("Error encoding: ", err)
+		}
+
 		if err := p.conn.WriteMessage(websocket.BinaryMessage, outBuff); err != nil {
 			fmt.Println("Error writing msg to player: ", err)
 		}

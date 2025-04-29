@@ -35,6 +35,7 @@ func (h *Hub) run() {
 		// Update server state
 		h.state.Players[inData.ID].Pos.X = inData.Pos.X
 		h.state.Players[inData.ID].Pos.Y = inData.Pos.Y
+		h.state.Players[inData.ID].ID = inData.ID
 	}
 }
 

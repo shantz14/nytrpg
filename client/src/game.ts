@@ -32,7 +32,7 @@ export class Game {
         setInterval(() => {
             this.loadOtherCharSprites();
             this.update();
-        }, 33);
+        }, 34);
     }
 
     private handleMsgs() {
@@ -48,6 +48,7 @@ export class Game {
 
             for (const id in msg.players) {
                 const newState = msg.players[id];
+                console.log(newState.me)
                 if (newState.me) {
                     // This is the players own data
 
@@ -77,6 +78,7 @@ export class Game {
 
         this.move();
         this.displayDriver.draw();
+
     }
 
     private move() {
