@@ -39,8 +39,8 @@ func handleWS(h *Hub, w http.ResponseWriter, r *http.Request) {
 	fmt.Println("New connection coming from: ", conn.RemoteAddr())
 
 	// Add new conn to set
-	h.numPlayers += 1
-	newPlayer := Player{id: h.numPlayers, conn: conn}
+	h.currentID += 1
+	newPlayer := Player{id: h.currentID, conn: conn}
 	h.players[&newPlayer] = true
 
 	// Add pos to gamestate
@@ -50,10 +50,8 @@ func handleWS(h *Hub, w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Player) handlePlayer(h *Hub) {
-	// TODO Need to do more cleanup, remove from state and Players.  Probably 
-	// using chan because other threads may be accessing the data.
-	// Also need to remove the character on the client side.
 	defer func() {
+		h.unregister <- p
 		p.conn.Close()
 	}()
 
@@ -63,7 +61,9 @@ func (p *Player) handlePlayer(h *Hub) {
 		// Read
 		_, inBuff, err := p.conn.ReadMessage() // No use for msg type yet
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+			if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
+				fmt.Println("Player disconnected")
+			} else if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				fmt.Println("Error reading msg from player: ", err)
 			}
 			break
@@ -85,6 +85,7 @@ func (p *Player) handlePlayer(h *Hub) {
 		outData.Players = make(map[int]*PlayerData)
 
 		// TODO: I think just making one new PlayerData and swapping just that reference in outData would be better
+		// Failed attempts: 1
 		for id, player := range h.state.Players {
 			var newPlayer PlayerData
 			newPlayer.ID = id
@@ -98,10 +99,9 @@ func (p *Player) handlePlayer(h *Hub) {
 
 			outData.Players[id] = &newPlayer
 		}
-		
-		// Set players own data ME flag
-		// TODO: Maybe Consolidate these 2 id values
-		outData.Players[p.id].Me = true
+
+
+		outData.Unregister = h.state.Unregister
 
 		outBuff, err := msgpack.Marshal(outData)
 		if err != nil {

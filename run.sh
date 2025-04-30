@@ -1,0 +1,2 @@
+tsc
+go run *.go

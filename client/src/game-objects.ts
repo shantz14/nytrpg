@@ -13,9 +13,11 @@ export class GameState {
 
 export class UpdateState {
     players: {[key: string]: PlayerState};
+    unregister: number
 
     constructor() {
         this.players = {};
+        this.unregister = -999;
     }
 }
 

@@ -1,41 +1,53 @@
 package main
 
-import (
-)
-
 type GameState struct {
 	Players map[int]*PlayerData `msgpack:"players"`
+	Unregister int `msgpack:"unregister"`
 }
 
 type Hub struct {
 	players map[*Player]bool
 
-	numPlayers int
+	currentID int
 
 	state *GameState
 
 	in chan PlayerData
+	unregister chan *Player
 }
 
 func newHub() *Hub {
 	return &Hub {
 		players: make(map[*Player]bool),
-		numPlayers: 0,
+		currentID: 0,
 		state: &GameState {
 			Players: make(map[int]*PlayerData),
+			Unregister: -999,
 		},
 		in: make(chan PlayerData),
+		unregister: make(chan *Player),
 	}
 }
 
 func (h *Hub) run() {
 	for {
-		inData := <-h.in
 
-		// Update server state
-		h.state.Players[inData.ID].Pos.X = inData.Pos.X
-		h.state.Players[inData.ID].Pos.Y = inData.Pos.Y
-		h.state.Players[inData.ID].ID = inData.ID
+		select {
+		case updateData := <-h.in:
+			// Update server state
+			h.state.Players[updateData.ID].Pos.X = updateData.Pos.X
+			h.state.Players[updateData.ID].Pos.Y = updateData.Pos.Y
+
+		case player := <-h.unregister:
+			// Unregister 
+			h.state.Unregister = player.id
+
+			delete(h.state.Players, player.id)
+			delete(h.players, player)
+
+		}
+
+
 	}
 }
 

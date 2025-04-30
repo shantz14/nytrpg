@@ -4,7 +4,6 @@ import { GameState, PlayerState, UpdateState } from "./game-objects.js";
 import { Vector2D } from "./vector2D.js";
 
 declare const MessagePack: typeof import("@msgpack/msgpack");
-
 const encode = MessagePack.encode;
 const decode = MessagePack.decode;
 
@@ -46,9 +45,10 @@ export class Game {
             }
             const msg = decode(new Uint8Array(rawMsg)) as UpdateState;
 
+            this.unregister(msg.unregister);
+
             for (const id in msg.players) {
                 const newState = msg.players[id];
-                console.log(newState.me)
                 if (newState.me) {
                     // This is the players own data
 
@@ -61,6 +61,13 @@ export class Game {
         }
     }
 
+    private unregister(id: number) {
+        delete this.state.otherChars[id];
+        delete this.displayDriver.state.otherChars[id];
+
+        this.displayDriver.images.delete(String(id));
+    }
+
     private send() {
         const msg = new PlayerState();
         msg.pos.x = this.state.charVec.x;
@@ -68,7 +75,7 @@ export class Game {
 
         const encoded: Uint8Array = encode(msg);
 
-        if (this.sock.readyState == WebSocket.OPEN) {
+        if (this.sock.readyState === WebSocket.OPEN) {
             this.sock.send(encoded);
         }
     }

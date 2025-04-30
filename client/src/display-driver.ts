@@ -29,7 +29,6 @@ export class DisplayDriver {
     }
 
     private drawBackground() {
-        // TODO: Make image loading not a ton of if elses actually maybe not
         const bg = this.images.get("bg") as HTMLImageElement;
         
         if (bg) {
