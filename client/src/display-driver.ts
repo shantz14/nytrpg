@@ -55,6 +55,15 @@ export class DisplayDriver {
                 this.ctx.drawImage(sprite, charVec.x, charVec.y);
             }
         }
+
+        for (const name in this.state.clickables) {
+            const pos = this.state.clickables[name].rect.tl;
+            const sprite = this.images.get(name) as HTMLImageElement;
+
+            if (sprite) {
+                this.ctx.drawImage(sprite, pos.x, pos.y);
+            }
+        }
     }
 
     private scaleCanvas() {
@@ -70,6 +79,7 @@ export class DisplayDriver {
 
     public loadImage(key: string, filename: string) {
         const path: string = "./assets/" + filename;
+        console.log(path)
 
         const image = new Image();
         image.src = path;

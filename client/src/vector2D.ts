@@ -7,6 +7,11 @@ export class Vector2D {
         this.y = y;
     }
 
+    public set(x: number, y:number) {
+        this.x = x;
+        this.y = y;
+    }
+
     public add(otherVec: Vector2D) {
         this.x += otherVec.x;
         this.y += otherVec.y;

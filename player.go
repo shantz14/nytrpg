@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 	"net/http"
-
 	"github.com/gorilla/websocket"
 	"github.com/vmihailenco/msgpack/v5"
 )

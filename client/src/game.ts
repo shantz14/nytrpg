@@ -1,6 +1,6 @@
 import { DisplayDriver } from "./display-driver.js";
 import { InputDriver } from "./input-driver.js";
-import { GameState, PlayerState, UpdateState } from "./game-objects.js";
+import { Clickable, GameState, PlayerState, UpdateState } from "./game-objects.js";
 import { Vector2D } from "./vector2D.js";
 
 declare const MessagePack: typeof import("@msgpack/msgpack");
@@ -19,17 +19,15 @@ export class Game {
         const canvas = ctx.canvas;
 
         this.sock = new WebSocket(SERVER_URL);
-
         this.state = new GameState();
-
-        this.inputDriver = new InputDriver(this.state);
+        this.inputDriver = new InputDriver(canvas, this.state);
         this.displayDriver = new DisplayDriver(ctx, this.state);
     }
 
     public run() {
         this.handleMsgs();
+        this.createMap();
         setInterval(() => {
-            this.loadOtherCharSprites();
             this.update();
         }, 34);
     }
@@ -81,11 +79,27 @@ export class Game {
     }
 
     private update() {
+        this.loadOtherCharSprites();
         this.send();
 
         this.move();
         this.displayDriver.draw();
 
+    }
+
+    private createMap() {
+        this.createClickable("guide", 500, 500, 750, 750, "goober.png", function() {
+            console.log("CLICKED");
+        });
+
+    }
+
+    private createClickable(name: string, x1: number, y1: number, x2: number, y2: number, asset: string, action: Function) {
+        let guide = new Clickable(name, x1, y1, x2, y2, action);
+        this.state.clickables[name] = guide;
+        if (!this.displayDriver.images.has(name)) {
+            this.displayDriver.loadImage(name, asset);
+        }
     }
 
     private move() {
