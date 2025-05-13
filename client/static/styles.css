@@ -38,9 +38,10 @@ canvas {
     height: 75vh;
     width: 75vw;
     display: grid;
-    grid-template-rows: .65fr .35fr;
+    grid-template-rows: .1fr .65fr .25fr;
     grid-template-columns: 1fr;
     grid-template-areas:
+    "topButtons"
     "wordContainer"
     "buttons"
     ;
@@ -84,4 +85,14 @@ canvas {
 #wordlePopup a {
     color: white;
     text-decoration: none;
+}
+
+#exit {
+    grid-area: topButtons;
+    place-self: start end;
+    width: 50px;
+    height: 50px;
+    margin: 5px;
+    color: white;
+    background-color: darkred;
 }

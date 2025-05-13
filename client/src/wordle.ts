@@ -17,8 +17,6 @@ export class Wordle {
         this.displayGame();
 
         this.populateGame();    
-
-        this.deleteGame();
     }
 
     // TODO word load from database!!!
@@ -29,6 +27,8 @@ export class Wordle {
 
     private displayGame() {
         const gameHtml = `
+        <button id="exit">X</button>
+
         <div class="gameContainer" id="gameContainer">
 
             <div class="wordContainer" id="wordContainer0">
@@ -76,8 +76,11 @@ export class Wordle {
                 let box = document.getElementById(baseId + i) as HTMLInputElement;
                 boxes.push(box);
 
-                const letter = box.value
-                guess = guess + letter;
+
+                if (box) {
+                    const letter = box.value;
+                    guess = guess + letter;
+                }
             }
 
             if (guess.length == this.word.length) {
@@ -98,6 +101,11 @@ export class Wordle {
             }
         });
 
+        const exitButton = document.getElementById("exit") as HTMLButtonElement;
+        exitButton.addEventListener("click", () => {
+            popup.remove();
+        });
+
         document.addEventListener("keypress", (e: KeyboardEvent) => {
             if (e.key === "Enter") {
                 e.preventDefault();
@@ -108,20 +116,20 @@ export class Wordle {
     }
 
     private deleteGame() {
-        const popup = document.createElement("div");
-        if (popup) {
-            popup.remove();
-        } else {
-            console.error("Could not remove popup.");
-        }
+        const popup = document.getElementById("wordlePopup") as HTMLDivElement;
+        popup.remove();
     }
 
     private win() {
         console.log("YOU WIN");
+
+        this.deleteGame();
     }
 
     private lose() {
         console.log("YOU LOSE");
+
+        this.deleteGame();
     }
 
     private colorMyBoxes(boxes: Array<HTMLInputElement>, guess: string) {
@@ -132,7 +140,6 @@ export class Wordle {
             lettersCounted[guess[i]] = 0;
         }
         
-        //sequential checks
         //greys
         for (let i = 0; i < guess.length; i++) {
             boxes[i].style.backgroundColor = "grey";
