@@ -39,9 +39,9 @@ export class Clickable {
     rect: Rect;
     action: Function;
 
-    constructor(name: string, x1: number, y1: number, x2: number, y2: number, action: Function) {
+    constructor(name: string, pos: Vector2D, height: number, width: number, action: Function) {
         this.name = name;
-        this.rect = new Rect(x1, y1, x2, y2);
+        this.rect = new Rect(pos, height, width);
         this.action = action;
     }
 }
@@ -52,10 +52,16 @@ export class Clickable {
 export class Rect {
     tl: Vector2D;
     br: Vector2D;
+    pos: Vector2D;
+    height: number;
+    width: number;
 
-    constructor(x1: number, y1: number, x2: number, y2: number) {
-        this.tl = new Vector2D(x1, y1);
-        this.br = new Vector2D(x2, y2);
+    constructor(pos: Vector2D, height: number, width: number) {
+        this.pos = pos;
+        this.height = height;
+        this.width = width;
+        this.tl = new Vector2D(pos.x, pos.y);
+        this.br = new Vector2D(pos.x + width, pos.y + height);
     }
 
     // True if position passed is inside the rect

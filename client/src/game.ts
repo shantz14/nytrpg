@@ -2,6 +2,7 @@ import { DisplayDriver } from "./display-driver.js";
 import { InputDriver } from "./input-driver.js";
 import { Clickable, GameState, PlayerState, UpdateState } from "./game-objects.js";
 import { Vector2D } from "./vector2D.js";
+import { Wordle } from "./wordle.js";
 
 declare const MessagePack: typeof import("@msgpack/msgpack");
 const encode = MessagePack.encode;
@@ -88,14 +89,19 @@ export class Game {
     }
 
     private createMap() {
-        this.createClickable("guide", 500, 500, 750, 750, "goober.png", function() {
+        /*this.createClickable("guide", new Vector2D(500, 500), 64, 64, "Skoobyuboo.png", function() {
             console.log("CLICKED");
+        });*/
+
+        this.createClickable("playWordle", new Vector2D(1250, 500), 128, 128, "GameBoard.png", function() {
+            const wordle = new Wordle();
+            wordle.run();
         });
 
     }
 
-    private createClickable(name: string, x1: number, y1: number, x2: number, y2: number, asset: string, action: Function) {
-        let guide = new Clickable(name, x1, y1, x2, y2, action);
+    private createClickable(name: string, pos: Vector2D, height: number, width: number, asset: string, action: Function) {
+        const guide = new Clickable(name, pos, height, width, action);
         this.state.clickables[name] = guide;
         if (!this.displayDriver.images.has(name)) {
             this.displayDriver.loadImage(name, asset);
@@ -105,17 +111,17 @@ export class Game {
     private move() {
         let movement = new Vector2D(0, 0); 
 
-        if (this.inputDriver.keysPressed.has("w")) {
+        if (this.inputDriver.keysPressed.has("w") && !this.inputDriver.keysPressed.has("s")) {
             movement.y = -15;
         }
-        else if (this.inputDriver.keysPressed.has("s")) {
+        else if (this.inputDriver.keysPressed.has("s") && !this.inputDriver.keysPressed.has("w")) {
             movement.y = 15;
         }
 
-        if (this.inputDriver.keysPressed.has("a")) {
+        if (this.inputDriver.keysPressed.has("a") && !this.inputDriver.keysPressed.has("d")) {
             movement.x = -15;
         }
-        else if (this.inputDriver.keysPressed.has("d")) {
+        else if (this.inputDriver.keysPressed.has("d") && !this.inputDriver.keysPressed.has("a")) {
             movement.x = 15;
         }
 
