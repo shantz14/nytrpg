@@ -79,7 +79,6 @@ export class DisplayDriver {
 
     public loadImage(key: string, filename: string) {
         const path: string = "./assets/" + filename;
-        console.log(path)
 
         const image = new Image();
         image.src = path;

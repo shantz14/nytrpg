@@ -1,12 +1,17 @@
+import { Game } from "./game";
+import { WordleRes } from "./messages";
+
 const GUESSES = 5;
 
 export class Wordle {
+    game: Game;
     word: string;
     submitButton: HTMLButtonElement | null;
     nextLetter: HTMLInputElement | null;
     currentGuess: number;
     
-    constructor() {
+    constructor(game: Game) {
+        this.game = game;
         this.word = this.getWord();
         this.submitButton = null;
         this.nextLetter = null;
@@ -103,7 +108,7 @@ export class Wordle {
 
         const exitButton = document.getElementById("exit") as HTMLButtonElement;
         exitButton.addEventListener("click", () => {
-            popup.remove();
+            this.deleteGame();
         });
 
         document.addEventListener("keypress", (e: KeyboardEvent) => {
@@ -115,8 +120,14 @@ export class Wordle {
 
     }
 
+    public handleResponse(res: WordleRes) {
+        const colors = res.colors;
+        
+    }
+
     private deleteGame() {
         const popup = document.getElementById("wordlePopup") as HTMLDivElement;
+        this.game.wordle = null;
         popup.remove();
     }
 
@@ -241,3 +252,14 @@ export class Wordle {
         }
     }
 }
+
+export type WordleStatus = number;
+export const INGAME: WordleStatus = 0;
+export const WIN: WordleStatus = 1;
+export const LOSE: WordleStatus = 2;
+
+export type WordleColor = number;
+export const GREY: WordleColor = 0;
+export const YELLOW: WordleColor = 1;
+export const GREEN: WordleColor = 2;
+

@@ -12,16 +12,6 @@ export class GameState {
     }
 }
 
-export class UpdateState {
-    players: {[key: string]: PlayerState};
-    unregister: number
-
-    constructor() {
-        this.players = {};
-        this.unregister = -999;
-    }
-}
-
 export class PlayerState {
     id: number;
     pos: Vector2D;

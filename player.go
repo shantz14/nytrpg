@@ -68,20 +68,12 @@ func (p *Player) handlePlayer(h *Hub) {
 			break
 
 		} else {
-			var inData PlayerData
-			if err := msgpack.Unmarshal(inBuff, &inData); err != nil {
-				fmt.Println("Error unpacking data: ", err)
-			}
-
-			// Assign their id
-			inData.ID = p.id
-
-			h.in <- inData
+			p.handleMsg(inBuff, h)
 		}
 
 		// Write
-		var outData GameState
-		outData.Players = make(map[int]*PlayerData)
+		var playerData GameState
+		playerData.Players = make(map[int]*PlayerData)
 
 		// TODO: I think just making one new PlayerData and swapping just that reference in outData would be better
 		// Failed attempts: 1
@@ -96,25 +88,86 @@ func (p *Player) handlePlayer(h *Hub) {
 				newPlayer.Me = false
 			}
 
-			outData.Players[id] = &newPlayer
+			playerData.Players[id] = &newPlayer
 		}
 
 
-		outData.Unregister = h.state.Unregister
+		playerData.Unregister = h.state.Unregister
 
-		outBuff, err := msgpack.Marshal(outData)
-		if err != nil {
-			fmt.Println("Error encoding: ", err)
+		p.send(playerData, ServerUpdatePos)
+
+	}
+
+}
+
+func (p *Player) send(data any, msgType ServerMessageType) {
+	var envelope ServerMessage
+	envelope.UpdateType = msgType
+	var asserted any
+
+	if (msgType == ServerUpdatePos) {
+		asserted = data.(GameState)
+	} else if (msgType == ServerSendWordle) {
+		asserted = data.(WordleRes)
+	}
+
+	dataBuff, err := msgpack.Marshal(asserted)
+	if err != nil {
+		fmt.Println("Error encoding pos data: ", err)
+	}
+
+	envelope.Data = dataBuff
+
+	outBuff, err := msgpack.Marshal(envelope)
+	if err != nil {
+		fmt.Println("Error encoding envelope: ", err)
+	}
+
+	if err := p.conn.WriteMessage(websocket.BinaryMessage, outBuff); err != nil {
+		fmt.Println("Error writing msg to player: ", err)
+	}
+}
+
+func (p *Player) handleMsg(rawData []byte, h *Hub) {
+	var inData ClientMessage
+	if err := msgpack.Unmarshal(rawData, &inData); err != nil {
+		fmt.Println("Error unpacking envelope data: ", err)
+	}
+
+	if inData.UpdateType == ClientUpdatePos {
+		var posData PlayerData
+		if err := msgpack.Unmarshal(inData.Data, &posData); err != nil {
+			fmt.Println("Client data could not be asserted as type PlayerData.")
+		} else {
+			p.updatePos(posData, h)
 		}
-
-		if err := p.conn.WriteMessage(websocket.BinaryMessage, outBuff); err != nil {
-			fmt.Println("Error writing msg to player: ", err)
+	} else if inData.UpdateType == ClientRecWordle {
+		var wordleData WordleReq
+		if err := msgpack.Unmarshal(inData.Data, &wordleData); err != nil {
+			fmt.Println("Client data could not be asserted as type WordleData.")
+		} else {
+			p.updateWordle(wordleData)
 		}
 	}
 
 }
 
+func (p *Player) updatePos(posData PlayerData, h *Hub) {
+	posData.ID = p.id
+	h.in <- posData
+}
 
+func (p *Player) updateWordle(data WordleReq) {
+	// TODO wordle game logic, get a valid guess, send back 
+	// the colors 4 da letters
+	guess := data.Guess
+	status, colors := getColors(guess)
 
+	var response WordleRes
+	response.Status = status
+	response.Colors = colors
+
+	p.send(response, ServerSendWordle)
+}
 
 

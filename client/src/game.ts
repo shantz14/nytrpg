@@ -1,8 +1,9 @@
 import { DisplayDriver } from "./display-driver.js";
 import { InputDriver } from "./input-driver.js";
-import { Clickable, GameState, PlayerState, UpdateState } from "./game-objects.js";
+import { Clickable, GameState, PlayerState} from "./game-objects.js";
 import { Vector2D } from "./vector2D.js";
 import { Wordle } from "./wordle.js";
+import { ClientUpdate, ClientUpdatePos, ServerUpdate, ServerUpdatePos, ServerWordleRes, UpdateState, WordleRes } from "./messages.js";
 
 declare const MessagePack: typeof import("@msgpack/msgpack");
 const encode = MessagePack.encode;
@@ -15,6 +16,7 @@ export class Game {
     displayDriver: DisplayDriver;
     inputDriver: InputDriver;
     state: GameState;
+    wordle: Wordle | null;
 
     constructor(ctx: CanvasRenderingContext2D) {
         const canvas = ctx.canvas;
@@ -23,6 +25,7 @@ export class Game {
         this.state = new GameState();
         this.inputDriver = new InputDriver(canvas, this.state);
         this.displayDriver = new DisplayDriver(ctx, this.state);
+        this.wordle = null;
     }
 
     public run() {
@@ -42,22 +45,41 @@ export class Game {
             } else {
                 rawMsg = e.data;
             }
-            const msg = decode(new Uint8Array(rawMsg)) as UpdateState;
+            const msg = decode(new Uint8Array(rawMsg)) as ServerUpdate;
 
-            this.unregister(msg.unregister);
-
-            for (const id in msg.players) {
-                const newState = msg.players[id];
-                if (newState.me) {
-                    // This is the players own data
-
+            if (msg.updateType == ServerUpdatePos) {
+                const update = decode(msg.data) as UpdateState;
+                this.updatePos(update);
+            } else if (msg.updateType == ServerWordleRes){
+                const update = decode(msg.data) as WordleRes;
+                if (this.wordle) {
+                    this.wordle.handleResponse(update);
                 } else {
-                    // Another players data
-                    this.state.otherChars[Number(id)] = structuredClone(newState);
+                    console.log("Guys there's no wordle why are we sending wordle updates.");
                 }
 
+            } else {
+                console.log("Wacky msg from server.");
             }
+
         }
+    }
+
+    private updatePos(update: UpdateState) {
+        this.unregister(update.unregister);
+
+        for (const id in update.players) {
+            const newState = update.players[id];
+            if (newState.me) {
+                // This is the players own data
+
+            } else {
+                // Another players data
+                this.state.otherChars[Number(id)] = structuredClone(newState);
+            }
+
+        }
+
     }
 
     private unregister(id: number) {
@@ -68,11 +90,15 @@ export class Game {
     }
 
     private send() {
-        const msg = new PlayerState();
-        msg.pos.x = this.state.charVec.x;
-        msg.pos.y = this.state.charVec.y;
+        const data = new PlayerState();
+        data.pos.x = this.state.charVec.x;
+        data.pos.y = this.state.charVec.y;
+        const envelope: ClientUpdate = {
+            updateType: ClientUpdatePos,
+            data: encode(data)
+        };
 
-        const encoded: Uint8Array = encode(msg);
+        const encoded: Uint8Array = encode(envelope);
 
         if (this.sock.readyState === WebSocket.OPEN) {
             this.sock.send(encoded);
@@ -93,9 +119,9 @@ export class Game {
             console.log("CLICKED");
         });*/
 
-        this.createClickable("playWordle", new Vector2D(1250, 500), 128, 128, "GameBoard.png", function() {
-            const wordle = new Wordle();
-            wordle.run();
+        this.createClickable("playWordle", new Vector2D(1250, 500), 128, 128, "GameBoard.png", () => {
+            this.wordle = new Wordle(this);
+            this.wordle.run();
         });
 
     }
