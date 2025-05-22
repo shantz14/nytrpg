@@ -1,10 +1,79 @@
 package main
 
-func getColors(guess string) (WordleStatus, []WordleColor) {
-	var colors []WordleColor
-	var status WordleStatus
+import (
+	"fmt"
+	"strings"
+)
+
+const GUESSES_ALLOWED = 5
+
+func getColors(guess string, guessCount int) (WordleStatus, []WordleColor) {
+	word := getWord()
+
+	status, colors := colorMyBoxes(guess, word, guessCount)
 
 	return status, colors
+}
+
+func colorMyBoxes(guess string, word string, guessCount int) (WordleStatus, []WordleColor){
+	var status WordleStatus
+	letterCounts := countLetters(word)
+	colors := make([]WordleColor, len(word))
+
+	lettersCounted := make(map[rune]int)
+	for _, letter := range guess {
+		lettersCounted[letter] = 0
+	}
+
+	//greys
+	for i := range guess {
+		colors[i] = GREY
+	}
+	//greens
+	for i, letter := range guess {
+		if (guess[i] == word[i]) {
+			colors[i] = GREEN
+			lettersCounted[letter] += 1
+		}
+	}
+	//yellows
+	for i, letter := range guess {
+		if (lettersCounted[letter] < letterCounts[letter] && strings.ContainsRune(word, letter) && colors[i] == GREY) {
+			colors[i] = YELLOW
+			lettersCounted[letter]++
+		}
+	}
+
+	for _, value := range colors {
+		if value == YELLOW || value == GREY {
+			status = INGAME
+			if guessCount == GUESSES_ALLOWED {
+				status = LOSE
+			}
+			break
+		}
+		status = WIN
+	}
+
+	return status, colors
+}
+
+func countLetters(word string) map[rune]int {
+	letters := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	letterCounts := make(map[rune]int)
+	for _, letter := range letters {
+		letterCounts[letter] = 0
+	}
+	for _, letter := range word {
+		letterCounts[letter] += 1
+	}
+	return letterCounts
+}
+
+func getWord() string {
+	// TODO: Get word from a db
+
+	return "GAMER"
 }
 
 type WordleStatus int

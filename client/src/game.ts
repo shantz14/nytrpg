@@ -3,7 +3,7 @@ import { InputDriver } from "./input-driver.js";
 import { Clickable, GameState, PlayerState} from "./game-objects.js";
 import { Vector2D } from "./vector2D.js";
 import { Wordle } from "./wordle.js";
-import { ClientUpdate, ClientUpdatePos, ServerUpdate, ServerUpdatePos, ServerWordleRes, UpdateState, WordleRes } from "./messages.js";
+import { ClientUpdate, ClientUpdatePos, ClientUpdateType, ServerUpdate, ServerUpdatePos, ServerWordleRes, UpdateState, WordleReq, WordleRes } from "./messages.js";
 
 declare const MessagePack: typeof import("@msgpack/msgpack");
 const encode = MessagePack.encode;
@@ -89,12 +89,17 @@ export class Game {
         this.displayDriver.images.delete(String(id));
     }
 
-    private send() {
+    private sendPlayerState() {
         const data = new PlayerState();
         data.pos.x = this.state.charVec.x;
         data.pos.y = this.state.charVec.y;
+
+        this.send(ClientUpdatePos, data);
+    }
+
+    public send(type: ClientUpdateType, data: PlayerState | WordleReq) {
         const envelope: ClientUpdate = {
-            updateType: ClientUpdatePos,
+            updateType: type,
             data: encode(data)
         };
 
@@ -107,7 +112,7 @@ export class Game {
 
     private update() {
         this.loadOtherCharSprites();
-        this.send();
+        this.sendPlayerState();
 
         this.move();
         this.displayDriver.draw();

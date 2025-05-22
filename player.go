@@ -158,10 +158,8 @@ func (p *Player) updatePos(posData PlayerData, h *Hub) {
 }
 
 func (p *Player) updateWordle(data WordleReq) {
-	// TODO wordle game logic, get a valid guess, send back 
 	// the colors 4 da letters
-	guess := data.Guess
-	status, colors := getColors(guess)
+	status, colors := getColors(data.Guess, data.GuessCount)
 
 	var response WordleRes
 	response.Status = status

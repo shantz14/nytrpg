@@ -1,5 +1,5 @@
-import { PlayerState } from "./game-objects";
-import { WordleColor, WordleStatus } from "./wordle";
+import { PlayerState } from "./game-objects.js";
+import { WordleColor, WordleStatus } from "./wordle.js";
 
 export type ServerUpdateType = number;
 

@@ -1,18 +1,18 @@
-import { Game } from "./game";
-import { WordleRes } from "./messages";
+import { Game } from "./game.js";
+import { ClientSendWordle, WordleReq, WordleRes } from "./messages.js";
 
 const GUESSES = 5;
 
 export class Wordle {
     game: Game;
-    word: string;
+    wordLength: number;
     submitButton: HTMLButtonElement | null;
     nextLetter: HTMLInputElement | null;
     currentGuess: number;
     
     constructor(game: Game) {
         this.game = game;
-        this.word = this.getWord();
+        this.wordLength = this.getWordLength();
         this.submitButton = null;
         this.nextLetter = null;
         this.currentGuess = 0;
@@ -24,10 +24,9 @@ export class Wordle {
         this.populateGame();    
     }
 
-    // TODO word load from database!!!
-    private getWord(): string {
-
-        return "GAMER";
+    // TODO: get word length from backend!!!
+    private getWordLength(): number {
+        return 5;
     }
 
     private displayGame() {
@@ -77,7 +76,7 @@ export class Wordle {
             let guess = "";
             let boxes = [];
 
-            for (let i = 0; i < this.word.length; i++) {
+            for (let i = 0; i < this.wordLength; i++) {
                 let box = document.getElementById(baseId + i) as HTMLInputElement;
                 boxes.push(box);
 
@@ -88,16 +87,10 @@ export class Wordle {
                 }
             }
 
-            if (guess.length == this.word.length) {
-                this.colorMyBoxes(boxes, guess);
+            if (guess.length == this.wordLength) {
                 this.currentGuess++;
+                this.sendGuess(guess);
                 
-                if (guess === this.word) {
-                    this.win();
-                } else if (this.currentGuess == GUESSES) {
-                    this.lose();
-                }
-
                 if (this.nextLetter) {
                     this.nextLetter.focus();
                 } else {
@@ -120,9 +113,28 @@ export class Wordle {
 
     }
 
+    private sendGuess(guess: string) {
+        const data: WordleReq = {
+            // TODO: make ids real
+            id: -1,
+            guess: guess,
+            guessCount: this.currentGuess
+        };
+
+        this.game.send(ClientSendWordle, data);
+    }
+
     public handleResponse(res: WordleRes) {
         const colors = res.colors;
-        
+        this.colorMyBoxes(colors);
+
+        if (res.status == WIN) {
+            this.win();
+        } else if (res.status == LOSE) {
+            this.lose();
+        } else if (res.status == INGAME) {
+            //notin
+        }
     }
 
     private deleteGame() {
@@ -143,44 +155,19 @@ export class Wordle {
         this.deleteGame();
     }
 
-    private colorMyBoxes(boxes: Array<HTMLInputElement>, guess: string) {
-        const letterCounts = this.countLetters();
+    private colorMyBoxes(colors: Array<WordleColor>) {
+            const baseId = "letter" + (this.currentGuess-1);
 
-        const lettersCounted: {[key: string]: number} = {};
-        for (let i = 0; i < guess.length; i++) {
-            lettersCounted[guess[i]] = 0;
-        }
-        
-        //greys
-        for (let i = 0; i < guess.length; i++) {
-            boxes[i].style.backgroundColor = "grey";
-        }
-        //greens
-        for (let i = 0; i < guess.length; i++) {
-            if (guess[i] == this.word[i]) {
-                boxes[i].style.backgroundColor = "green";
-                lettersCounted[guess[i]]++;
+            for (let i = 0; i < 5; i++) {
+                let box = document.getElementById(baseId + i) as HTMLInputElement;
+                if (colors[i] == GREY) {
+                    box.style.backgroundColor = "grey";
+                } else if (colors[i] == YELLOW) {
+                    box.style.backgroundColor = "yellow";
+                } else if (colors[i] == GREEN) {
+                    box.style.backgroundColor = "green";
+                }
             }
-        }
-        //yellows
-        for (let i = 0; i < guess.length; i++) {
-            if (lettersCounted[guess[i]] < letterCounts[guess[i]] && this.word.includes(guess[i]) && boxes[i].style.backgroundColor === "grey") {
-                boxes[i].style.backgroundColor = "yellow";
-                lettersCounted[guess[i]]++;
-            }
-        }
-    }
-
-    private countLetters() {
-        let letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        let letterCounts: {[key: string]: number} = {};
-        for (let i = 0; i < letters.length; i++) {
-            letterCounts[letters[i]] = 0;
-        }
-        for (let i = 0; i < this.word.length; i++) {
-            letterCounts[this.word[i]]++;
-        }
-        return letterCounts;
     }
 
     private populateGame() {
@@ -205,7 +192,7 @@ export class Wordle {
 
     private populateWord(wordContainer: HTMLDivElement) {
         const letterDiv = document.getElementById("letter00") as HTMLInputElement;
-        for (let c = 0; c < this.word.length; c++) {
+        for (let c = 0; c < this.wordLength; c++) {
             let newLetter = letterDiv.cloneNode(true) as HTMLInputElement;
             newLetter.id = "letter" + wordContainer.id[wordContainer.id.length - 1] + c;
 
@@ -234,7 +221,7 @@ export class Wordle {
         var row = parseInt(oldId[oldId.length - 2]);
         var col = parseInt(oldId[oldId.length - 1]);
 
-        if (col == game.word.length - 1) {
+        if (col == game.wordLength - 1) {
             if (row == GUESSES - 1) {
                 row = 0;
             } else {
