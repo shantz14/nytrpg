@@ -1,5 +1,9 @@
 package main
 
+import (
+	"nytrpg/resources"
+)
+
 type GameState struct {
 	Players map[int]*PlayerData `msgpack:"players"`
 	Unregister int `msgpack:"unregister"`
@@ -14,6 +18,8 @@ type Hub struct {
 
 	in chan PlayerData
 	unregister chan *Player
+
+	resourceManager *resources.ResourceManager
 }
 
 func newHub() *Hub {
@@ -26,10 +32,13 @@ func newHub() *Hub {
 		},
 		in: make(chan PlayerData),
 		unregister: make(chan *Player),
+		resourceManager: resources.NewResourceManager(),
 	}
 }
 
 func (h *Hub) run() {
+	go h.resourceManager.LoadResources()
+
 	for {
 
 		select {

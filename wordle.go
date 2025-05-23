@@ -1,15 +1,12 @@
 package main
 
 import (
-	"fmt"
 	"strings"
 )
 
 const GUESSES_ALLOWED = 5
 
-func getColors(guess string, guessCount int) (WordleStatus, []WordleColor) {
-	word := getWord()
-
+func getColors(guess string, guessCount int, word string) (WordleStatus, []WordleColor) {
 	status, colors := colorMyBoxes(guess, word, guessCount)
 
 	return status, colors
@@ -68,12 +65,6 @@ func countLetters(word string) map[rune]int {
 		letterCounts[letter] += 1
 	}
 	return letterCounts
-}
-
-func getWord() string {
-	// TODO: Get word from a db
-
-	return "GAMER"
 }
 
 type WordleStatus int
