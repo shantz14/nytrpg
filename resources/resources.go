@@ -32,18 +32,19 @@ func (rm *ResourceManager) LoadResources () {
 	// Every day at midnight...
 	for {
 		// ct = current time
-		ct := time.Now()
-		midnight := time.Date(ct.Year(), ct.Month(), ct.Day(), 23, 59, 58, ct.Nanosecond(), time.UTC)
+		mst := time.FixedZone("MST", -7*60*60)
+		ct := time.Now().In(mst)
+		midnight := time.Date(ct.Year(), ct.Month(), ct.Day(), 23, 59, 58, 0, mst)
 
-		diff := ct.Sub(midnight)
+		diff := midnight.Sub(ct)
 
 		time.Sleep(diff)
 
 		// THIS STUFF RUNS
 		rm.LoadWordle()
 
-		// maybe?
 		time.Sleep(time.Second * 5)
+
 	}
 }
 
