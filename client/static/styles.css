@@ -32,7 +32,6 @@ canvas {
 
 #wordlePopup {
     background-color: rgb(26, 25, 25);
-    color: blue;
     font-family:Arial, Helvetica, sans-serif;
     position: absolute;
     height: 75vh;
@@ -46,6 +45,34 @@ canvas {
     "buttons"
     ;
     z-index: 2;
+}
+
+#resultPopup {
+    background-color: rgb(26, 25, 25);
+    font-family:Arial, Helvetica, sans-serif;
+    color: white;
+    position: absolute;
+    height: 75vh;
+    width: 75vw;
+    display: grid;
+    grid-template-rows: .1fr .65fr .25fr;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+    "topButtons"
+    "wordContainer"
+    "buttons"
+    ;
+    z-index: 2;
+}
+
+#resultText {
+    color: white;
+    font-size: xx-large;
+}
+
+#solutionText {
+    color: white;
+    font-size: xx-large;
 }
 
 #submit {
@@ -62,6 +89,19 @@ canvas {
     margin-inline: auto;
     display: flex;
     flex-direction: column;
+}
+
+#resultContainer {
+    max-height: fit-content;
+    max-width: fit-content;
+    margin-inline: auto;
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+}
+
+#resultContainer p {
+    margin: 10px;
 }
 
 .wordContainer {

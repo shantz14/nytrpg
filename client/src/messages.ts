@@ -4,7 +4,8 @@ import { WordleColor, WordleStatus } from "./wordle.js";
 export type ServerUpdateType = number;
 
 export const ServerUpdatePos: ServerUpdateType = 1;
-export const ServerWordleRes: ServerUpdateType = 2;
+export const ServerWordleResponse: ServerUpdateType = 2;
+export const ServerWordleResult: ServerUpdateType = 3;
 
 export type ServerUpdate = {
     updateType: ServerUpdateType;
@@ -18,9 +19,11 @@ export type UpdateState = {
 }
 
 // Win/loss/inGame and array of colors for da letters
-export type WordleRes = {
+export type WordleResponse = {
+    valid: boolean;
     status: WordleStatus;
     colors: Array<WordleColor>;
+    solution: string;
 }
 
 
@@ -40,6 +43,7 @@ export type WordleReq = {
     guess: string;
     guessCount: number;
 }
+
 
 
 

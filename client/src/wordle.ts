@@ -1,5 +1,5 @@
 import { Game } from "./game.js";
-import { ClientSendWordle, WordleReq, WordleRes } from "./messages.js";
+import { ClientSendWordle, WordleReq, WordleResponse } from "./messages.js";
 
 const GUESSES = 5;
 
@@ -31,8 +31,6 @@ export class Wordle {
 
     private displayGame() {
         const gameHtml = `
-        <button id="exit">X</button>
-
         <div class="gameContainer" id="gameContainer">
 
             <div class="wordContainer" id="wordContainer0">
@@ -99,11 +97,6 @@ export class Wordle {
             }
         });
 
-        const exitButton = document.getElementById("exit") as HTMLButtonElement;
-        exitButton.addEventListener("click", () => {
-            this.deleteGame();
-        });
-
         document.addEventListener("keypress", (e: KeyboardEvent) => {
             if (e.key === "Enter") {
                 e.preventDefault();
@@ -124,35 +117,98 @@ export class Wordle {
         this.game.send(ClientSendWordle, data);
     }
 
-    public handleResponse(res: WordleRes) {
+    public handleResponse(res: WordleResponse) {
+        if (!res.valid) {
+            this.cancelMove();
+            return
+        }
         const colors = res.colors;
         this.colorMyBoxes(colors);
 
         if (res.status == WIN) {
-            this.win();
+            this.win(res.solution);
         } else if (res.status == LOSE) {
-            this.lose();
+            this.lose(res.solution);
         } else if (res.status == INGAME) {
             //notin
         }
     }
 
+    private cancelMove() {
+        this.currentGuess--;
+        const firstLetter = document.getElementById("letter" + (this.currentGuess) + "0");
+        firstLetter?.focus();
+        for (var i = 0; i < 5; i++) {
+            const id = "letter" + (this.currentGuess) + i;
+            const letter = document.getElementById(id) as HTMLInputElement;
+            letter.value = "";
+        }
+    }
+
     private deleteGame() {
+        const result = document.getElementById("resultPopup") as HTMLDivElement;
+        result.remove();
         const popup = document.getElementById("wordlePopup") as HTMLDivElement;
-        this.game.wordle = null;
         popup.remove();
+        this.game.wordle = null;
     }
 
-    private win() {
-        console.log("YOU WIN");
-
-        this.deleteGame();
+    private win(word: string) {
+        this.displayResultDiv(true, word);
     }
 
-    private lose() {
-        console.log("YOU LOSE");
+    private lose(word: string) {
+        this.displayResultDiv(false, word);
+    }
 
-        this.deleteGame();
+    private displayResultDiv(win: boolean, word: string) {
+        const html = `
+        <button id="exit">X</button>
+
+        <div class="resultContainer" id="resultContainer">
+
+            <p id="resultText"></p>
+            <p>The word was:</p>
+            <p id="solutionText"></p>
+
+        </div>
+        `;
+        const popup = document.createElement("div");
+        popup.setAttribute("id", "resultPopup")
+        popup.innerHTML = html;
+
+        const parent = document.getElementById("container");
+        if (parent) {
+            parent.appendChild(popup);
+        } else {
+            console.error("No parent to append popup to.");
+        }
+
+        const exitButton = document.getElementById("exit") as HTMLButtonElement;
+        exitButton.addEventListener("click", () => {
+            this.deleteGame();
+        });
+
+        const resultText = document.getElementById("resultText");
+        if (resultText) {
+            if (win) {
+                if (this.currentGuess > 1) {
+                    resultText.innerHTML = "You Won In " + this.currentGuess + " Guesses!";
+                } else {
+                    resultText.innerHTML = "You Won In " + this.currentGuess + " Guess!";
+                }
+            } else {
+                resultText.innerHTML = "You Lose...";
+            }
+        } else {
+            console.log("No resultText element found.");
+        }
+        const solutionText = document.getElementById("solutionText");
+        if (solutionText) {
+            solutionText.innerHTML = word;
+        } else {
+            console.log("No solutionText element found.");
+        }
     }
 
     private colorMyBoxes(colors: Array<WordleColor>) {

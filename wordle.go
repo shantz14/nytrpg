@@ -6,14 +6,24 @@ import (
 
 const GUESSES_ALLOWED = 5
 
-func getColors(guess string, guessCount int, word string) (WordleStatus, []WordleColor) {
-	status, colors := colorMyBoxes(guess, word, guessCount)
+func getColors(guess string, guessCount int, word string, guessables *map[string]bool) (bool, WordleStatus, []WordleColor) {
+	valid, status, colors := colorMyBoxes(guess, word, guessCount, guessables)
 
-	return status, colors
+	return valid, status, colors
 }
 
-func colorMyBoxes(guess string, word string, guessCount int) (WordleStatus, []WordleColor){
+func colorMyBoxes(guess string, word string, guessCount int, guessables *map[string]bool) (bool, WordleStatus, []WordleColor){
 	var status WordleStatus
+	var valid bool
+	_, ok := (*guessables)[strings.ToLower(guess)]; if !ok {
+		// TODO: wordles of different lengths
+		valid = false
+		status = INGAME
+		colors := []WordleColor{GREY, GREY, GREY, GREY, GREY}
+		return valid, status, colors
+	}
+	valid = true
+
 	letterCounts := countLetters(word)
 	colors := make([]WordleColor, len(word))
 
@@ -52,7 +62,7 @@ func colorMyBoxes(guess string, word string, guessCount int) (WordleStatus, []Wo
 		status = WIN
 	}
 
-	return status, colors
+	return valid, status, colors
 }
 
 func countLetters(word string) map[rune]int {

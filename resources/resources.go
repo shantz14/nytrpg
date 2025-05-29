@@ -13,13 +13,13 @@ var resourceManager ResourceManager
 
 type ResourceManager struct {
 	wordle string
-	guessableWords map[string]bool
+	GuessableWords map[string]bool
 }
 
 func NewResourceManager() *ResourceManager {
 	return &ResourceManager {
 		wordle: "",
-		guessableWords: make(map[string]bool),
+		GuessableWords: make(map[string]bool),
 	}
 }
 
@@ -58,7 +58,7 @@ func (rm *ResourceManager) LoadGuessables () {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		word := scanner.Text()
-		rm.guessableWords[word] = true
+		rm.GuessableWords[word] = true
 	}
 
 	if err := scanner.Err(); err != nil {

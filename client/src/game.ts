@@ -3,7 +3,7 @@ import { InputDriver } from "./input-driver.js";
 import { Clickable, GameState, PlayerState} from "./game-objects.js";
 import { Vector2D } from "./vector2D.js";
 import { Wordle } from "./wordle.js";
-import { ClientUpdate, ClientUpdatePos, ClientUpdateType, ServerUpdate, ServerUpdatePos, ServerWordleRes, UpdateState, WordleReq, WordleRes } from "./messages.js";
+import { ClientUpdate, ClientUpdatePos, ClientUpdateType, ServerUpdate, ServerUpdatePos, ServerWordleResponse, UpdateState, WordleReq, WordleResponse } from "./messages.js";
 
 declare const MessagePack: typeof import("@msgpack/msgpack");
 const encode = MessagePack.encode;
@@ -50,14 +50,13 @@ export class Game {
             if (msg.updateType == ServerUpdatePos) {
                 const update = decode(msg.data) as UpdateState;
                 this.updatePos(update);
-            } else if (msg.updateType == ServerWordleRes){
-                const update = decode(msg.data) as WordleRes;
+            } else if (msg.updateType == ServerWordleResponse){
+                const update = decode(msg.data) as WordleResponse;
                 if (this.wordle) {
                     this.wordle.handleResponse(update);
                 } else {
                     console.log("Guys there's no wordle why are we sending wordle updates.");
                 }
-
             } else {
                 console.log("Wacky msg from server.");
             }
@@ -124,7 +123,7 @@ export class Game {
             console.log("CLICKED");
         });*/
 
-        this.createClickable("playWordle", new Vector2D(1250, 500), 128, 128, "GameBoard.png", () => {
+        this.createClickable("playWordle", new Vector2D(750, 500), 128, 128, "GameBoard.png", () => {
             this.wordle = new Wordle(this);
             this.wordle.run();
         });

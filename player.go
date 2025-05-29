@@ -147,7 +147,7 @@ func (p *Player) handleMsg(rawData []byte, h *Hub) {
 			fmt.Println("Client data could not be asserted as type WordleData.")
 		} else {
 			wordOfTheDay := h.resourceManager.GetWordle()
-			p.updateWordle(wordleData, wordOfTheDay)
+			p.updateWordle(wordleData, wordOfTheDay, &h.resourceManager.GuessableWords)
 		}
 	}
 
@@ -158,13 +158,19 @@ func (p *Player) updatePos(posData PlayerData, h *Hub) {
 	h.in <- posData
 }
 
-func (p *Player) updateWordle(data WordleReq, word string) {
+func (p *Player) updateWordle(data WordleReq, word string, guessables *map[string]bool) {
 	// the colors 4 da letters
-	status, colors := getColors(data.Guess, data.GuessCount, word)
+	valid, status, colors := getColors(data.Guess, data.GuessCount, word, guessables)
 
 	var response WordleRes
+	response.Valid = valid
 	response.Status = status
 	response.Colors = colors
+	if status == WIN || status == LOSE {
+		response.Solution = word
+	} else {
+		response.Solution = ""
+	}
 
 	p.send(response, ServerSendWordle)
 }

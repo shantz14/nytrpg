@@ -31,8 +31,10 @@ type WordleReq struct {
 }
 
 type WordleRes struct {
+	Valid bool `msgpack:"valid"`
 	Status WordleStatus `msgpack:"status"`
 	Colors []WordleColor `msgpack:"colors"`
+	Solution string `msgpack:"solution"`
 }
 
 
