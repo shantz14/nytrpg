@@ -22,6 +22,24 @@ export class Wordle {
         this.displayGame();
 
         this.populateGame();    
+
+        this.runTimer();
+    }
+
+    private runTimer() {
+        this.displayTimer();
+        const start = Date.now();
+        setInterval(() => {
+            let delta = Date.now();
+            // 5 minutes
+            if ((delta - start) >= 300000) {
+                this.loseByTime();
+            }
+        }, 1000);
+    }
+
+    private displayTimer() {
+        
     }
 
     // TODO: get word length from backend!!!
@@ -161,6 +179,10 @@ export class Wordle {
         this.displayResultDiv(false, word);
     }
 
+    private loseByTime() {
+        this.displayResultDiv(false, "")
+    }
+
     private displayResultDiv(win: boolean, word: string) {
         const html = `
         <button id="exit">X</button>
@@ -212,18 +234,18 @@ export class Wordle {
     }
 
     private colorMyBoxes(colors: Array<WordleColor>) {
-            const baseId = "letter" + (this.currentGuess-1);
+        const baseId = "letter" + (this.currentGuess-1);
 
-            for (let i = 0; i < 5; i++) {
-                let box = document.getElementById(baseId + i) as HTMLInputElement;
-                if (colors[i] == GREY) {
-                    box.style.backgroundColor = "grey";
-                } else if (colors[i] == YELLOW) {
-                    box.style.backgroundColor = "yellow";
-                } else if (colors[i] == GREEN) {
-                    box.style.backgroundColor = "green";
-                }
+        for (let i = 0; i < 5; i++) {
+            let box = document.getElementById(baseId + i) as HTMLInputElement;
+            if (colors[i] == GREY) {
+                box.style.backgroundColor = "grey";
+            } else if (colors[i] == YELLOW) {
+                box.style.backgroundColor = "yellow";
+            } else if (colors[i] == GREEN) {
+                box.style.backgroundColor = "green";
             }
+        }
     }
 
     private populateGame() {
