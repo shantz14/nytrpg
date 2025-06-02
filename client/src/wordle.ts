@@ -2,6 +2,7 @@ import { Game } from "./game.js";
 import { ClientSendWordle, WordleReq, WordleResponse } from "./messages.js";
 
 const GUESSES = 5;
+const TIME_LIMIT = 1; //minutes
 
 export class Wordle {
     game: Game;
@@ -9,6 +10,7 @@ export class Wordle {
     submitButton: HTMLButtonElement | null;
     nextLetter: HTMLInputElement | null;
     currentGuess: number;
+    timePlayed: number;
     
     constructor(game: Game) {
         this.game = game;
@@ -16,6 +18,7 @@ export class Wordle {
         this.submitButton = null;
         this.nextLetter = null;
         this.currentGuess = 0;
+        this.timePlayed = 0;
     }
 
     public run() {
@@ -27,19 +30,35 @@ export class Wordle {
     }
 
     private runTimer() {
-        this.displayTimer();
         const start = Date.now();
+        const timer = document.getElementById("timer") as HTMLDivElement;
+        let minutes = TIME_LIMIT;
+        let seconds = 0;
+        timer.innerHTML = minutes + ":" + seconds + "0"
         setInterval(() => {
             let delta = Date.now();
+
+            if (minutes == 0 && seconds == 0) {
+                //notin
+            } else if (seconds == 0) {
+                minutes--;
+                seconds = 59;
+                timer.innerHTML = minutes + ":" + seconds;
+            } else if (seconds < 10) {
+                seconds--;
+                timer.innerHTML = minutes + ":" + "0" + seconds;
+            } else {
+                seconds--;
+                timer.innerHTML = minutes + ":" + seconds;
+            }
+
+            this.timePlayed = (delta - start) / 1000;
+
             // 5 minutes
-            if ((delta - start) >= 300000) {
+            if ((this.timePlayed) >= (TIME_LIMIT * 60)) {
                 this.loseByTime();
             }
         }, 1000);
-    }
-
-    private displayTimer() {
-        
     }
 
     // TODO: get word length from backend!!!
@@ -50,6 +69,7 @@ export class Wordle {
     private displayGame() {
         const gameHtml = `
         <div class="gameContainer" id="gameContainer">
+            <div id="timer"></div>
 
             <div class="wordContainer" id="wordContainer0">
                 <input type="text" class="letter" id="letter00" 
@@ -215,9 +235,9 @@ export class Wordle {
         if (resultText) {
             if (win) {
                 if (this.currentGuess > 1) {
-                    resultText.innerHTML = "You Won In " + this.currentGuess + " Guesses!";
+                    resultText.innerHTML = "You Won In " + this.currentGuess + " Guesses!" + " (" + this.secToMin(this.timePlayed) + ")";
                 } else {
-                    resultText.innerHTML = "You Won In " + this.currentGuess + " Guess!";
+                    resultText.innerHTML = "You Won In " + this.currentGuess + " Guess!" + " (" + this.secToMin(this.timePlayed) + ")";
                 }
             } else {
                 resultText.innerHTML = "You Lose...";
@@ -231,6 +251,19 @@ export class Wordle {
         } else {
             console.log("No solutionText element found.");
         }
+    }
+
+    private secToMin(secs: number): string {
+        const min = (secs / 60).toString()[0];
+        const seconds = (secs % 60);
+        var secStr = "";
+        if (seconds < 10) {
+            secStr = "0" + seconds.toFixed(0); 
+        } else {
+            secStr = seconds.toFixed(0);
+        }
+        const result = min + ":" + secStr;
+        return result;
     }
 
     private colorMyBoxes(colors: Array<WordleColor>) {

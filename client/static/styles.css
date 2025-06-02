@@ -40,7 +40,7 @@ canvas {
     grid-template-rows: .1fr .65fr .25fr;
     grid-template-columns: 1fr;
     grid-template-areas:
-    "topButtons"
+    "timer"
     "wordContainer"
     "buttons"
     ;
@@ -89,6 +89,14 @@ canvas {
     margin-inline: auto;
     display: flex;
     flex-direction: column;
+}
+
+#timer {
+    grid-area: timer;
+    color: white;
+    text-align: center;
+    margin: 30px;
+    font-size: xx-large;
 }
 
 #resultContainer {
