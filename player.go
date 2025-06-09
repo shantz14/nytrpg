@@ -1,9 +1,10 @@
 package main
 
 import (
-	"fmt"
-	"time"
+	"log"
 	"net/http"
+	"time"
+
 	"github.com/gorilla/websocket"
 	"github.com/vmihailenco/msgpack/v5"
 )
@@ -15,9 +16,7 @@ var upgrader = websocket.Upgrader{
 
 type Player struct {
 	id int
-
 	conn *websocket.Conn
-
 }
 
 type PlayerData struct {
@@ -31,15 +30,16 @@ type PlayerData struct {
 func handleWS(h *Hub, w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		fmt.Println("Connection failed at Upgrader: ", err)
+		log.Println("Connection failed at Upgrader: ", err)
 		return
 	}
 
-	fmt.Println("New connection coming from: ", conn.RemoteAddr())
+	log.Println("New connection coming from: ", conn.RemoteAddr())
 
-	// Add new conn to set
 	h.currentID += 1
 	newPlayer := Player{id: h.currentID, conn: conn}
+
+	// Add new conn to set
 	h.players[&newPlayer] = true
 
 	// Add pos to gamestate
@@ -59,11 +59,11 @@ func (p *Player) handlePlayer(h *Hub) {
 	for range time.Tick(updateInterval) {
 		// Read
 		_, inBuff, err := p.conn.ReadMessage() // No use for msg type yet
-		if err != nil {
+	if err != nil {
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
-				fmt.Println("Player disconnected")
+				log.Println("Player disconnected")
 			} else if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				fmt.Println("Error reading msg from player: ", err)
+				log.Println("Error reading msg from player: ", err)
 			}
 			break
 
@@ -113,41 +113,41 @@ func (p *Player) send(data any, msgType ServerMessageType) {
 
 	dataBuff, err := msgpack.Marshal(asserted)
 	if err != nil {
-		fmt.Println("Error encoding pos data: ", err)
+		log.Println("Error encoding pos data: ", err)
 	}
 
 	envelope.Data = dataBuff
 
 	outBuff, err := msgpack.Marshal(envelope)
 	if err != nil {
-		fmt.Println("Error encoding envelope: ", err)
+		log.Println("Error encoding envelope: ", err)
 	}
 
 	if err := p.conn.WriteMessage(websocket.BinaryMessage, outBuff); err != nil {
-		fmt.Println("Error writing msg to player: ", err)
+		log.Println("Error writing msg to player: ", err)
 	}
 }
 
 func (p *Player) handleMsg(rawData []byte, h *Hub) {
 	var inData ClientMessage
 	if err := msgpack.Unmarshal(rawData, &inData); err != nil {
-		fmt.Println("Error unpacking envelope data: ", err)
+		log.Println("Error unpacking envelope data: ", err)
 	}
 
 	if inData.UpdateType == ClientUpdatePos {
 		var posData PlayerData
 		if err := msgpack.Unmarshal(inData.Data, &posData); err != nil {
-			fmt.Println("Client data could not be asserted as type PlayerData.")
+			log.Println("Client data could not be asserted as type PlayerData.")
 		} else {
 			p.updatePos(posData, h)
 		}
 	} else if inData.UpdateType == ClientRecWordle {
 		var wordleData WordleReq
 		if err := msgpack.Unmarshal(inData.Data, &wordleData); err != nil {
-			fmt.Println("Client data could not be asserted as type WordleData.")
+			log.Println("Client data could not be asserted as type WordleData.")
 		} else {
 			wordOfTheDay := h.resourceManager.GetWordle()
-			p.updateWordle(wordleData, wordOfTheDay, &h.resourceManager.GuessableWords)
+			p.updateWordle(wordleData, wordOfTheDay, &h.resourceManager.GuessableWords, h.db)
 		}
 	}
 
@@ -158,7 +158,7 @@ func (p *Player) updatePos(posData PlayerData, h *Hub) {
 	h.in <- posData
 }
 
-func (p *Player) updateWordle(data WordleReq, word string, guessables *map[string]bool) {
+func (p *Player) updateWordle(data WordleReq, word string, guessables *map[string]bool, db *Connection) {
 	// the colors 4 da letters
 	valid, status, colors := getColors(data.Guess, data.GuessCount, word, guessables)
 
@@ -166,8 +166,12 @@ func (p *Player) updateWordle(data WordleReq, word string, guessables *map[strin
 	response.Valid = valid
 	response.Status = status
 	response.Colors = colors
-	if status == WIN || status == LOSE {
+	if status == WIN {
 		response.Solution = word
+		p.submitWordle(true, db)
+	} else if status == LOSE {
+		response.Solution = word
+		p.submitWordle(false, db)
 	} else {
 		response.Solution = ""
 	}
@@ -175,4 +179,11 @@ func (p *Player) updateWordle(data WordleReq, word string, guessables *map[strin
 	p.send(response, ServerSendWordle)
 }
 
+func (p *Player) submitWordle(win bool, db *Connection) {
+	pRow, exists := db.getPlayerById(999); if !exists {
+		log.Println("No player in database with id: ", 999)
+		return
+	}
+	log.Println(pRow.id, ", ", pRow.username)
+}
 

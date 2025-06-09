@@ -149,7 +149,8 @@ export class Wordle {
             // TODO: make ids real
             id: -1,
             guess: guess,
-            guessCount: this.currentGuess
+            guessCount: this.currentGuess,
+            time: this.timePlayed
         };
 
         this.game.send(ClientSendWordle, data);

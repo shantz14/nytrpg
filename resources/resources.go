@@ -2,7 +2,7 @@ package resources
 
 import (
 	"bufio"
-	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"strings"
@@ -50,7 +50,7 @@ func (rm *ResourceManager) LoadResources () {
 
 func (rm *ResourceManager) LoadGuessables () {
 	file, err := os.Open("resources/wordle-All.txt"); if err != nil {
-		fmt.Println("Error opening file:", err)
+		log.Println("Error opening file:", err)
 		return
 	}
 	defer file.Close()
@@ -62,7 +62,7 @@ func (rm *ResourceManager) LoadGuessables () {
 	}
 
 	if err := scanner.Err(); err != nil {
-		fmt.Println("Error scanning file:", err)
+		log.Println("Error scanning file:", err)
 		return
 	}
 }
@@ -70,7 +70,7 @@ func (rm *ResourceManager) LoadGuessables () {
 func (rm *ResourceManager) LoadWordle () {
 	solutions := make([]string, 0)
 	file, err := os.Open("resources/wordle-La.txt"); if err != nil {
-		fmt.Println("Error opening file:", err)
+		log.Println("Error opening file:", err)
 		return
 	}
 	defer file.Close()
@@ -82,12 +82,12 @@ func (rm *ResourceManager) LoadWordle () {
 	}
 
 	if err := scanner.Err(); err != nil {
-		fmt.Println("Error scanning file:", err)
+		log.Println("Error scanning file:", err)
 		return
 	}
 
 	index := rand.Intn(len(solutions) - 1) + 1
-	fmt.Println("The word of the day is: ", solutions[index])
+	log.Println("The word of the day is: ", solutions[index])
 	rm.wordle = strings.ToUpper(solutions[index])
 }
 

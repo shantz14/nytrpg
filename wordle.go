@@ -2,6 +2,7 @@ package main
 
 import (
 	"strings"
+
 )
 
 const GUESSES_ALLOWED = 5
@@ -64,6 +65,7 @@ func colorMyBoxes(guess string, word string, guessCount int, guessables *map[str
 
 	return valid, status, colors
 }
+
 
 func countLetters(word string) map[rune]int {
 	letters := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"

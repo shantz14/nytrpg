@@ -11,15 +11,12 @@ type GameState struct {
 
 type Hub struct {
 	players map[*Player]bool
-
 	currentID int
-
 	state *GameState
-
 	in chan PlayerData
 	unregister chan *Player
-
 	resourceManager *resources.ResourceManager
+	db *Connection
 }
 
 func newHub() *Hub {
@@ -33,6 +30,7 @@ func newHub() *Hub {
 		in: make(chan PlayerData),
 		unregister: make(chan *Player),
 		resourceManager: resources.NewResourceManager(),
+		db: newConnection(),
 	}
 }
 

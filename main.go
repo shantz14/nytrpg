@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -23,6 +23,6 @@ func main() {
 		handleWS(hub, w, r)
 	})
 
-    fmt.Println("Server running on port", PORT)
+    log.Println("Server running on port", PORT)
     http.ListenAndServe("localhost:" + strconv.Itoa(PORT), nil)
 }

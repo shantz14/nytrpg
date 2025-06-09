@@ -42,6 +42,7 @@ export type WordleReq = {
     id: number;
     guess: string;
     guessCount: number;
+    time: number;
 }
 
 
