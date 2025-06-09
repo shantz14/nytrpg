@@ -28,6 +28,7 @@ type WordleReq struct {
 	ID int `msgpack:"id"`
 	Guess string `msgpack:"guess"`
 	GuessCount int `msgpack:"guessCount"`
+	Time int `msgpack:"time"`
 }
 
 type WordleRes struct {

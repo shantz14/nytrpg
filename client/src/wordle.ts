@@ -150,7 +150,7 @@ export class Wordle {
             id: -1,
             guess: guess,
             guessCount: this.currentGuess,
-            time: this.timePlayed
+            time: Math.trunc(this.timePlayed)
         };
 
         this.game.send(ClientSendWordle, data);

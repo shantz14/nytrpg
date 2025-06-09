@@ -22,7 +22,6 @@ type Player struct {
 type PlayerData struct {
 	ID int `msgpack:"id"`
 	Pos Vector2D `msgpack:"pos"`
-	
 	// True when this is the data of the player being sent to
 	Me bool `msgpack:"me"`
 }
@@ -144,7 +143,7 @@ func (p *Player) handleMsg(rawData []byte, h *Hub) {
 	} else if inData.UpdateType == ClientRecWordle {
 		var wordleData WordleReq
 		if err := msgpack.Unmarshal(inData.Data, &wordleData); err != nil {
-			log.Println("Client data could not be asserted as type WordleData.")
+			log.Println("Client data could not be asserted as type WordleReq.")
 		} else {
 			wordOfTheDay := h.resourceManager.GetWordle()
 			p.updateWordle(wordleData, wordOfTheDay, &h.resourceManager.GuessableWords, h.db)
@@ -168,10 +167,10 @@ func (p *Player) updateWordle(data WordleReq, word string, guessables *map[strin
 	response.Colors = colors
 	if status == WIN {
 		response.Solution = word
-		p.submitWordle(true, db)
+		p.submitWordle(true, data, db)
 	} else if status == LOSE {
 		response.Solution = word
-		p.submitWordle(false, db)
+		p.submitWordle(false, data, db)
 	} else {
 		response.Solution = ""
 	}
@@ -179,9 +178,9 @@ func (p *Player) updateWordle(data WordleReq, word string, guessables *map[strin
 	p.send(response, ServerSendWordle)
 }
 
-func (p *Player) submitWordle(win bool, db *Connection) {
-	pRow, exists := db.getPlayerById(999); if !exists {
-		log.Println("No player in database with id: ", 999)
+func (p *Player) submitWordle(win bool, data WordleReq, db *Connection) {
+	pRow, exists := db.getPlayerById(p.id); if !exists {
+		log.Println("No player in database with id: ", p.id)
 		return
 	}
 	log.Println(pRow.id, ", ", pRow.username)
