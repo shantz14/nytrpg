@@ -4,6 +4,7 @@ import { Clickable, GameState, PlayerState} from "./game-objects.js";
 import { Vector2D } from "./vector2D.js";
 import { Wordle } from "./wordle.js";
 import { ClientUpdate, ClientUpdatePos, ClientUpdateType, ServerUpdate, ServerUpdatePos, ServerWordleResponse, UpdateState, WordleReq, WordleResponse } from "./messages.js";
+import { login } from "./login.js"
 
 declare const MessagePack: typeof import("@msgpack/msgpack");
 const encode = MessagePack.encode;
@@ -30,6 +31,7 @@ export class Game {
 
     public run() {
         this.handleMsgs();
+        //login();
         this.createMap();
         setInterval(() => {
             this.update();
@@ -139,6 +141,10 @@ export class Game {
     }
 
     private move() {
+        if (!this.inputDriver.gameFocused) {
+            return;
+        }
+
         let movement = new Vector2D(0, 0); 
 
         if (this.inputDriver.keysPressed.has("w") && !this.inputDriver.keysPressed.has("s")) {

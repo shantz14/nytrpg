@@ -6,12 +6,14 @@ export class InputDriver {
     keysPressed: Set<string>;
     mousePos: Vector2D;
     state: GameState;
+    gameFocused: boolean;
 
     constructor(canvas: HTMLCanvasElement, state: GameState) {
         this.canvas = canvas;
         this.keysPressed = new Set();
         this.mousePos = new Vector2D(0, 0);
         this.state = state;
+        this.gameFocused = false;
 
         document.addEventListener('keydown', (event) => {
             const key = event.key.toLowerCase();
@@ -35,7 +37,7 @@ export class InputDriver {
     private click(e: MouseEvent) {
         for (const key in this.state.clickables) {
             const obj = this.state.clickables[key];
-            if (obj.rect.inRect(this.mousePos)) {
+            if (obj.rect.inRect(this.mousePos) && this.gameFocused) {
                 obj.action();
             }
         }
