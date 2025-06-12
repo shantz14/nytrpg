@@ -4,7 +4,7 @@ import { Clickable, GameState, PlayerState} from "./game-objects.js";
 import { Vector2D } from "./vector2D.js";
 import { Wordle } from "./wordle.js";
 import { ClientUpdate, ClientUpdatePos, ClientUpdateType, ServerUpdate, ServerUpdatePos, ServerWordleResponse, UpdateState, WordleReq, WordleResponse } from "./messages.js";
-import { login } from "./login.js"
+import { UserData } from "./login.js";
 
 declare const MessagePack: typeof import("@msgpack/msgpack");
 const encode = MessagePack.encode;
@@ -18,8 +18,9 @@ export class Game {
     inputDriver: InputDriver;
     state: GameState;
     wordle: Wordle | null;
+    userData: UserData;
 
-    constructor(ctx: CanvasRenderingContext2D) {
+    constructor(ctx: CanvasRenderingContext2D, userData: UserData) {
         const canvas = ctx.canvas;
 
         this.sock = new WebSocket(SERVER_URL);
@@ -27,11 +28,11 @@ export class Game {
         this.inputDriver = new InputDriver(canvas, this.state);
         this.displayDriver = new DisplayDriver(ctx, this.state);
         this.wordle = null;
+        this.userData = userData;
     }
 
     public run() {
         this.handleMsgs();
-        //login();
         this.createMap();
         setInterval(() => {
             this.update();
