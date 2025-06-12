@@ -22,6 +22,7 @@ export class Wordle {
     }
 
     public run() {
+        this.game.inputDriver.gameFocused = false;
         this.displayGame();
 
         this.populateGame();    
@@ -189,6 +190,7 @@ export class Wordle {
         result.remove();
         const popup = document.getElementById("wordlePopup") as HTMLDivElement;
         popup.remove();
+        this.game.inputDriver.gameFocused = true;
         this.game.wordle = null;
     }
 

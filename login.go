@@ -33,7 +33,6 @@ func handleLogin(h *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Println(req.Username, req.Password)
 	//jwtStr, err := createToken(req.username, req.password)
 
 	var res UserData

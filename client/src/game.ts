@@ -32,6 +32,7 @@ export class Game {
     }
 
     public run() {
+        console.log(this.userData.validUser)
         this.handleMsgs();
         this.createMap();
         setInterval(() => {

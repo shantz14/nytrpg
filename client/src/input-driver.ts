@@ -13,7 +13,7 @@ export class InputDriver {
         this.keysPressed = new Set();
         this.mousePos = new Vector2D(0, 0);
         this.state = state;
-        this.gameFocused = false;
+        this.gameFocused = true;
 
         document.addEventListener('keydown', (event) => {
             const key = event.key.toLowerCase();

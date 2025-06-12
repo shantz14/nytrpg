@@ -35,7 +35,6 @@ async function submit(): Promise<UserData> {
             };
             fetch(loginURL, options)
             .then(response => {
-                console.log(response)
                 if (!response.ok) {
                     throw new Error(`Error posting login data. Status: ${response.status}`);
                 }
