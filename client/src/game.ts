@@ -23,7 +23,8 @@ export class Game {
     constructor(ctx: CanvasRenderingContext2D, userData: UserData) {
         const canvas = ctx.canvas;
 
-        this.sock = new WebSocket(SERVER_URL);
+        console.log(userData)
+        this.sock = new WebSocket(SERVER_URL + `?id=${userData.id}`);
         this.state = new GameState();
         this.inputDriver = new InputDriver(canvas, this.state);
         this.displayDriver = new DisplayDriver(ctx, this.state);
@@ -32,7 +33,6 @@ export class Game {
     }
 
     public run() {
-        console.log(this.userData.validUser)
         this.handleMsgs();
         this.createMap();
         setInterval(() => {
@@ -96,6 +96,7 @@ export class Game {
         const data = new PlayerState();
         data.pos.x = this.state.charVec.x;
         data.pos.y = this.state.charVec.y;
+        data.id = this.userData.id;
 
         this.send(ClientUpdatePos, data);
     }

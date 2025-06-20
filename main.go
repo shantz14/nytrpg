@@ -25,6 +25,9 @@ func main() {
 	http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		handleLogin(hub, w, r)
 	})
+	http.HandleFunc("/signup", func(w http.ResponseWriter, r *http.Request) {
+		handleSignup(hub, w, r)
+	})
 
     log.Println("Server running on port", PORT)
     http.ListenAndServe("localhost:" + strconv.Itoa(PORT), nil)

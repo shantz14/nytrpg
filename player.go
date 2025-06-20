@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -32,11 +33,15 @@ func handleWS(h *Hub, w http.ResponseWriter, r *http.Request) {
 		log.Println("Connection failed at Upgrader: ", err)
 		return
 	}
+	idStr := r.URL.Query().Get("id")
+	id, err := strconv.Atoi(idStr); if err != nil {
+		log.Println("ID not a int?", err)
+		return
+	}
 
 	log.Println("New connection coming from: ", conn.RemoteAddr())
 
-	h.currentID += 1
-	newPlayer := Player{id: h.currentID, conn: conn}
+	newPlayer := Player{id: id, conn: conn}
 
 	// Add new conn to set
 	h.players[&newPlayer] = true
@@ -58,7 +63,7 @@ func (p *Player) handlePlayer(h *Hub) {
 	for range time.Tick(updateInterval) {
 		// Read
 		_, inBuff, err := p.conn.ReadMessage() // No use for msg type yet
-	if err != nil {
+		if err != nil {
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
 				log.Println("Player disconnected")
 			} else if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
