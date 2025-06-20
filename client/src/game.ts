@@ -23,7 +23,6 @@ export class Game {
     constructor(ctx: CanvasRenderingContext2D, userData: UserData) {
         const canvas = ctx.canvas;
 
-        console.log(userData)
         this.sock = new WebSocket(SERVER_URL + `?id=${userData.id}`);
         this.state = new GameState();
         this.inputDriver = new InputDriver(canvas, this.state);

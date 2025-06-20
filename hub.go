@@ -13,7 +13,6 @@ type GameState struct {
 
 type Hub struct {
 	players map[*Player]bool
-	sessionID int
 	state *GameState
 	in chan PlayerData
 	unregister chan *Player
@@ -25,7 +24,6 @@ type Hub struct {
 func newHub() *Hub {
 	return &Hub {
 		players: make(map[*Player]bool),
-		sessionID: 0,
 		state: &GameState {
 			Players: make(map[int]*PlayerData),
 			Unregister: -999,
