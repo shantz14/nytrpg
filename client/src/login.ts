@@ -1,4 +1,4 @@
-export { login };
+export { login, logout };
 
 const loginURL = "http://localhost:8080/login"
 const signupURL = "http://localhost:8080/signup"
@@ -56,6 +56,11 @@ async function login(): Promise<UserData> {
     const userData = await submit();
     deleteLoginPopup();
     return userData;
+}
+
+function logout() {
+    window.localStorage.removeItem("jwt");
+    window.location.reload();
 }
 
 async function submit(): Promise<UserData> {

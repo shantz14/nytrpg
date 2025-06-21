@@ -3,7 +3,6 @@ package main
 import (
 	"nytrpg/resources"
 
-	"github.com/golang-jwt/jwt/v5"
 )
 
 type GameState struct {
@@ -18,7 +17,6 @@ type Hub struct {
 	unregister chan *Player
 	resourceManager *resources.ResourceManager
 	db *Connection
-	tokens map[*jwt.Token]bool
 }
 
 func newHub() *Hub {
@@ -32,7 +30,6 @@ func newHub() *Hub {
 		unregister: make(chan *Player),
 		resourceManager: resources.NewResourceManager(),
 		db: newConnection(),
-		tokens: make(map[*jwt.Token]bool),
 	}
 }
 

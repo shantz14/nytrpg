@@ -4,7 +4,7 @@ import { Clickable, GameState, PlayerState} from "./game-objects.js";
 import { Vector2D } from "./vector2D.js";
 import { Wordle } from "./wordle.js";
 import { ClientUpdate, ClientUpdatePos, ClientUpdateType, ServerUpdate, ServerUpdatePos, ServerWordleResponse, UpdateState, WordleReq, WordleResponse } from "./messages.js";
-import { UserData } from "./login.js";
+import { UserData, logout } from "./login.js";
 
 declare const MessagePack: typeof import("@msgpack/msgpack");
 const encode = MessagePack.encode;
@@ -33,6 +33,7 @@ export class Game {
 
     public run() {
         this.handleMsgs();
+        this.createUI();
         this.createMap();
         setInterval(() => {
             this.update();
@@ -122,6 +123,10 @@ export class Game {
 
     }
 
+    private createUI() {
+        this.createUIClickable("logout", new Vector2D(750, 200), 128, 128, "logout.png", logout);
+    }
+
     private createMap() {
         /*this.createClickable("guide", new Vector2D(500, 500), 64, 64, "Skoobyuboo.png", function() {
             console.log("CLICKED");
@@ -135,6 +140,14 @@ export class Game {
     }
 
     private createClickable(name: string, pos: Vector2D, height: number, width: number, asset: string, action: Function) {
+        const guide = new Clickable(name, pos, height, width, action);
+        this.state.clickables[name] = guide;
+        if (!this.displayDriver.images.has(name)) {
+            this.displayDriver.loadImage(name, asset);
+        }
+    }
+
+    private createUIClickable(name: string, pos: Vector2D, height: number, width: number, asset: string, action: Function) {
         const guide = new Clickable(name, pos, height, width, action);
         this.state.clickables[name] = guide;
         if (!this.displayDriver.images.has(name)) {
