@@ -34,7 +34,28 @@ func (c *Connection) init() {
 // Returns (row, exists) of first player with given id in a PlayerRow struct
 func (c *Connection) getPlayerById(id int) (PlayerRow, bool) {
 	var p PlayerRow
-	rows, err := c.pool.Query("select id, username from Player where id = ?", id)
+	rows, err := c.pool.Query("select player_id, username from Player where player_id = ?", id)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		err := rows.Scan(&p.id, &p.username)
+		if err != nil {
+			log.Fatal(err)
+		}
+		return p, true
+	}
+	err = rows.Err()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return p, false
+}
+
+func (c *Connection) getPlayerByUname(uname string) (PlayerRow, bool) {
+	var p PlayerRow
+	rows, err := c.pool.Query("select player_id, username from Player where username = ?", uname)
 	if err != nil {
 		log.Fatal(err)
 	}

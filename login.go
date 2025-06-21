@@ -22,6 +22,7 @@ type UserData struct {
 	ValidUser bool `json:"validUser"`
 	Id int `json:"id"`
 	Jwt string `json:"jwt"`
+	Username string `json:"username"`
 }
 
 type SignupRes struct {
@@ -132,6 +133,7 @@ func handleLogin(h *Hub, w http.ResponseWriter, r *http.Request) {
 	res.ValidUser = true
 	res.Jwt = jwtStr
 	res.Id = id
+	res.Username = username
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(res)
 	if err != nil {
@@ -162,17 +164,59 @@ func createToken(uname string, psw string) (string, error) {
 	return tokenString, nil
 }
 
-func verifyToken(tokenStr string) bool {
+func checkToken(h *Hub, w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed, only POST allowed.", http.StatusMethodNotAllowed)
+		return
+	}
+	var req string
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Println("Error decoding login request:", err)
+		return
+	}
+	var res UserData
+	if verified, uname := verifyToken(req); verified {
+		row, found := h.db.getPlayerByUname(uname) 
+		if !found {
+			http.Error(w, "Couldn't find player row by username.", http.StatusInternalServerError)
+			return
+		}
+		res.Id = row.id
+		res.Username = row.username
+		res.Jwt = req
+		res.ValidUser = true
+	} else {
+		res.Id = -999
+		res.Username = ""
+		res.Jwt = ""
+		res.ValidUser = false
+	}
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(res)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Println("Error encoding login response:", err)
+		return
+	}
+}
+
+func verifyToken(tokenStr string) (bool, string) {
 	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (any, error) {
-		return os.Getenv("JWT_SECRET"), nil
+		return []byte(os.Getenv("JWT_SECRET")), nil
 	})
 	if err != nil {
 		log.Println("Error parsing jwt:", err)
-		return false
+		return false, ""
 	}
 	if !token.Valid {
 		log.Println("Invalid jwt.")
-		return false
+		return false, ""
 	}
-	return true
+	if claims, ok := token.Claims.(jwt.MapClaims); ok {
+		username := claims["username"].(string)
+		return true, username
+	}
+	return false, ""
 }

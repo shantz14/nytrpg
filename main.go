@@ -25,6 +25,9 @@ func main() {
 	http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		handleLogin(hub, w, r)
 	})
+	http.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+		checkToken(hub, w, r)
+	})
 	http.HandleFunc("/signup", func(w http.ResponseWriter, r *http.Request) {
 		handleSignup(hub, w, r)
 	})

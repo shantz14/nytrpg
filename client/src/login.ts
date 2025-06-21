@@ -2,11 +2,13 @@ export { login };
 
 const loginURL = "http://localhost:8080/login"
 const signupURL = "http://localhost:8080/signup"
+const tokenURL = "http://localhost:8080/token"
 
 export type UserData = {
     validUser: boolean,
     id: number,
     jwt: string,
+    username: string,
 }
 
 export type SignupRes = {
@@ -14,9 +16,44 @@ export type SignupRes = {
 }
 
 async function login(): Promise<UserData> {
+    const jwt = window.localStorage.getItem("jwt");
+    if (jwt != null) {
+        const options = {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(jwt),
+        };
+        const userData: UserData = await fetch(tokenURL, options)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Error posting jwt. Status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(responseData => {
+            return responseData;
+        })
+        .catch(error => {
+            console.error('Error parsing login response json(jwt check):', error);
+            const userData: UserData = {
+                validUser: false,
+                id: -999,
+                jwt: "",
+                username: ""
+            };
+            return userData;
+        });
+
+        if (userData.validUser) {
+            return userData;
+        }
+    }
+
     createLoginPopup();
     handleSignup();
-    const userData: UserData = await submit();
+    const userData = await submit();
     deleteLoginPopup();
     return userData;
 }
@@ -50,6 +87,7 @@ async function submit(): Promise<UserData> {
             .then(responseData => {
                 userData = responseData;
                 submitButton?.removeEventListener("click", listener);
+                window.localStorage.setItem("jwt", userData.jwt);
                 resolve(userData);
             })
             .catch(error => {
