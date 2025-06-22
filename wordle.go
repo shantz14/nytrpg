@@ -79,6 +79,10 @@ func countLetters(word string) map[rune]int {
 	return letterCounts
 }
 
+func insertWordle() {
+
+}
+
 type WordleStatus int
 
 const (

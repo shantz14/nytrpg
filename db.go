@@ -24,7 +24,7 @@ func newConnection() *Connection {
 func (c *Connection) init() {
 	// Create DB connection
 	db, err := sql.Open("sqlite3", 
-				"file:./nytrpg.db?mode=rw")
+				"file:./nytrpg.db?mode=rw&_txlock=immediate&_journal=WAL")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func (c *Connection) getPlayerById(id int) (PlayerRow, bool) {
 		log.Fatal(err)
 	}
 	defer rows.Close()
-	for rows.Next() {
+	if rows.Next() {
 		err := rows.Scan(&p.id, &p.username)
 		if err != nil {
 			log.Fatal(err)
@@ -73,3 +73,22 @@ func (c *Connection) getPlayerByUname(uname string) (PlayerRow, bool) {
 	}
 	return p, false
 }
+
+func (c *Connection) insertWordle(date string, win bool, seconds float32, guessCount int, pid int) {
+	sql := `
+	INSERT INTO Wordle (date, win, seconds, guessCount, player_id)
+	VALUES (?, ?, ?, ?, ?);
+	`
+	wini := 0
+	if win {
+		wini = 1
+	}
+	_, err := c.pool.Exec(sql, date, wini, seconds, guessCount, pid)
+	if err != nil {
+		log.Println("Failed to insert wordle record.", err)
+	}
+}
+
+
+
+

@@ -184,10 +184,8 @@ func (p *Player) updateWordle(data WordleReq, word string, guessables *map[strin
 }
 
 func (p *Player) submitWordle(win bool, data WordleReq, db *Connection) {
-	pRow, exists := db.getPlayerById(p.id); if !exists {
-		log.Println("No player in database with id: ", p.id)
-		return
-	}
-	log.Println(pRow.id, ", ", pRow.username)
+	currentTime := time.Now()
+	date := currentTime.Format("2006-01-02")
+	db.insertWordle(date, win, float32(data.Time), data.GuessCount, p.id)
 }
 

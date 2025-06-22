@@ -2,7 +2,7 @@ import { Game } from "./game.js";
 import { ClientSendWordle, WordleReq, WordleResponse } from "./messages.js";
 
 const GUESSES = 5;
-const TIME_LIMIT = 1; //minutes
+const TIME_LIMIT = 3; //minutes
 
 export class Wordle {
     game: Game;
@@ -27,7 +27,32 @@ export class Wordle {
 
         this.populateGame();    
 
-        this.runTimer();
+        this.runStopwatch();
+    }
+
+    private runStopwatch() {
+        const start = Date.now();
+        const timer = document.getElementById("timer") as HTMLDivElement;
+        let minutes = 0;
+        let seconds = 0;
+        timer.innerHTML = minutes + ":" + seconds + "0"
+        setInterval(() => {
+            let delta = Date.now();
+
+            if (seconds == 59) {
+                timer.innerHTML = minutes + ":" + seconds;
+                minutes++;
+                seconds = 0;
+            } else if (seconds < 10) {
+                timer.innerHTML = minutes + ":" + "0" + seconds;
+                seconds++;
+            } else {
+                timer.innerHTML = minutes + ":" + seconds;
+                seconds++;
+            }
+
+            this.timePlayed = (delta - start) / 1000;
+        }, 1000);
     }
 
     private runTimer() {
@@ -57,7 +82,7 @@ export class Wordle {
 
             // 5 minutes
             if ((this.timePlayed) >= (TIME_LIMIT * 60)) {
-                this.loseByTime();
+                //this.loseByTime();
             }
         }, 1000);
     }
