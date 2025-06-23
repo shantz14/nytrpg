@@ -1,8 +1,10 @@
 package main
 
 import (
-	"log"
 	"database/sql"
+	"log"
+	"time"
+
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -72,6 +74,24 @@ func (c *Connection) getPlayerByUname(uname string) (PlayerRow, bool) {
 		log.Fatal(err)
 	}
 	return p, false
+}
+
+func (c *Connection) playedToday(pid int) bool {
+	currentTime := time.Now()
+	date := currentTime.Format("2006-01-02")
+	sql := `
+	SELECT * FROM Wordle
+	WHERE player_id = ? AND date = ?;
+	`
+	rows, err := c.pool.Query(sql, pid, date)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		return true
+	}
+	return false
 }
 
 func (c *Connection) insertWordle(date string, win bool, seconds float32, guessCount int, pid int) {

@@ -31,6 +31,9 @@ func main() {
 	http.HandleFunc("/signup", func(w http.ResponseWriter, r *http.Request) {
 		handleSignup(hub, w, r)
 	})
+	http.HandleFunc("/haveIPlayed", func(w http.ResponseWriter, r *http.Request) {
+		handleHaveIPlayed(hub, w, r)
+	})
 
     log.Println("Server running on port", PORT)
     http.ListenAndServe("localhost:" + strconv.Itoa(PORT), nil)

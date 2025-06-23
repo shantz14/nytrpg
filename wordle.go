@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/json"
+	"log"
+	"net/http"
+	"strconv"
 	"strings"
-
 )
 
 const GUESSES_ALLOWED = 5
@@ -79,8 +82,27 @@ func countLetters(word string) map[rune]int {
 	return letterCounts
 }
 
-func insertWordle() {
+func handleHaveIPlayed(h *Hub, w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed, only GET allowed.", http.StatusMethodNotAllowed)
+		return
+	}
+	idStr := r.URL.Query().Get("id")
+	id, err := strconv.Atoi(idStr); if err != nil {
+		log.Println("ID not a int?", err)
+		return
+	}
+	var res bool
 
+	res = h.db.playedToday(id)
+
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(res)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Println("Error encoding haveiplayed response:", err)
+		return
+	}
 }
 
 type WordleStatus int

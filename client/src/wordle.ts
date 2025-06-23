@@ -3,6 +3,7 @@ import { ClientSendWordle, WordleReq, WordleResponse } from "./messages.js";
 
 const GUESSES = 5;
 const TIME_LIMIT = 3; //minutes
+const wordleURL = "http://localhost:8080/haveIPlayed"
 
 export class Wordle {
     game: Game;
@@ -23,11 +24,69 @@ export class Wordle {
 
     public run() {
         this.game.inputDriver.gameFocused = false;
-        this.displayGame();
 
-        this.populateGame();    
+        this.haveIPlayedToday()
+        .then(played => {
+            if (played) {
+                this.displayYouHavePlayed();
+                return;
+            } else {
+                this.displayGame();
+                this.populateGame();    
+                this.runStopwatch();
+            }
+        });
+    }
 
-        this.runStopwatch();
+    private async haveIPlayedToday(): Promise<boolean> {
+        const options = {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        }
+        return fetch(wordleURL + `?id=${this.game.userData.id}`, options)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Error getting wordle thingy. Status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(responseData => {
+            return responseData;
+        })
+        .catch(error => {
+            console.error('Error parsing haveIPlayedToday:', error);
+            return true;
+        });
+    }
+
+    private displayYouHavePlayed() {
+        const html = `
+        <button id="exit">X</button>
+
+        <div class="resultContainer" id="resultContainer">
+
+            <p>You already played the wordle today.</p>
+
+        </div>
+        `;
+        const popup = document.createElement("div");
+        popup.setAttribute("id", "resultPopup")
+        popup.innerHTML = html;
+
+        const parent = document.getElementById("container");
+        if (parent) {
+            parent.appendChild(popup);
+        } else {
+            console.error("No parent to append popup to.");
+        }
+
+        const exitButton = document.getElementById("exit") as HTMLButtonElement;
+        exitButton.addEventListener("click", () => {
+            popup.remove();
+            this.game.inputDriver.gameFocused = true;
+        });
     }
 
     private runStopwatch() {
@@ -35,7 +94,7 @@ export class Wordle {
         const timer = document.getElementById("timer") as HTMLDivElement;
         let minutes = 0;
         let seconds = 0;
-        timer.innerHTML = minutes + ":" + seconds + "0"
+        timer.innerHTML = minutes + ":" + seconds + "0";
         setInterval(() => {
             let delta = Date.now();
 
@@ -107,7 +166,7 @@ export class Wordle {
         <button id="submit">Submit</button>
         `;
         const popup = document.createElement("div");
-        popup.setAttribute("id", "wordlePopup")
+        popup.setAttribute("id", "wordlePopup");
         popup.innerHTML = gameHtml;
 
         const parent = document.getElementById("container");
@@ -185,7 +244,7 @@ export class Wordle {
     public handleResponse(res: WordleResponse) {
         if (!res.valid) {
             this.cancelMove();
-            return
+            return;
         }
         const colors = res.colors;
         this.colorMyBoxes(colors);
@@ -228,7 +287,7 @@ export class Wordle {
     }
 
     private loseByTime() {
-        this.displayResultDiv(false, "")
+        this.displayResultDiv(false, "");
     }
 
     private displayResultDiv(win: boolean, word: string) {
