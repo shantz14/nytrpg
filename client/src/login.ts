@@ -1,8 +1,8 @@
 export { login, logout };
 
-const loginURL = "http://localhost:8080/login"
-const signupURL = "http://localhost:8080/signup"
-const tokenURL = "http://localhost:8080/token"
+const loginURL = "/login"
+const signupURL = "/signup"
+const tokenURL = "/token"
 
 export type UserData = {
     validUser: boolean,

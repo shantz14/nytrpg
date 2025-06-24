@@ -3,7 +3,7 @@ import { ClientSendWordle, WordleReq, WordleResponse } from "./messages.js";
 
 const GUESSES = 5;
 const TIME_LIMIT = 3; //minutes
-const wordleURL = "http://localhost:8080/haveIPlayed"
+const wordleURL = "/haveIPlayed"
 
 export class Wordle {
     game: Game;

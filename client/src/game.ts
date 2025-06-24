@@ -10,7 +10,7 @@ declare const MessagePack: typeof import("@msgpack/msgpack");
 const encode = MessagePack.encode;
 const decode = MessagePack.decode;
 
-const SERVER_URL = "http://localhost:8080/ws";
+const SERVER_URL = "/ws";
 
 export class Game {
     sock: WebSocket;
@@ -54,7 +54,7 @@ export class Game {
             if (msg.updateType == ServerUpdatePos) {
                 const update = decode(msg.data) as UpdateState;
                 this.updatePos(update);
-            } else if (msg.updateType == ServerWordleResponse){
+            } else if (msg.updateType == ServerWordleResponse) {
                 const update = decode(msg.data) as WordleResponse;
                 if (this.wordle) {
                     this.wordle.handleResponse(update);
