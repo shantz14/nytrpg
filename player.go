@@ -25,6 +25,7 @@ type PlayerData struct {
 	Pos Vector2D `msgpack:"pos"`
 	// True when this is the data of the player being sent to
 	Me bool `msgpack:"me"`
+	Username string `msgpack:"username"`
 }
 
 func handleWS(h *Hub, w http.ResponseWriter, r *http.Request) {
@@ -46,8 +47,10 @@ func handleWS(h *Hub, w http.ResponseWriter, r *http.Request) {
 	// Add new conn to set
 	h.players[&newPlayer] = true
 
+	pRow, _ := h.db.getPlayerById(id)
+
 	// Add pos to gamestate
-	h.state.Players[newPlayer.id] = &PlayerData{ID: newPlayer.id, Pos: Vector2D{X: 0, Y: 0}, Me: false}
+	h.state.Players[newPlayer.id] = &PlayerData{ID: newPlayer.id, Pos: Vector2D{X: 0, Y: 0}, Me: false, Username: pRow.username}
 
 	go newPlayer.handlePlayer(h)
 }
@@ -85,6 +88,7 @@ func (p *Player) handlePlayer(h *Hub) {
 			var newPlayer PlayerData
 			newPlayer.ID = id
 			newPlayer.Pos = player.Pos
+			newPlayer.Username = player.Username
 
 			if (id == p.id) {
 				newPlayer.Me = true

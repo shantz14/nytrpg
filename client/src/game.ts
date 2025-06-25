@@ -78,6 +78,7 @@ export class Game {
 
             } else {
                 // Another players data
+                console.log("recived " + newState.username)
                 this.state.otherChars[Number(id)] = structuredClone(newState);
             }
 

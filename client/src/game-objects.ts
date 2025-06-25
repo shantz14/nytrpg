@@ -16,11 +16,13 @@ export class PlayerState {
     id: number;
     pos: Vector2D;
     me: boolean;
+    username: string;
     
     constructor() {
         this.id = -1;
         this.pos = new Vector2D(0, 0); 
         this.me = false;
+        this.username = "";
     }
 }
 

@@ -52,10 +52,13 @@ export class DisplayDriver {
     private drawOtherChars() {
         for (const id in this.state.otherChars) {
             const charVec = this.state.otherChars[id].pos;
+            const username = this.state.otherChars[id].username;
             const sprite = this.images.get(String(id)) as HTMLImageElement;
 
             if (sprite) {
                 this.ctx.drawImage(sprite, charVec.x, charVec.y);
+                this.ctx.font = "26px serif"
+                this.ctx.fillText(username, charVec.x, charVec.y-10);
             }
         }
 
