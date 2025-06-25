@@ -1,4 +1,5 @@
 import { GameState } from "./game-objects.js";
+import { UserData } from "./login.js";
 import { Vector2D } from "./vector2D.js";
 
 export class DisplayDriver {
@@ -6,12 +7,14 @@ export class DisplayDriver {
     canvas: HTMLCanvasElement;
     state: GameState;
     images: Map<string, HTMLImageElement>;
+    userData: UserData;
 
-    constructor(ctx: CanvasRenderingContext2D, startState: GameState) {
+    constructor(ctx: CanvasRenderingContext2D, startState: GameState, userData: UserData) {
         this.ctx = ctx;
         this.canvas = ctx.canvas;
         this.state = startState;
         this.images = new Map();
+        this.userData = userData;
 
         this.scaleCanvas();
 
@@ -38,11 +41,11 @@ export class DisplayDriver {
 
     private drawCharacter() {
         const charVec = this.state.charVec;
-
         const sprite = this.images.get("character") as HTMLImageElement;
-
         if (sprite) {
             this.ctx.drawImage(sprite, charVec.x, charVec.y);
+            this.ctx.font = "26px serif"
+            this.ctx.fillText(this.userData.username, charVec.x, charVec.y-10);
         }
     }
 

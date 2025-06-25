@@ -26,7 +26,7 @@ export class Game {
         this.sock = new WebSocket(SERVER_URL + `?id=${userData.id}`);
         this.state = new GameState();
         this.inputDriver = new InputDriver(canvas, this.state);
-        this.displayDriver = new DisplayDriver(ctx, this.state);
+        this.displayDriver = new DisplayDriver(ctx, this.state, userData);
         this.wordle = null;
         this.userData = userData;
     }
