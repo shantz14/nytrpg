@@ -89,6 +89,19 @@ func handleSignup(h *Hub, w http.ResponseWriter, r *http.Request) {
 }
 
 func handleLogin(h *Hub, w http.ResponseWriter, r *http.Request) {
+	var res UserData
+	res.ValidUser = false
+	res.Jwt = ""
+	res.Id = -999
+	res.Username = ""
+	defer func() {
+		w.Header().Set("Content-Type", "application/json")
+		err := json.NewEncoder(w).Encode(res)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Println("Error encoding login response:", err)
+		}
+	}()
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed, only POST allowed.", http.StatusMethodNotAllowed)
 		return
@@ -109,7 +122,8 @@ func handleLogin(h *Hub, w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.db.pool.Query(sql, req.Username)
 	if err != nil {
-		log.Fatal(err)
+		log.Println("Broke db login thing:", err)
+		return
 	}
 	if (!rows.Next()) {
 		log.Println("Invalid credentials (username)")
@@ -121,6 +135,7 @@ func handleLogin(h *Hub, w http.ResponseWriter, r *http.Request) {
 	err = rows.Scan(&id, &username, &storedPass)
 	if err != nil {
 		log.Println("Error scanning player row:", err)
+		return
 	}
 	if (!checkPassword(req.Password, storedPass)) {
 		log.Println("Invalid credentials (password)")
@@ -129,18 +144,10 @@ func handleLogin(h *Hub, w http.ResponseWriter, r *http.Request) {
 
 	jwtStr, err := createToken(req.Username, req.Password)
 
-	var res UserData
 	res.ValidUser = true
 	res.Jwt = jwtStr
 	res.Id = id
 	res.Username = username
-	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(res)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log.Println("Error encoding login response:", err)
-		return
-	}
 }
 
 func checkPassword(password string, storedHash string) bool {
@@ -203,6 +210,9 @@ func checkToken(h *Hub, w http.ResponseWriter, r *http.Request) {
 }
 
 func verifyToken(tokenStr string) (bool, string) {
+	if tokenStr == "" {
+		return false, ""
+	}
 	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (any, error) {
 		return []byte(os.Getenv("JWT_SECRET")), nil
 	})

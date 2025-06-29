@@ -91,9 +91,14 @@ async function submit(): Promise<UserData> {
             })
             .then(responseData => {
                 userData = responseData;
-                submitButton?.removeEventListener("click", listener);
-                window.localStorage.setItem("jwt", userData.jwt);
-                resolve(userData);
+                if (userData.validUser) {
+                    submitButton?.removeEventListener("click", listener);
+                    window.localStorage.setItem("jwt", userData.jwt);
+                    resolve(userData);
+                } else {
+                    const errtxt = document.getElementById("errorText") as HTMLParagraphElement;
+                    errtxt.innerText = "Invalid username/password.";
+                }
             })
             .catch(error => {
                 console.error('Error parsing login response json:', error);
@@ -107,6 +112,7 @@ async function submit(): Promise<UserData> {
 function createLoginPopup() {
     const html = `
     <div class="loginContainer" id="loginContainer">
+    <p id="errorText"></p>
 
     <label for="uname"><b>Username</b></label>
         <input type="text" id="uname" placeholder="Enter Username" name="uname" required>
