@@ -142,6 +142,11 @@ func handleLogin(h *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.state.Players[id] != nil {
+		log.Println("Already logged in")
+		return
+	}
+
 	jwtStr, err := createToken(req.Username, req.Password)
 
 	res.ValidUser = true
@@ -191,9 +196,17 @@ func checkToken(h *Hub, w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		res.Id = row.id
-		res.Username = row.username
-		res.Jwt = req
-		res.ValidUser = true
+		if h.state.Players[row.id] != nil {
+			log.Println("Already logged in")
+			res.Id = -999
+			res.Username = ""
+			res.Jwt = ""
+			res.ValidUser = false
+		} else {
+			res.Username = row.username
+			res.Jwt = req
+			res.ValidUser = true
+		}
 	} else {
 		res.Id = -999
 		res.Username = ""
