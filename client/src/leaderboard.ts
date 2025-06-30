@@ -1,3 +1,4 @@
+import { InputDriver } from "./input-driver";
 import { UserData } from "./login";
 
 const URL = "/leaderboard";
@@ -11,12 +12,15 @@ type Row = {
 
 export class Leaderboard {
     userData: UserData;
+    inputDriver: InputDriver
 
-    constructor(userData: UserData) {
+    constructor(userData: UserData, inputDriver: InputDriver) {
         this.userData = userData;
+        this.inputDriver = inputDriver;
     }
 
     public run() {
+        this.inputDriver.gameFocused = false;
         this.createPopup();
         this.populate();
     }
@@ -41,6 +45,8 @@ export class Leaderboard {
             day = '0' + day;
         }
         const date = year + '-' + month + '-' + day;
+        const dateText = document.getElementById("date") as HTMLHeadingElement;
+        dateText.innerHTML = date;
         const data: Array<Row> = await fetch(URL + `?date=${date}`, options)
         .then(response => {
             if (!response.ok) {
@@ -76,9 +82,11 @@ export class Leaderboard {
 
     private createPopup() {
         const html = `
+        <button id="exit">X</button>
         <div class="leaderboardContainer" id="leaderboardContainer">
 
         <h1>Wordle Rankings</h1>
+        <h2 id="date"></h2>
 
         <table id="lb">
             <tr id="h">
@@ -93,6 +101,10 @@ export class Leaderboard {
 
         <button id="pageUp">Pgup</button>
         <button id="pageDown">Pgdn</button>
+        <div id="days">
+            <button id="prevDay">Previous Day</button>
+            <button id="nextDay">Next Day</button>
+        </div>
 
         </div>
         `;
@@ -106,6 +118,37 @@ export class Leaderboard {
         } else {
             console.error("No parent to append popup to.");
         }
+
+        const pgup = document.getElementById("pageUp");
+        pgup?.addEventListener("click", this.pageUp);
+        const pgdn = document.getElementById("pageDown");
+        pgdn?.addEventListener("click", this.pageDown);
+        const nextDay = document.getElementById("nextDay");
+        nextDay?.addEventListener("click", this.nextDay);
+        const prevDay = document.getElementById("prevDay");
+        prevDay?.addEventListener("click", this.prevDay);
+        const exit = document.getElementById("exit");
+        exit?.addEventListener("click", () => {
+            this.inputDriver.gameFocused = true;
+            const popup = document.getElementById("leaderboardPopup") as HTMLDivElement;
+            popup.remove();
+        });
+    }
+
+    private nextDay() {
+
+    }
+
+    private prevDay() {
+
+    }
+
+    private pageUp() {
+
+    }
+
+    private pageDown() {
+
     }
 
 }

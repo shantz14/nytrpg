@@ -128,7 +128,7 @@ export class Game {
     private createUI() {
         this.createUIClickable("logout", new Vector2D(750, 200), 128, 128, "logout.png", logout);
         this.createUIClickable("leaderboard", new Vector2D(200, 200), 128, 128, "logout.png", () => {
-            const lb = new Leaderboard(this.userData);
+            const lb = new Leaderboard(this.userData, this.inputDriver);
             lb.run();
         });
     }

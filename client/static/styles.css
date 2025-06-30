@@ -101,8 +101,17 @@ canvas {
     margin-bottom: 200px;
 }
 
-#leaderboardContainer h1 {
+#leaderboardContainer {
     margin-bottom: 100px;
+}
+
+#days {
+    margin: 10px;
+}
+
+#days button {
+    margin: 5px;
+
 }
 
 #lb {
@@ -111,6 +120,10 @@ canvas {
     border-collapse: collapse;
     margin: 10px;
     width: 60vw;
+}
+
+#leaderboardContainer h1 {
+    margin-bottom: 50px;
 }
 
 #lb th {
