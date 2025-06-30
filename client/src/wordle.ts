@@ -1,5 +1,7 @@
 import { Game } from "./game.js";
 import { ClientSendWordle, WordleReq, WordleResponse } from "./messages.js";
+// TODO: wordle needs to be persistent after reload and keep counting the timer
+// but have a timeout
 
 const GUESSES = 5;
 const TIME_LIMIT = 3; //minutes
@@ -225,7 +227,13 @@ export class Wordle {
                 e.preventDefault();
                 this.submitButton?.click();
             }
-        })
+        });
+        document.addEventListener("keydown", (e: KeyboardEvent) => {
+            if (e.key === "Backspace") {
+                e.preventDefault();
+                this.cancelMove();
+            }
+        });
 
     }
 
@@ -243,6 +251,7 @@ export class Wordle {
 
     public handleResponse(res: WordleResponse) {
         if (!res.valid) {
+            this.currentGuess--;
             this.cancelMove();
             return;
         }
@@ -259,7 +268,6 @@ export class Wordle {
     }
 
     private cancelMove() {
-        this.currentGuess--;
         const firstLetter = document.getElementById("letter" + (this.currentGuess) + "0");
         firstLetter?.focus();
         for (var i = 0; i < 5; i++) {
