@@ -1,2 +1,0 @@
-tsc
-go run *.go

@@ -65,7 +65,7 @@ canvas {
     z-index: 2;
 }
 
-#loginPopup, #signupPopup {
+#leaderboardPopup, #loginPopup, #signupPopup {
     background-color: rgb(26, 25, 25);
     font-family:Arial, Helvetica, sans-serif;
     color: white;
@@ -90,7 +90,7 @@ canvas {
     z-index: 3;
 }
 
-#loginContainer, #signupContainer {
+#leaderboardContainer, #loginContainer, #signupContainer {
     display: flex;
     flex-direction: column;
     align-content: center;
@@ -99,6 +99,34 @@ canvas {
     align-items: center;
     text-align: center;
     margin-bottom: 200px;
+}
+
+#leaderboardContainer h1 {
+    margin-bottom: 100px;
+}
+
+#lb {
+    border: 1px solid rgp(25, 25, 25);
+    background-color: rgb(16, 16, 22);
+    border-collapse: collapse;
+    margin: 10px;
+    width: 60vw;
+}
+
+#lb th {
+    background-color: rgb(23, 23, 23);
+    color: rgb(216, 200, 145);
+}
+
+#lb tr {
+    color: rgb(146, 125, 96);
+}
+
+#pageUp, #pageDown {
+    margin-top: 20px;
+    border-radius: 99rem;
+    width: 100px;
+    height: 40px;
 }
 
 #signupPopup label {

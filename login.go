@@ -217,7 +217,7 @@ func verifyToken(tokenStr string) (bool, string) {
 		return []byte(os.Getenv("JWT_SECRET")), nil
 	})
 	if err != nil {
-		log.Println("Error parsing jwt:", err)
+		log.Println("Invalid jwt:", err)
 		return false, ""
 	}
 	if !token.Valid {

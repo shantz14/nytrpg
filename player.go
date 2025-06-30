@@ -188,7 +188,7 @@ func (p *Player) updateWordle(data WordleReq, word string, guessables *map[strin
 }
 
 func (p *Player) submitWordle(win bool, data WordleReq, db *Connection) {
-	currentTime := time.Now()
+	currentTime := time.Now().UTC()
 	date := currentTime.Format("2006-01-02")
 	db.insertWordle(date, win, float32(data.Time), data.GuessCount, p.id)
 }

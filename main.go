@@ -34,6 +34,9 @@ func main() {
 	http.HandleFunc("/haveIPlayed", func(w http.ResponseWriter, r *http.Request) {
 		handleHaveIPlayed(hub, w, r)
 	})
+	http.HandleFunc("/leaderboard", func(w http.ResponseWriter, r *http.Request) {
+		handleLeaderboard(hub, w, r)
+	})
 
     log.Println("Server running on port", PORT)
     http.ListenAndServe("localhost:" + strconv.Itoa(PORT), nil)

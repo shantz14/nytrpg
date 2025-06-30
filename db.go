@@ -109,6 +109,41 @@ func (c *Connection) insertWordle(date string, win bool, seconds float32, guessC
 	}
 }
 
+func (c *Connection) getLeaderboard(date string) []lbRow {
+	var result []lbRow
+	sql := `
+	SELECT p.username, w.guessCount, w.seconds FROM Wordle w
+	INNER JOIN Player p ON w.player_id = p.player_id
+	WHERE w.date = ? AND w.win = 1
+	ORDER BY w.guessCount ASC, w.seconds ASC;
+	`
+	rows, err := c.pool.Query(sql, date)
+	if err != nil {
+		log.Panicln(err)
+	}
+	defer rows.Close()
+	place := 1
+	for rows.Next() {
+		var row lbRow
+		err := rows.Scan(&row.Uname, &row.Guesses, &row.Time)
+		if err != nil {
+			log.Println(err)
+		}
+		row.Place = place
+		result = append(result, row)
+		place++
+	}
+	if len(result) == 0 {
+		var fakeRow lbRow
+		fakeRow.Uname = "No records for today..."
+		fakeRow.Guesses = 0
+		fakeRow.Place = 1
+		fakeRow.Time = 0
+		result = append(result, fakeRow)
+	}
+	return result
+}
+
 
 
 
