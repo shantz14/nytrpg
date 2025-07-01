@@ -35,6 +35,7 @@ export class Leaderboard {
             },
         }
         const now = new Date(); // Get the current date and time
+        now.setHours(now.getHours()-7);
         const year = now.getUTCFullYear();
         let month = (now.getUTCMonth() + 1).toString();
         if (Number(month) < 10) {
