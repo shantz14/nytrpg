@@ -8,13 +8,15 @@ export class DisplayDriver {
     state: GameState;
     images: Map<string, HTMLImageElement>;
     userData: UserData;
+    middle: Vector2D;
 
-    constructor(ctx: CanvasRenderingContext2D, startState: GameState, userData: UserData) {
+    constructor(ctx: CanvasRenderingContext2D, startState: GameState, userData: UserData, middle: Vector2D) {
         this.ctx = ctx;
         this.canvas = ctx.canvas;
         this.state = startState;
         this.images = new Map();
         this.userData = userData;
+        this.middle = middle;
 
         this.scaleCanvas();
 
@@ -33,19 +35,19 @@ export class DisplayDriver {
 
     private drawBackground() {
         const bg = this.images.get("bg") as HTMLImageElement;
+        const pP = this.state.charVec;
         
         if (bg) {
-            this.ctx.drawImage(bg, 0, 0);
+            this.ctx.drawImage(bg, 0-pP.x, 0-pP.y);
         }
     }
 
     private drawCharacter() {
-        const charVec = this.state.charVec;
         const sprite = this.images.get("character") as HTMLImageElement;
         if (sprite) {
-            this.ctx.drawImage(sprite, charVec.x, charVec.y);
+            this.ctx.drawImage(sprite, this.middle.x, this.middle.y);
             this.ctx.font = "26px serif"
-            this.ctx.fillText(this.userData.username, charVec.x, charVec.y-10);
+            this.ctx.fillText(this.userData.username, this.middle.x, this.middle.y-10);
         }
     }
 
@@ -55,16 +57,19 @@ export class DisplayDriver {
             const username = this.state.otherChars[id].username;
             const sprite = this.images.get(String(id)) as HTMLImageElement;
 
+            const adjusted = new Vector2D(charVec.x, charVec.y);
+            adjusted.subtract(this.state.charVec);
             if (sprite) {
-                this.ctx.drawImage(sprite, charVec.x, charVec.y);
-                this.ctx.font = "26px serif"
-                this.ctx.fillText(username, charVec.x, charVec.y-10);
+                this.ctx.drawImage(sprite, adjusted.x, adjusted.y);
+                this.ctx.font = "26px serif";
+                this.ctx.fillText(username, adjusted.x, adjusted.y-10);
             }
         }
 
         for (const name in this.state.clickables) {
-            const pos = this.state.clickables[name].rect.tl;
             const sprite = this.images.get(name) as HTMLImageElement;
+            this.state.clickables[name].rect.adjust(this.state.charVec);
+            const pos = this.state.clickables[name].rect.tl;
 
             if (sprite) {
                 this.ctx.drawImage(sprite, pos.x, pos.y);

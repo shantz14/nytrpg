@@ -27,7 +27,8 @@ export class Game {
         this.sock = new WebSocket(SERVER_URL + `?id=${userData.id}`);
         this.state = new GameState();
         this.inputDriver = new InputDriver(canvas, this.state);
-        this.displayDriver = new DisplayDriver(ctx, this.state, userData);
+        const middle = this.findMiddle();
+        this.displayDriver = new DisplayDriver(ctx, this.state, userData, middle);
         this.wordle = null;
         this.userData = userData;
     }
@@ -95,8 +96,8 @@ export class Game {
 
     private sendPlayerState() {
         const data = new PlayerState();
-        data.pos.x = this.state.charVec.x;
-        data.pos.y = this.state.charVec.y;
+        data.pos.x = this.state.charVec.x + this.displayDriver.middle.x;
+        data.pos.y = this.state.charVec.y + this.displayDriver.middle.y;
         data.id = this.userData.id;
 
         this.send(ClientUpdatePos, data);
@@ -191,6 +192,12 @@ export class Game {
                 this.displayDriver.loadImage(String(id), "Skoobyuboo.png");
             }
         }
+    }
+
+    private findMiddle(): Vector2D {
+        const x = window.innerWidth / 2;
+        const y = window.innerHeight / 2;
+        return new Vector2D(x, y);
     }
 
 }

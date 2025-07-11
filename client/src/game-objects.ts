@@ -63,4 +63,11 @@ export class Rect {
         }
         return false;
     }
+
+    public adjust(vec: Vector2D) {
+        this.tl.x = this.pos.x - vec.x;
+        this.tl.y = this.pos.y - vec.y;
+        this.br.x = this.tl.x + this.width;
+        this.br.y = this.tl.y + this.height;
+    }
 }
