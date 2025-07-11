@@ -104,6 +104,10 @@ func (p *Player) handlePlayer(h *Hub) {
 
 		p.send(playerData, ServerUpdatePos)
 
+		if h.state.Unregister != -999 {
+			h.state.Unregister = -999
+		}
+
 	}
 
 }

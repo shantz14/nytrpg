@@ -195,7 +195,6 @@ func checkToken(h *Hub, w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Couldn't find player row by username.", http.StatusInternalServerError)
 			return
 		}
-		res.Id = row.id
 		if h.state.Players[row.id] != nil {
 			log.Println("Already logged in")
 			res.Id = -999
@@ -203,6 +202,7 @@ func checkToken(h *Hub, w http.ResponseWriter, r *http.Request) {
 			res.Jwt = ""
 			res.ValidUser = false
 		} else {
+			res.Id = row.id
 			res.Username = row.username
 			res.Jwt = req
 			res.ValidUser = true
