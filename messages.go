@@ -3,8 +3,10 @@ package main
 type ServerMessageType int
 
 const (
+	// Data sent FROM the SERVER
 	ServerUpdatePos ServerMessageType = 1
 	ServerSendWordle ServerMessageType = 2
+	ServerSendChat ServerMessageType = 4
 )
 
 type ServerMessage struct {
@@ -15,8 +17,10 @@ type ServerMessage struct {
 type ClientMessageType int
 
 const (
+	// Data sent FROM the CLIENT
 	ClientUpdatePos ClientMessageType = 1
 	ClientRecWordle ClientMessageType = 2
+	ClientRecChat ClientMessageType = 3
 )
 
 type ClientMessage struct {
@@ -36,6 +40,11 @@ type WordleRes struct {
 	Status WordleStatus `msgpack:"status"`
 	Colors []WordleColor `msgpack:"colors"`
 	Solution string `msgpack:"solution"`
+}
+
+type Chat struct {
+	ID int `msgpack:"id"`
+	Msg string `msgpack:"msg"`
 }
 
 

@@ -1,5 +1,6 @@
 import { GameState } from "./game-objects.js";
 import { UserData } from "./login.js";
+import { Chat } from "./messages.js";
 import { Vector2D } from "./vector2D.js";
 
 export class DisplayDriver {
@@ -7,6 +8,7 @@ export class DisplayDriver {
     canvas: HTMLCanvasElement;
     state: GameState;
     images: Map<string, HTMLImageElement>;
+    chats: Map<Chat, Date>;
     userData: UserData;
     middle: Vector2D;
 
@@ -15,6 +17,7 @@ export class DisplayDriver {
         this.canvas = ctx.canvas;
         this.state = startState;
         this.images = new Map();
+        this.chats = new Map();
         this.userData = userData;
         this.middle = middle;
 
@@ -46,7 +49,7 @@ export class DisplayDriver {
         const sprite = this.images.get("character") as HTMLImageElement;
         if (sprite) {
             this.ctx.drawImage(sprite, this.middle.x, this.middle.y);
-            this.ctx.font = "26px serif"
+            this.ctx.font = "26px serif";
             this.ctx.fillText(this.userData.username, this.middle.x, this.middle.y-10);
         }
     }
@@ -77,6 +80,19 @@ export class DisplayDriver {
         }
     }
 
+    public updateChat(chat: Chat) {
+        let pos: Vector2D;
+        if (chat.id == this.userData.id) {
+            pos = this.state.charVec;
+        } else {
+            pos = this.state.otherChars[chat.id].pos;
+        }
+        const adjusted = new Vector2D(pos.x, pos.y);
+        adjusted.subtract(this.state.charVec);
+        this.ctx.font = "26px serif";
+        this.ctx.fillText(chat.msg, adjusted.x, adjusted.y-20);
+    }
+
     private scaleCanvas() {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
@@ -102,4 +118,5 @@ export class DisplayDriver {
             this.images.set(key, image);
         }
     }
+
 }

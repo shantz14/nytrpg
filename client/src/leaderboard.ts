@@ -20,7 +20,7 @@ export class Leaderboard {
     }
 
     public run() {
-        this.inputDriver.gameFocused = false;
+        this.inputDriver.setPopupFocused();
         this.createPopup();
         this.populate();
     }
@@ -130,7 +130,7 @@ export class Leaderboard {
         prevDay?.addEventListener("click", this.prevDay);
         const exit = document.getElementById("exit");
         exit?.addEventListener("click", () => {
-            this.inputDriver.gameFocused = true;
+            this.inputDriver.setGameFocused();
             const popup = document.getElementById("leaderboardPopup") as HTMLDivElement;
             popup.remove();
         });

@@ -25,7 +25,7 @@ export class Wordle {
     }
 
     public run() {
-        this.game.inputDriver.gameFocused = false;
+        this.game.inputDriver.setPopupFocused();
 
         this.haveIPlayedToday()
         .then(played => {
@@ -87,7 +87,7 @@ export class Wordle {
         const exitButton = document.getElementById("exit") as HTMLButtonElement;
         exitButton.addEventListener("click", () => {
             popup.remove();
-            this.game.inputDriver.gameFocused = true;
+            this.game.inputDriver.setGameFocused();
         });
     }
 
@@ -223,13 +223,13 @@ export class Wordle {
         });
 
         document.addEventListener("keypress", (e: KeyboardEvent) => {
-            if (e.key === "Enter") {
+            if (e.key === "Enter" && !this.game.inputDriver.isGameFocused()) {
                 e.preventDefault();
                 this.submitButton?.click();
             }
         });
         document.addEventListener("keydown", (e: KeyboardEvent) => {
-            if (e.key === "Backspace") {
+            if (e.key === "Backspace" && !this.game.inputDriver.isGameFocused()) {
                 e.preventDefault();
                 this.cancelMove();
             }
@@ -282,7 +282,7 @@ export class Wordle {
         result.remove();
         const popup = document.getElementById("wordlePopup") as HTMLDivElement;
         popup.remove();
-        this.game.inputDriver.gameFocused = true;
+        this.game.inputDriver.setGameFocused();
         this.game.wordle = null;
     }
 

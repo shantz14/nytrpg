@@ -253,3 +253,14 @@ canvas {
     color: white;
     background-color: darkred;
 }
+
+#chat-container {
+    position: absolute;
+    bottom: 10px;
+    left: 10px; 
+    z-index: 2;
+}
+
+#chatbox {
+    z-index: 2;
+}

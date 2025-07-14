@@ -10,13 +10,7 @@ import (
 
 const GUESSES_ALLOWED = 5
 
-func getColors(guess string, guessCount int, word string, guessables *map[string]bool) (bool, WordleStatus, []WordleColor) {
-	valid, status, colors := colorMyBoxes(guess, word, guessCount, guessables)
-
-	return valid, status, colors
-}
-
-func colorMyBoxes(guess string, word string, guessCount int, guessables *map[string]bool) (bool, WordleStatus, []WordleColor){
+func colorMyBoxes(guess string, guessCount int, word string, guessables *map[string]bool) (bool, WordleStatus, []WordleColor){
 	var status WordleStatus
 	var valid bool
 	_, ok := (*guessables)[strings.ToLower(guess)]; if !ok {

@@ -4,7 +4,7 @@ import { Clickable, GameState, PlayerState} from "./game-objects.js";
 import { Vector2D } from "./vector2D.js";
 import { Wordle } from "./wordle.js";
 import { Leaderboard } from "./leaderboard.js";
-import { ClientUpdate, ClientUpdatePos, ClientUpdateType, ServerUpdate, ServerUpdatePos, ServerWordleResponse, UpdateState, WordleReq, WordleResponse } from "./messages.js";
+import { ClientUpdate, ClientUpdatePos, ClientUpdateType, ServerUpdate, ServerUpdatePos, ServerWordleResponse, UpdateState, WordleReq, WordleResponse, Chat, ServerChat, ClientChat } from "./messages.js";
 import { UserData, logout } from "./login.js";
 
 declare const MessagePack: typeof import("@msgpack/msgpack");
@@ -35,6 +35,7 @@ export class Game {
 
     public run() {
         this.handleMsgs();
+        this.handleChats();
         this.createUI();
         this.createMap();
         setInterval(() => {
@@ -63,6 +64,9 @@ export class Game {
                 } else {
                     console.log("Guys there's no wordle why are we sending wordle updates.");
                 }
+            } else if (msg.updateType == ServerChat) {
+                const update = decode(msg.data) as Chat;
+                this.displayDriver.updateChat(update);
             } else {
                 console.log("Wacky msg from server.");
             }
@@ -93,7 +97,7 @@ export class Game {
 
         this.displayDriver.images.delete(String(id));
     }
-
+    
     private sendPlayerState() {
         const data = new PlayerState();
         data.pos.x = this.state.charVec.x + this.displayDriver.middle.x;
@@ -103,7 +107,7 @@ export class Game {
         this.send(ClientUpdatePos, data);
     }
 
-    public send(type: ClientUpdateType, data: PlayerState | WordleReq) {
+    public send(type: ClientUpdateType, data: PlayerState | WordleReq | Chat) {
         const envelope: ClientUpdate = {
             updateType: type,
             data: encode(data)
@@ -162,7 +166,7 @@ export class Game {
     }
 
     private move() {
-        if (!this.inputDriver.gameFocused) {
+        if (!this.inputDriver.isGameFocused()) {
             return;
         }
 
@@ -198,6 +202,17 @@ export class Game {
         const x = window.innerWidth / 2;
         const y = window.innerHeight / 2;
         return new Vector2D(x, y);
+    }
+
+    private handleChats() {
+        const chatbox = document.getElementById("chatbox") as HTMLInputElement;
+        chatbox.addEventListener("sendChat", () => {
+            const chat: Chat = {
+                id: this.userData.id,
+                msg: chatbox.value
+            }
+            this.send(ClientChat, chat);
+        });
     }
 
 }

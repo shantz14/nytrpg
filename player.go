@@ -121,6 +121,8 @@ func (p *Player) send(data any, msgType ServerMessageType) {
 		asserted = data.(GameState)
 	} else if (msgType == ServerSendWordle) {
 		asserted = data.(WordleRes)
+	} else if (msgType == ServerSendChat) {
+		asserted = data.(Chat)
 	}
 
 	dataBuff, err := msgpack.Marshal(asserted)
@@ -161,6 +163,13 @@ func (p *Player) handleMsg(rawData []byte, h *Hub) {
 			wordOfTheDay := h.resourceManager.GetWordle()
 			p.updateWordle(wordleData, wordOfTheDay, &h.resourceManager.GuessableWords, h.db)
 		}
+	} else if inData.UpdateType == ClientRecChat {
+		var chat Chat
+		if err := msgpack.Unmarshal(inData.Data, &chat); err != nil {
+			log.Println("Client data could not be asserted as type Chat.")
+		} else {
+			h.chatIn <- chat
+		}
 	}
 
 }
@@ -172,7 +181,7 @@ func (p *Player) updatePos(posData PlayerData, h *Hub) {
 
 func (p *Player) updateWordle(data WordleReq, word string, guessables *map[string]bool, db *Connection) {
 	// the colors 4 da letters
-	valid, status, colors := getColors(data.Guess, data.GuessCount, word, guessables)
+	valid, status, colors := colorMyBoxes(data.Guess, data.GuessCount, word, guessables)
 
 	var response WordleRes
 	response.Valid = valid

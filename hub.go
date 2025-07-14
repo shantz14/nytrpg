@@ -17,6 +17,7 @@ type Hub struct {
 	unregister chan *Player
 	resourceManager *resources.ResourceManager
 	db *Connection
+	chatIn chan Chat
 }
 
 func newHub() *Hub {
@@ -30,6 +31,7 @@ func newHub() *Hub {
 		unregister: make(chan *Player),
 		resourceManager: resources.NewResourceManager(),
 		db: newConnection(),
+		chatIn: make(chan Chat),
 	}
 }
 
@@ -51,6 +53,8 @@ func (h *Hub) run() {
 			delete(h.state.Players, player.id)
 			delete(h.players, player)
 
+		case chat := <-h.chatIn:
+			broadcastChat(chat, h)
 		}
 
 

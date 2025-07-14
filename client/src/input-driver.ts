@@ -1,28 +1,49 @@
 import { Vector2D } from "./vector2D.js";
 import { GameState } from "./game-objects.js";
 
+export enum InputMode {
+    GameFocused = 1,
+    PopupFocused,
+    ChatFocused
+}
+
 export class InputDriver {
     canvas: HTMLCanvasElement;
     keysPressed: Set<string>;
     mousePos: Vector2D;
     state: GameState;
-    gameFocused: boolean;
+    inputMode: InputMode;
 
     constructor(canvas: HTMLCanvasElement, state: GameState) {
         this.canvas = canvas;
         this.keysPressed = new Set();
         this.mousePos = new Vector2D(0, 0);
         this.state = state;
-        this.gameFocused = true;
+        this.inputMode = InputMode.GameFocused;
 
         document.addEventListener('keydown', (event) => {
-            const key = event.key.toLowerCase();
-            this.keysPressed.add(key);
+            if (event.key == "/") {
+                const chatbox = document.getElementById("chatbox") as HTMLInputElement;
+                chatbox.focus();
+                this.setChatFocused();
+            } else if (event.key == "Enter" ){
+                const chatbox = document.getElementById("chatbox") as HTMLInputElement;
+                if (chatbox.value) {
+                    const event = new Event("sendChat");
+                    chatbox.dispatchEvent(event);
+                }
+            }
+            if (this.inputMode == InputMode.GameFocused) {
+                const key = event.key.toLowerCase();
+                this.keysPressed.add(key);
+            }
         });
 
         document.addEventListener('keyup', (event) => {
-            const key = event.key.toLowerCase();
-            this.keysPressed.delete(key);
+            if (this.inputMode == InputMode.GameFocused) {
+                const key = event.key.toLowerCase();
+                this.keysPressed.delete(key);
+            }
         });
 
         document.addEventListener('mousemove', (event) => {
@@ -37,7 +58,7 @@ export class InputDriver {
     private click(e: MouseEvent) {
         for (const key in this.state.clickables) {
             const obj = this.state.clickables[key];
-            if (obj.rect.inRect(this.mousePos) && this.gameFocused) {
+            if (obj.rect.inRect(this.mousePos) && (this.inputMode = InputMode.GameFocused)) {
                 obj.action();
             }
         }
@@ -51,4 +72,24 @@ export class InputDriver {
 
         this.mousePos.set(x, y);
     }
+
+    public isGameFocused(): boolean {
+        if (this.inputMode = InputMode.GameFocused) {
+            return true;
+        }
+        return false;
+    }
+
+    public setGameFocused() {
+        this.inputMode = InputMode.GameFocused;
+    }
+
+    public setPopupFocused() {
+        this.inputMode = InputMode.PopupFocused;
+    }
+
+    public setChatFocused() {
+        this.inputMode = InputMode.ChatFocused;
+    }
+
 }
