@@ -5,7 +5,7 @@ import (
 )
 
 func broadcastChat(chat Chat, h *Hub) {
-	chat.Msg = addUsername(chat, h.db)
+	//chat.Msg = addUsername(chat, h.db)
 	for p := range h.players {
 		p.send(chat, ServerSendChat)
 	}

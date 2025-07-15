@@ -23,6 +23,7 @@ export class InputDriver {
 
         document.addEventListener('keydown', (event) => {
             if (event.key == "/") {
+                event.preventDefault();
                 const chatbox = document.getElementById("chatbox") as HTMLInputElement;
                 chatbox.focus();
                 this.setChatFocused();
@@ -31,6 +32,8 @@ export class InputDriver {
                 if (chatbox.value) {
                     const event = new Event("sendChat");
                     chatbox.dispatchEvent(event);
+                    chatbox.value = "";
+                    chatbox.blur();
                 }
             }
             if (this.inputMode == InputMode.GameFocused) {

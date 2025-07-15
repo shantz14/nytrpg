@@ -8,7 +8,7 @@ export class DisplayDriver {
     canvas: HTMLCanvasElement;
     state: GameState;
     images: Map<string, HTMLImageElement>;
-    chats: Map<Chat, Date>;
+    chats: Map<number, ChatData>;
     userData: UserData;
     middle: Vector2D;
 
@@ -51,6 +51,14 @@ export class DisplayDriver {
             this.ctx.drawImage(sprite, this.middle.x, this.middle.y);
             this.ctx.font = "26px serif";
             this.ctx.fillText(this.userData.username, this.middle.x, this.middle.y-10);
+            let chatdata = this.chats.get(this.userData.id);
+            if (chatdata && this.chatIsExpired(chatdata)) {
+                this.chats.delete(this.userData.id);
+                chatdata = undefined;
+            }
+            if (chatdata) {
+                this.ctx.fillText(chatdata.chat.msg, this.middle.x, this.middle.y-35);
+            }
         }
     }
 
@@ -66,6 +74,14 @@ export class DisplayDriver {
                 this.ctx.drawImage(sprite, adjusted.x, adjusted.y);
                 this.ctx.font = "26px serif";
                 this.ctx.fillText(username, adjusted.x, adjusted.y-10);
+                let chatdata = this.chats.get(Number(id));
+                if (chatdata && this.chatIsExpired(chatdata)) {
+                    this.chats.delete(Number(id));
+                    chatdata = undefined;
+                }
+                if (chatdata) {
+                    this.ctx.fillText(chatdata.chat.msg, adjusted.x, adjusted.y-35);
+                }
             }
         }
 
@@ -80,6 +96,10 @@ export class DisplayDriver {
         }
     }
 
+    private chatIsExpired(chatData: ChatData): boolean {
+        return Date.now() > chatData.exp;
+    }
+
     public updateChat(chat: Chat) {
         let pos: Vector2D;
         if (chat.id == this.userData.id) {
@@ -87,10 +107,12 @@ export class DisplayDriver {
         } else {
             pos = this.state.otherChars[chat.id].pos;
         }
-        const adjusted = new Vector2D(pos.x, pos.y);
-        adjusted.subtract(this.state.charVec);
-        this.ctx.font = "26px serif";
-        this.ctx.fillText(chat.msg, adjusted.x, adjusted.y-20);
+        let exp = Date.now();
+        exp += 5 * 1000; // Add 5 seconds
+        this.chats.set(chat.id, {
+            chat: chat,
+            exp: exp
+        });
     }
 
     private scaleCanvas() {
@@ -120,3 +142,9 @@ export class DisplayDriver {
     }
 
 }
+
+type ChatData = {
+    chat: Chat,
+    exp: number
+}
+
