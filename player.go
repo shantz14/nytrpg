@@ -18,6 +18,7 @@ var upgrader = websocket.Upgrader{
 type Player struct {
 	id int
 	conn *websocket.Conn
+	chatOut chan Chat
 }
 
 type PlayerData struct {
@@ -42,7 +43,11 @@ func handleWS(h *Hub, w http.ResponseWriter, r *http.Request) {
 
 	log.Println("New connection coming from: ", conn.RemoteAddr())
 
-	newPlayer := Player{id: id, conn: conn}
+	newPlayer := Player{
+		id: id, 
+		conn: conn, 
+		chatOut: make(chan Chat, 30),
+	}
 
 	// Add new conn to set
 	h.players[&newPlayer] = true
@@ -101,6 +106,13 @@ func (p *Player) handlePlayer(h *Hub) {
 
 
 		playerData.Unregister = h.state.Unregister
+
+		select {
+		case chat := <-p.chatOut:
+			p.send(chat, ServerSendChat)
+		default:
+			//nothing just dont want it to block
+		}
 
 		p.send(playerData, ServerUpdatePos)
 
