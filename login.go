@@ -165,7 +165,7 @@ func createToken(uname string, psw string) (string, error) {
 	jwt.MapClaims{ 
 		"username": uname, 
 		"password": psw,
-		"exp": time.Now().Add(time.Hour * 24).Unix(), 
+		"exp": time.Now().Add(time.Hour * 72).Unix(), 
 	})
 
 	tokenString, err := token.SignedString(secretKey)
