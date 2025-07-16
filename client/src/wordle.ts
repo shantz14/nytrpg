@@ -116,38 +116,6 @@ export class Wordle {
         }, 1000);
     }
 
-    private runTimer() {
-        const start = Date.now();
-        const timer = document.getElementById("timer") as HTMLDivElement;
-        let minutes = TIME_LIMIT;
-        let seconds = 0;
-        timer.innerHTML = minutes + ":" + seconds + "0"
-        setInterval(() => {
-            let delta = Date.now();
-
-            if (minutes == 0 && seconds == 0) {
-                //notin
-            } else if (seconds == 0) {
-                minutes--;
-                seconds = 59;
-                timer.innerHTML = minutes + ":" + seconds;
-            } else if (seconds < 10) {
-                seconds--;
-                timer.innerHTML = minutes + ":" + "0" + seconds;
-            } else {
-                seconds--;
-                timer.innerHTML = minutes + ":" + seconds;
-            }
-
-            this.timePlayed = (delta - start) / 1000;
-
-            // 5 minutes
-            if ((this.timePlayed) >= (TIME_LIMIT * 60)) {
-                //this.loseByTime();
-            }
-        }, 1000);
-    }
-
     // TODO: get word length from backend!!!
     private getWordLength(): number {
         return 5;
@@ -294,10 +262,6 @@ export class Wordle {
         this.displayResultDiv(false, word);
     }
 
-    private loseByTime() {
-        this.displayResultDiv(false, "");
-    }
-
     private displayResultDiv(win: boolean, word: string) {
         const html = `
         <button id="exit">X</button>
@@ -386,7 +350,7 @@ export class Wordle {
             this.populateWord(newWord);
             gameContainer.appendChild(newWord);
         }
-        this.populateWord(wordContainer)
+        this.populateWord(wordContainer);
 
         document.querySelector("input")?.remove();
 
@@ -401,7 +365,11 @@ export class Wordle {
         for (let c = 0; c < this.wordLength; c++) {
             let newLetter = letterDiv.cloneNode(true) as HTMLInputElement;
             newLetter.id = "letter" + wordContainer.id[wordContainer.id.length - 1] + c;
+            if (newLetter.id == "letter00") {
+                letterDiv.remove();
+            }
 
+            console.log("adding: " + newLetter.id)
             const inputFunc = this.validateInput;
             newLetter.addEventListener("input", (event) => {
                 if (event instanceof InputEvent) {
