@@ -34,6 +34,7 @@ export class InputDriver {
                     chatbox.dispatchEvent(event);
                     chatbox.value = "";
                     chatbox.blur();
+                    this.setGameFocused();
                 }
             }
             if (this.inputMode == InputMode.GameFocused) {
@@ -77,10 +78,7 @@ export class InputDriver {
     }
 
     public isGameFocused(): boolean {
-        if (this.inputMode = InputMode.GameFocused) {
-            return true;
-        }
-        return false;
+        return this.inputMode == InputMode.GameFocused;
     }
 
     public setGameFocused() {
