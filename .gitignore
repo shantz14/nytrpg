@@ -9,3 +9,8 @@ node_modules/
 DDL.sql
 
 .env
+
+.exe
+.out
+app
+nytrpg

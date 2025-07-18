@@ -147,7 +147,7 @@ func handleLogin(h *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jwtStr, err := createToken(req.Username, req.Password)
+	jwtStr, err := createToken(req.Username)
 
 	res.ValidUser = true
 	res.Jwt = jwtStr
@@ -160,11 +160,10 @@ func checkPassword(password string, storedHash string) bool {
     return err == nil
 }
 
-func createToken(uname string, psw string) (string, error) {
+func createToken(uname string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, 
 	jwt.MapClaims{ 
 		"username": uname, 
-		"password": psw,
 		"exp": time.Now().Add(time.Hour * 72).Unix(), 
 	})
 

@@ -39,5 +39,5 @@ func main() {
 	})
 
     log.Println("Server running on port", PORT)
-    http.ListenAndServe("localhost:" + strconv.Itoa(PORT), nil)
+    http.ListenAndServe(":" + strconv.Itoa(PORT), nil)
 }
