@@ -26,7 +26,7 @@ func newConnection() *Connection {
 func (c *Connection) init() {
 	// Create DB connection
 	db, err := sql.Open("sqlite3", 
-				"file:./nytrpg.db?mode=rw&_txlock=immediate&_journal=WAL")
+				"file:./db/nytrpg.db?mode=rw&_txlock=immediate&_journal=WAL")
 	if err != nil {
 		log.Fatal(err)
 	}
