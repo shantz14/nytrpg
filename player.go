@@ -15,9 +15,15 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
+type PlayerConnAndState struct {
+	playerConn *Player
+	playerState *PlayerData
+}
+
 type Player struct {
 	id int
 	conn *websocket.Conn
+	stateOut chan GameState
 	chatOut chan Chat
 }
 
@@ -47,15 +53,16 @@ func handleWS(h *Hub, w http.ResponseWriter, r *http.Request) {
 		id: id, 
 		conn: conn, 
 		chatOut: make(chan Chat, 30),
+		stateOut: make(chan GameState, 2),
 	}
 
-	// Add new conn to set
-	h.players[&newPlayer] = true
-
 	pRow, _ := h.db.getPlayerById(id)
+	playerState := PlayerData{ID: newPlayer.id, Pos: Vector2D{X: 0, Y: 0}, Me: false, Username: pRow.username}
 
-	// Add pos to gamestate
-	h.state.Players[newPlayer.id] = &PlayerData{ID: newPlayer.id, Pos: Vector2D{X: 0, Y: 0}, Me: false, Username: pRow.username}
+	h.register <- PlayerConnAndState {
+		&newPlayer,
+		&playerState,
+	}
 
 	go newPlayer.handlePlayer(h)
 }
@@ -87,9 +94,9 @@ func (p *Player) handlePlayer(h *Hub) {
 		var playerData GameState
 		playerData.Players = make(map[int]*PlayerData)
 
-		// TODO: I think just making one new PlayerData and swapping just that reference in outData would be better
-		// Failed attempts: 1
-		for id, player := range h.state.Players {
+		// mmmmmmmm
+		state := <-p.stateOut
+		for id, player := range state.Players {
 			var newPlayer PlayerData
 			newPlayer.ID = id
 			newPlayer.Pos = player.Pos
@@ -105,7 +112,7 @@ func (p *Player) handlePlayer(h *Hub) {
 		}
 
 
-		playerData.Unregister = h.state.Unregister
+		playerData.Unregister = state.Unregister
 
 		select {
 		case chat := <-p.chatOut:

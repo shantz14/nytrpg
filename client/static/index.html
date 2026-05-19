@@ -18,6 +18,92 @@
                 <input type="text", id="chatbox", name="chatbox">
             </div>
         </div>
+
+        <template id="tpl-login">
+            <div id="loginPopup">
+                <div class="loginContainer" id="loginContainer">
+                    <p id="errorText"></p>
+                    <label for="uname"><b>Username</b></label>
+                    <input type="text" id="uname" placeholder="Enter Username" name="uname" required>
+                    <label for="psw"><b>Password</b></label>
+                    <input type="password" id="psw" placeholder="Enter Password" name="psw" required>
+                    <button id="submitLogin" type="submit">Login</button>
+                    <button id="openSignup">Or Signup</button>
+                </div>
+            </div>
+        </template>
+
+        <template id="tpl-signup">
+            <div id="signupPopup">
+                <div class="signupContainer" id="signupContainer">
+                    <div id="error"></div>
+                    <label for="signupuname"><b>Username</b></label>
+                    <input type="text" id="signupuname" placeholder="Enter Username" name="signupuname" required>
+                    <label for="signuppsw"><b>Password</b></label>
+                    <input type="password" id="signuppsw" placeholder="Enter Password" name="signuppsw" required>
+                    <button id="submitSignup" type="submit">Signup</button>
+                    <button id="deleteSignup">Back to Login</button>
+                </div>
+            </div>
+        </template>
+
+        <template id="tpl-wordle-game">
+            <div id="wordlePopup">
+                <div class="gameContainer" id="gameContainer">
+                    <div id="timer"></div>
+                    <div class="wordContainer" id="wordContainer0">
+                        <input type="text" class="letter" id="letter00" maxlength="1" autocomplete="off">
+                    </div>
+                </div>
+                <button id="submit">Submit</button>
+            </div>
+        </template>
+
+        <template id="tpl-wordle-played">
+            <div id="resultPopup">
+                <button id="exit">X</button>
+                <div class="resultContainer" id="resultContainer">
+                    <p>You already played the wordle today.</p>
+                </div>
+            </div>
+        </template>
+
+        <template id="tpl-wordle-result">
+            <div id="resultPopup">
+                <button id="exit">X</button>
+                <div class="resultContainer" id="resultContainer">
+                    <p id="resultText"></p>
+                    <p>The word was:</p>
+                    <p id="solutionText"></p>
+                </div>
+            </div>
+        </template>
+
+        <template id="tpl-leaderboard">
+            <div id="leaderboardPopup">
+                <button id="exit">X</button>
+                <div class="leaderboardContainer" id="leaderboardContainer">
+                    <h1>Wordle Rankings</h1>
+                    <h2 id="date"></h2>
+                    <table id="lb">
+                        <tr id="h">
+                            <th>Place</th>
+                            <th>Name</th>
+                            <th>Guesses</th>
+                            <th>Time</th>
+                        </tr>
+                        <tr></tr>
+                    </table>
+                    <button id="pageUp">Pgup</button>
+                    <button id="pageDown">Pgdn</button>
+                    <div id="days">
+                        <button id="prevDay">Previous Day</button>
+                        <button id="nextDay">Next Day</button>
+                    </div>
+                </div>
+            </div>
+        </template>
+
         <script src="./app.js" type="module"></script>
     </body>
 </html>

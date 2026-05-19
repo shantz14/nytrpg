@@ -82,43 +82,8 @@ export class Leaderboard {
     }
 
     private createPopup() {
-        const html = `
-        <button id="exit">X</button>
-        <div class="leaderboardContainer" id="leaderboardContainer">
-
-        <h1>Wordle Rankings</h1>
-        <h2 id="date"></h2>
-
-        <table id="lb">
-            <tr id="h">
-                <th>Place</th>
-                <th>Name</th>
-                <th>Guesses</th>
-                <th>Time</th>
-            </tr>
-            <tr>
-            </tr>
-        </table>
-
-        <button id="pageUp">Pgup</button>
-        <button id="pageDown">Pgdn</button>
-        <div id="days">
-            <button id="prevDay">Previous Day</button>
-            <button id="nextDay">Next Day</button>
-        </div>
-
-        </div>
-        `;
-        const popup = document.createElement("div");
-        popup.setAttribute("id", "leaderboardPopup")
-        popup.innerHTML = html;
-
-        const parent = document.getElementById("container");
-        if (parent) {
-            parent.appendChild(popup);
-        } else {
-            console.error("No parent to append popup to.");
-        }
+        const tpl = document.getElementById("tpl-leaderboard") as HTMLTemplateElement;
+        document.getElementById("container")!.appendChild(tpl.content.cloneNode(true));
 
         const pgup = document.getElementById("pageUp");
         pgup?.addEventListener("click", this.pageUp);

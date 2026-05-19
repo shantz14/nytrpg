@@ -26,7 +26,7 @@ type UserData struct {
 }
 
 type SignupRes struct {
-	UsernameTaken bool `json:"usernameTaken"`
+	UsernameAvailable bool `json:"usernameTaken"`
 }
 
 func handleSignup(h *Hub, w http.ResponseWriter, r *http.Request) {
@@ -53,7 +53,7 @@ func handleSignup(h *Hub, w http.ResponseWriter, r *http.Request) {
 	}
 	if (rows.Next()) {
 		log.Println("Username already taken")
-		res.UsernameTaken = true
+		res.UsernameAvailable = false
 		w.Header().Set("Content-Type", "application/json")
 		err = json.NewEncoder(w).Encode(res)
 		if err != nil {
@@ -78,7 +78,7 @@ func handleSignup(h *Hub, w http.ResponseWriter, r *http.Request) {
 	`
 	db.pool.Exec(sql, req.Username, hash)
 
-	res.UsernameTaken = false
+	res.UsernameAvailable = true
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(res)
 	if err != nil {

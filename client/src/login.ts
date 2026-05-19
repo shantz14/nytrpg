@@ -110,31 +110,8 @@ async function submit(): Promise<UserData> {
 }
 
 function createLoginPopup() {
-    const html = `
-    <div class="loginContainer" id="loginContainer">
-    <p id="errorText"></p>
-
-    <label for="uname"><b>Username</b></label>
-        <input type="text" id="uname" placeholder="Enter Username" name="uname" required>
-
-    <label for="psw"><b>Password</b></label>
-        <input type="password" id="psw" placeholder="Enter Password" name="psw" required>
-
-    <button id="submitLogin" type="submit">Login</button>
-    <button id="openSignup">Or Signup</button>
-
-    </div>
-    `;
-    const popup = document.createElement("div");
-    popup.setAttribute("id", "loginPopup")
-    popup.innerHTML = html;
-
-    const parent = document.getElementById("container");
-    if (parent) {
-        parent.appendChild(popup);
-    } else {
-        console.error("No parent to append popup to.");
-    }
+    const tpl = document.getElementById("tpl-login") as HTMLTemplateElement;
+    document.getElementById("container")!.appendChild(tpl.content.cloneNode(true));
 }
 
 function handleSignup() {
@@ -143,32 +120,8 @@ function handleSignup() {
 }
 
 function createSignupPopup() {
-    const html = `
-    <div class="signupContainer" id="signupContainer">
-
-    <div id="error"></div>
-
-    <label for="signupuname"><b>Username</b></label>
-        <input type="text" id="signupuname" placeholder="Enter Username" name="signupuname" required>
-
-    <label for="signuppsw"><b>Password</b></label>
-        <input type="password" id="signuppsw" placeholder="Enter Password" name="signuppsw" required>
-
-    <button id="submitSignup" type="submit">Signup</button>
-    <button id="deleteSignup">Back to Login</button>
-
-    </div>
-    `;
-    const signupPopup = document.createElement("div");
-    signupPopup.setAttribute("id", "signupPopup");
-    signupPopup.innerHTML = html;
-
-    const parent = document.getElementById("container");
-    if (parent) {
-        parent.appendChild(signupPopup);
-    } else {
-        console.error("No parent to append popup to.");
-    }
+    const tpl = document.getElementById("tpl-signup") as HTMLTemplateElement;
+    document.getElementById("container")!.appendChild(tpl.content.cloneNode(true));
 
     const deleteSignup = document.getElementById("deleteSignup") as HTMLButtonElement;
     deleteSignup?.addEventListener("click", deleteSignupPopup);
@@ -203,7 +156,7 @@ function submitSignup() {
     })
     .then(responseData => {
         res = responseData;
-        if (!res.usernameAvailable) {
+        if (res.usernameAvailable) {
             deleteSignupPopup();
         } else {
             const errDiv = document.getElementById("error") as HTMLDivElement;

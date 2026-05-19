@@ -80,7 +80,9 @@ export class DisplayDriver {
                     chatdata = undefined;
                 }
                 if (chatdata) {
+                    this.ctx.fillStyle = "white";
                     this.ctx.fillText(chatdata.chat.msg, adjusted.x, adjusted.y-35);
+                    this.ctx.fillStyle = "black";
                 }
             }
         }

@@ -64,29 +64,12 @@ export class Wordle {
     }
 
     private displayYouHavePlayed() {
-        const html = `
-        <button id="exit">X</button>
-
-        <div class="resultContainer" id="resultContainer">
-
-            <p>You already played the wordle today.</p>
-
-        </div>
-        `;
-        const popup = document.createElement("div");
-        popup.setAttribute("id", "resultPopup")
-        popup.innerHTML = html;
-
-        const parent = document.getElementById("container");
-        if (parent) {
-            parent.appendChild(popup);
-        } else {
-            console.error("No parent to append popup to.");
-        }
+        const tpl = document.getElementById("tpl-wordle-played") as HTMLTemplateElement;
+        document.getElementById("container")!.appendChild(tpl.content.cloneNode(true));
 
         const exitButton = document.getElementById("exit") as HTMLButtonElement;
         exitButton.addEventListener("click", () => {
-            popup.remove();
+            document.getElementById("resultPopup")!.remove();
             this.game.inputDriver.setGameFocused();
         });
     }
@@ -122,29 +105,8 @@ export class Wordle {
     }
 
     private displayGame() {
-        const gameHtml = `
-        <div class="gameContainer" id="gameContainer">
-            <div id="timer"></div>
-
-            <div class="wordContainer" id="wordContainer0">
-                <input type="text" class="letter" id="letter00" 
-                maxlength="1" autocomplete="off">
-            </div>
-
-        </div>
-
-        <button id="submit">Submit</button>
-        `;
-        const popup = document.createElement("div");
-        popup.setAttribute("id", "wordlePopup");
-        popup.innerHTML = gameHtml;
-
-        const parent = document.getElementById("container");
-        if (parent) {
-            parent.appendChild(popup);
-        } else {
-            console.error("No parent to append popup to.");
-        }
+        const tpl = document.getElementById("tpl-wordle-game") as HTMLTemplateElement;
+        document.getElementById("container")!.appendChild(tpl.content.cloneNode(true));
 
         const inputFunc = this.validateInput;
         const firstLetter = document.getElementById("letter00") as HTMLInputElement;
@@ -263,27 +225,8 @@ export class Wordle {
     }
 
     private displayResultDiv(win: boolean, word: string) {
-        const html = `
-        <button id="exit">X</button>
-
-        <div class="resultContainer" id="resultContainer">
-
-            <p id="resultText"></p>
-            <p>The word was:</p>
-            <p id="solutionText"></p>
-
-        </div>
-        `;
-        const popup = document.createElement("div");
-        popup.setAttribute("id", "resultPopup")
-        popup.innerHTML = html;
-
-        const parent = document.getElementById("container");
-        if (parent) {
-            parent.appendChild(popup);
-        } else {
-            console.error("No parent to append popup to.");
-        }
+        const tpl = document.getElementById("tpl-wordle-result") as HTMLTemplateElement;
+        document.getElementById("container")!.appendChild(tpl.content.cloneNode(true));
 
         const exitButton = document.getElementById("exit") as HTMLButtonElement;
         exitButton.addEventListener("click", () => {
