@@ -21,7 +21,9 @@ A multiplayer browser RPG where the gameplay is built around daily NYT-style puz
 
 ## Running
 
+Uses a mount point, the db is written to disk outside of the container.
+
 ```bash
 docker build -t nytrpg .
-docker run -p 8080:8080 nytrpg
+docker run -p 8080:8080 -v $(pwd)/db:/nytrpg/db nytrpg
 ```

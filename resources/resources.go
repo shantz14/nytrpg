@@ -86,7 +86,7 @@ func (rm *ResourceManager) LoadWordle () {
 		return
 	}
 
-	index := rand.Intn(len(solutions) - 1) + 1
+	index := rand.Intn(len(solutions))
 	log.Println("The word of the day is: ", solutions[index])
 	rm.wordle = strings.ToUpper(solutions[index])
 }

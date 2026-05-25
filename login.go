@@ -26,7 +26,7 @@ type UserData struct {
 }
 
 type SignupRes struct {
-	UsernameAvailable bool `json:"usernameTaken"`
+	UsernameAvailable bool `json:"usernameAvailable"`
 }
 
 func handleSignup(h *Hub, w http.ResponseWriter, r *http.Request) {

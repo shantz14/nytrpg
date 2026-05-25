@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"log"
+	"os"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -24,12 +25,37 @@ func newConnection() *Connection {
 }
 
 func (c *Connection) init() {
+	os.MkdirAll("db", 0755)
 	db, err := sql.Open("sqlite3",
-		"file:./db/nytrpg.db?mode=rw&_txlock=immediate&_journal=WAL")
+		"file:./db/nytrpg.db?mode=rwc&_txlock=immediate&_journal=WAL")
 	if err != nil {
 		log.Fatal(err)
 	}
 	c.pool = db
+	c.migrate()
+}
+
+func (c *Connection) migrate() {
+	_, err := c.pool.Exec(`
+		CREATE TABLE IF NOT EXISTS Player (
+			player_id INTEGER PRIMARY KEY AUTOINCREMENT,
+			username  TEXT NOT NULL UNIQUE,
+			password  TEXT NOT NULL
+		);
+		CREATE TABLE IF NOT EXISTS Wordle (
+			wordle_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+			date       TEXT NOT NULL,
+			win        INTEGER NOT NULL DEFAULT 0,
+			seconds    REAL NOT NULL DEFAULT 0,
+			guessCount INTEGER NOT NULL,
+			player_id  INTEGER NOT NULL,
+			FOREIGN KEY (player_id) REFERENCES Player(player_id),
+			UNIQUE (player_id, date)
+		);
+	`)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 // Returns (row, exists) of first player with given id in a PlayerRow struct
