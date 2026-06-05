@@ -93,9 +93,12 @@ func (p *Player) handlePlayer(h *Hub) {
 		// Write
 		var playerData GameState
 		playerData.Players = make(map[int]*PlayerData)
-
-		// mmmmmmmm
-		state := <-p.stateOut
+		
+		var state GameState
+		select {
+		case state = <-p.stateOut:
+		default:
+		}
 		for id, player := range state.Players {
 			var newPlayer PlayerData
 			newPlayer.ID = id

@@ -82,15 +82,31 @@ canvas {
 
 #error {
     display: none;
-    font-size: x-large;
-    margin: 5px;
+    color: #e06060;
+    font-size: 0.875rem;
+    margin-bottom: 4px;
+}
+
+#errorText {
+    color: #e06060;
+    font-size: 0.875rem;
+    min-height: 1.2em;
+    margin-bottom: 4px;
+}
+
+.auth-title {
+    color: #a5f3fc;
+    font-size: 1.75rem;
+    letter-spacing: 3px;
+    text-align: center;
+    margin-bottom: 16px;
 }
 
 #signupPopup {
     z-index: 3;
 }
 
-#leaderboardContainer, #loginContainer, #signupContainer {
+#leaderboardContainer {
     display: flex;
     flex-direction: column;
     align-content: center;
@@ -98,11 +114,20 @@ canvas {
     justify-items: center;
     align-items: center;
     text-align: center;
-    margin-bottom: 200px;
+    margin-bottom: 100px;
 }
 
-#leaderboardContainer {
-    margin-bottom: 100px;
+#loginContainer, #signupContainer {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    background-color: #161616;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0;
+    padding: 40px 48px;
+    min-width: 300px;
+    gap: 6px;
+    font-family: 'IBM Plex Mono', 'Courier New', monospace;
 }
 
 #days {
@@ -142,36 +167,66 @@ canvas {
     height: 40px;
 }
 
-#signupPopup label {
-    font-size: x-large;
+#loginPopup label, #signupPopup label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #aaaaaa;
+    margin-top: 8px;
 }
 
-#signupPopup input {
-    max-width: 150px;
-    font-size: large;
-    margin: 10px;
+#loginPopup input, #signupPopup input {
+    background-color: #0d0d0d;
+    color: #d4d4d4;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0;
+    padding: 10px 12px;
+    font-size: 0.9rem;
+    font-family: 'IBM Plex Mono', 'Courier New', monospace;
+    outline: none;
+    max-width: unset;
+    margin: 0;
 }
 
-#signupPopup button {
-    max-width: 150px;
-    font-size: x-large;
-    margin: 10px;
+#loginPopup input:focus, #signupPopup input:focus {
+    border-color: #a5f3fc;
 }
 
-#loginPopup label {
-    font-size: x-large;
+#submitLogin, #submitSignup {
+    background-color: rgba(165, 243, 252, 0.08);
+    color: #a5f3fc;
+    border: 1px solid rgba(165, 243, 252, 0.22);
+    border-radius: 0;
+    padding: 10px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-family: 'IBM Plex Mono', 'Courier New', monospace;
+    letter-spacing: 1px;
+    cursor: pointer;
+    margin-top: 12px;
+    max-width: unset;
 }
 
-#loginPopup input {
-    max-width: 150px;
-    font-size: large;
-    margin: 10px;
+#submitLogin:hover, #submitSignup:hover {
+    background-color: rgba(165, 243, 252, 0.14);
 }
 
-#loginPopup button {
-    max-width: 150px;
-    font-size: x-large;
-    margin: 10px;
+#openSignup, #deleteSignup {
+    background-color: transparent;
+    color: #aaaaaa;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0;
+    padding: 8px;
+    font-size: 0.8rem;
+    font-family: 'IBM Plex Mono', 'Courier New', monospace;
+    cursor: pointer;
+    margin-top: 4px;
+    max-width: unset;
+}
+
+#openSignup:hover, #deleteSignup:hover {
+    border-color: rgba(255, 255, 255, 0.20);
+    color: #d4d4d4;
 }
 
 #resultText {

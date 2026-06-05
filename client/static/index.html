@@ -7,6 +7,7 @@
         <title>rpgdle</title>
         <script src="https://cdn.jsdelivr.net/npm/@msgpack/msgpack@3.1.1/dist.umd/msgpack.min.js"></script>
         <link rel="stylesheet" href="styles.css">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap">
         <link rel="icon" href="/assets/favicon.ico" type="image/x-icon">
     </head>
     <body>
@@ -22,13 +23,14 @@
         <template id="tpl-login">
             <div id="loginPopup">
                 <div class="loginContainer" id="loginContainer">
+                    <h1 class="auth-title">rpgdle</h1>
                     <p id="errorText"></p>
-                    <label for="uname"><b>Username</b></label>
-                    <input type="text" id="uname" placeholder="Enter Username" name="uname" required>
-                    <label for="psw"><b>Password</b></label>
-                    <input type="password" id="psw" placeholder="Enter Password" name="psw" required>
+                    <label for="uname">Username</label>
+                    <input type="text" id="uname" placeholder="Enter username" name="uname" required>
+                    <label for="psw">Password</label>
+                    <input type="password" id="psw" placeholder="Enter password" name="psw" required>
                     <button id="submitLogin" type="submit">Login</button>
-                    <button id="openSignup">Or Signup</button>
+                    <button id="openSignup">Create account</button>
                 </div>
             </div>
         </template>
@@ -36,13 +38,14 @@
         <template id="tpl-signup">
             <div id="signupPopup">
                 <div class="signupContainer" id="signupContainer">
+                    <h1 class="auth-title">rpgdle</h1>
                     <div id="error"></div>
-                    <label for="signupuname"><b>Username</b></label>
-                    <input type="text" id="signupuname" placeholder="Enter Username" name="signupuname" required>
-                    <label for="signuppsw"><b>Password</b></label>
-                    <input type="password" id="signuppsw" placeholder="Enter Password" name="signuppsw" required>
-                    <button id="submitSignup" type="submit">Signup</button>
-                    <button id="deleteSignup">Back to Login</button>
+                    <label for="signupuname">Username</label>
+                    <input type="text" id="signupuname" placeholder="Enter username" name="signupuname" required>
+                    <label for="signuppsw">Password</label>
+                    <input type="password" id="signuppsw" placeholder="Enter password" name="signuppsw" required>
+                    <button id="submitSignup" type="submit">Sign up</button>
+                    <button id="deleteSignup">Back to login</button>
                 </div>
             </div>
         </template>
