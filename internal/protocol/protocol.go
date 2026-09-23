@@ -28,7 +28,8 @@ const (
 	ServerWordleResult ServerMsg = 2 // WordleRes
 	ServerWordleResume ServerMsg = 3 // WordleResume
 	ServerChat         ServerMsg = 4 // ChatMsg
-	ServerSnapshot     ServerMsg = 5 // Snapshot
+	ServerWorld        ServerMsg = 5 // WorldUpdate
+	ServerCorrection   ServerMsg = 6 // Vec, the server rejected a move, snap back here
 )
 
 type envelope struct {
@@ -68,21 +69,71 @@ type Vec struct {
 	Y int32 `msgpack:"y"`
 }
 
+type EntityID uint32
+
+type EntityKind uint8
+
+const (
+	EntityPlayer EntityKind = 1
+)
+
 type Welcome struct {
 	PlayerID int    `msgpack:"playerId"`
 	Username string `msgpack:"username"`
+	// The entity that is you. It is never sent in WorldUpdates, you move it yourself.
+	EntityID EntityID `msgpack:"entityId"`
+	Pos      Vec      `msgpack:"pos"`
+	Map      WorldMap `msgpack:"map"`
+	// Fastest a player may move in px/s, faster moves are corrected
+	MoveSpeed float64 `msgpack:"moveSpeed"`
+	TickRate  int     `msgpack:"tickRate"`
 }
 
-type PlayerSnap struct {
-	ID       int    `msgpack:"id"`
-	Username string `msgpack:"username"`
-	Pos      Vec    `msgpack:"pos"`
+// The static world, loaded from a JSON map file
+type WorldMap struct {
+	Width         int32          `json:"width" msgpack:"width"`
+	Height        int32          `json:"height" msgpack:"height"`
+	Background    string         `json:"background" msgpack:"background"`
+	Spawn         Vec            `json:"spawn" msgpack:"spawn"`
+	Interactables []Interactable `json:"interactables" msgpack:"interactables"`
 }
 
-// Every connected player. Clients replace their view with each one,
-// so anyone missing from a snapshot has left.
-type Snapshot struct {
-	Players []PlayerSnap `msgpack:"players"`
+// Something in the world a player can click
+type Interactable struct {
+	ID     string `json:"id" msgpack:"id"`
+	Sprite string `json:"sprite" msgpack:"sprite"`
+	Pos    Vec    `json:"pos" msgpack:"pos"`
+	W      int32  `json:"w" msgpack:"w"`
+	H      int32  `json:"h" msgpack:"h"`
+	// What the client does when it's clicked, e.g. "wordle"
+	Action string `json:"action" msgpack:"action"`
+}
+
+// Changes to the entities near you since the last update. Only sent when
+// something changed.
+type WorldUpdate struct {
+	// Entities that came into view
+	Spawn []EntitySpawn `msgpack:"spawn,omitempty"`
+	// Known entities that moved
+	Move []EntityMove `msgpack:"move,omitempty"`
+	// Entities that left view or the game
+	Despawn []EntityID `msgpack:"despawn,omitempty"`
+}
+
+type EntitySpawn struct {
+	ID     EntityID   `msgpack:"id"`
+	Kind   EntityKind `msgpack:"kind"`
+	Name   string     `msgpack:"name"`
+	Sprite string     `msgpack:"sprite"`
+	Pos    Vec        `msgpack:"pos"`
+}
+
+// Sent as [id, x, y] to keep moves small
+type EntityMove struct {
+	_msgpack struct{} `msgpack:",as_array"`
+	ID       EntityID
+	X        int32
+	Y        int32
 }
 
 type ChatReq struct {
@@ -90,9 +141,9 @@ type ChatReq struct {
 }
 
 type ChatMsg struct {
-	// Player who said it
-	ID  int    `msgpack:"id"`
-	Msg string `msgpack:"msg"`
+	// Entity who said it
+	ID  EntityID `msgpack:"id"`
+	Msg string   `msgpack:"msg"`
 }
 
 type WordleStatus int

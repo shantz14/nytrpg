@@ -1,0 +1,11 @@
+{
+    "width": 4690,
+    "height": 4690,
+    "background": "background.jpg",
+    "spawn": { "x": 1280, "y": 800 },
+    "interactables": [
+        { "id": "wordle", "sprite": "GameBoard.png", "pos": { "x": 750, "y": 500 }, "w": 128, "h": 128, "action": "wordle" },
+        { "id": "leaderboard", "sprite": "logout.png", "pos": { "x": 200, "y": 200 }, "w": 128, "h": 128, "action": "leaderboard" },
+        { "id": "logout", "sprite": "logout.png", "pos": { "x": 750, "y": 200 }, "w": 128, "h": 128, "action": "logout" }
+    ]
+}

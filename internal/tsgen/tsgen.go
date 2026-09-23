@@ -103,7 +103,12 @@ func genTypes(out *bytes.Buffer, gd *ast.GenDecl) error {
 		if asArray {
 			parts := make([]string, len(fields))
 			for i, f := range fields {
-				parts[i] = f.name + ": " + f.typ
+				// Tuple labels are just documentation, match TS style
+				label := strings.ToLower(f.name[:1]) + f.name[1:]
+				if strings.ToUpper(f.name) == f.name {
+					label = strings.ToLower(f.name) // ID -> id
+				}
+				parts[i] = label + ": " + f.typ
 			}
 			fmt.Fprintf(out, "export type %s = [%s];\n", ts.Name.Name, strings.Join(parts, ", "))
 			continue
@@ -143,7 +148,8 @@ func structFields(st *ast.StructType) (fields []field, asArray bool, err error) 
 			if !name.IsExported() {
 				continue
 			}
-			key := strings.Split(tag, ",")[0]
+			opts := strings.Split(tag, ",")
+			key := opts[0]
 			if key == "-" {
 				continue
 			}
@@ -157,6 +163,12 @@ func structFields(st *ast.StructType) (fields []field, asArray bool, err error) 
 			var doc []string
 			if f.Doc != nil {
 				doc = strings.Split(strings.TrimSpace(f.Doc.Text()), "\n")
+			}
+			// omitempty fields may be missing
+			for _, opt := range opts[1:] {
+				if opt == "omitempty" {
+					key += "?"
+				}
 			}
 			fields = append(fields, field{name: key, typ: typ, doc: doc})
 		}

@@ -18,12 +18,17 @@ import (
 type Server struct {
 	cfg    config.Config
 	store  *store.Store
-	hub    *game.Hub
+	world  *game.World
 	auth   *auth.Service
 	wordle *wordle.Service
 	router *netconn.Router
-	// Open websocket connections, so shutdown can wait for them
-	conns sync.WaitGroup
+
+	stopWorld context.CancelFunc
+
+	// Open websocket sessions, so shutdown can close them and wait
+	sessionsMu sync.Mutex
+	sessions   map[*netconn.Session]bool
+	conns      sync.WaitGroup
 }
 
 func New(cfg config.Config) (*Server, error) {
@@ -31,22 +36,30 @@ func New(cfg config.Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	m, err := game.LoadMap("town")
+	if err != nil {
+		st.Close()
+		return nil, err
+	}
 
-	hub := game.NewHub()
+	world := game.NewWorld(m)
 	s := &Server{
-		cfg:    cfg,
-		store:  st,
-		hub:    hub,
-		auth:   auth.New(st, cfg.JWTSecret, hub),
-		wordle: wordle.NewService(st),
-		router: netconn.NewRouter(),
+		cfg:      cfg,
+		store:    st,
+		world:    world,
+		auth:     auth.New(st, cfg.JWTSecret, world),
+		wordle:   wordle.NewService(st),
+		router:   netconn.NewRouter(),
+		sessions: make(map[*netconn.Session]bool),
 	}
 
 	// Each feature registers the websocket messages it handles
-	s.hub.RegisterHandlers(s.router)
+	s.world.RegisterHandlers(s.router)
 	s.wordle.RegisterHandlers(s.router)
 
-	go hub.Run()
+	ctx, cancel := context.WithCancel(context.Background())
+	s.stopWorld = cancel
+	go world.Run(ctx)
 	return s, nil
 }
 
@@ -62,10 +75,14 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
-// Disconnects every player and closes the database. Call after the HTTP server
-// has stopped accepting connections.
+// Disconnects every player, stops the world, and closes the database. Call after
+// the HTTP server has stopped accepting connections.
 func (s *Server) Shutdown(ctx context.Context) error {
-	s.hub.CloseAll()
+	s.sessionsMu.Lock()
+	for sess := range s.sessions {
+		go sess.CloseGoingAway()
+	}
+	s.sessionsMu.Unlock()
 
 	done := make(chan struct{})
 	go func() {
@@ -77,7 +94,23 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	case <-ctx.Done():
 		log.Println("Timed out waiting for connections to close")
 	}
+	s.stopWorld()
 	return s.store.Close()
+}
+
+func (s *Server) join(sess *netconn.Session) {
+	s.sessionsMu.Lock()
+	s.sessions[sess] = true
+	s.sessionsMu.Unlock()
+	s.world.Join(sess, sess.PlayerID, sess.Username)
+}
+
+func (s *Server) leave(sess *netconn.Session) {
+	s.sessionsMu.Lock()
+	delete(s.sessions, sess)
+	s.sessionsMu.Unlock()
+	// The world releases the player's online claim
+	s.world.Leave(sess)
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
@@ -87,7 +120,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid token.", http.StatusUnauthorized)
 		return
 	}
-	if !s.hub.ClaimOnline(p.ID) {
+	if !s.world.ClaimOnline(p.ID) {
 		http.Error(w, "Already connected.", http.StatusConflict)
 		return
 	}
@@ -95,10 +128,9 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	s.conns.Add(1)
 	defer s.conns.Done()
 
-	// The hub releases the claim when the player leaves
-	err := netconn.Serve(w, r, p.ID, p.Username, s.router, s.hub.Join, s.hub.Leave)
+	err := netconn.Serve(w, r, p.ID, p.Username, s.router, s.join, s.leave)
 	if err != nil {
 		log.Println("Connection failed at Upgrader: ", err)
-		s.hub.ReleaseOnline(p.ID)
+		s.world.ReleaseOnline(p.ID)
 	}
 }

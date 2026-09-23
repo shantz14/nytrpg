@@ -1,13 +1,25 @@
 import { Vector2D } from "./vector2D.js"
-import { PlayerSnap } from "./protocol.gen.js";
+import { EntityID, Vec } from "./protocol.gen.js";
+
+// Another entity the server told us about
+export type RemoteEntity = {
+    id: EntityID;
+    name: string;
+    sprite: string;
+    pos: Vec;
+}
 
 export class GameState {
+    // Camera offset: our world position is charVec + the middle of the screen
     charVec: Vector2D;
-    otherChars: {[key: number]: PlayerSnap};
+    // Our own entity, set by the welcome message
+    selfId: EntityID;
+    otherChars: {[key: number]: RemoteEntity};
     clickables: {[key: string]: Clickable};
 
     constructor() {
         this.charVec = new Vector2D(window.innerWidth/2, window.innerHeight/2);
+        this.selfId = 0;
         this.otherChars = {};
         this.clickables = {};
     }

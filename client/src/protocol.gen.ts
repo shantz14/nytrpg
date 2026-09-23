@@ -15,7 +15,8 @@ export const ServerWelcome: ServerMsg = 1; // Welcome, first message after conne
 export const ServerWordleResult: ServerMsg = 2; // WordleRes
 export const ServerWordleResume: ServerMsg = 3; // WordleResume
 export const ServerChat: ServerMsg = 4; // ChatMsg
-export const ServerSnapshot: ServerMsg = 5; // Snapshot
+export const ServerWorld: ServerMsg = 5; // WorldUpdate
+export const ServerCorrection: ServerMsg = 6; // Vec, the server rejected a move, snap back here
 
 // A position in world pixels
 export interface Vec {
@@ -23,30 +24,73 @@ export interface Vec {
     y: number;
 }
 
+export type EntityID = number;
+
+export type EntityKind = number;
+
+export const EntityPlayer: EntityKind = 1;
+
 export interface Welcome {
     playerId: number;
     username: string;
+    // The entity that is you. It is never sent in WorldUpdates, you move it yourself.
+    entityId: EntityID;
+    pos: Vec;
+    map: WorldMap;
+    // Fastest a player may move in px/s, faster moves are corrected
+    moveSpeed: number;
+    tickRate: number;
 }
 
-export interface PlayerSnap {
-    id: number;
-    username: string;
+// The static world, loaded from a JSON map file
+export interface WorldMap {
+    width: number;
+    height: number;
+    background: string;
+    spawn: Vec;
+    interactables: Array<Interactable>;
+}
+
+// Something in the world a player can click
+export interface Interactable {
+    id: string;
+    sprite: string;
+    pos: Vec;
+    w: number;
+    h: number;
+    // What the client does when it's clicked, e.g. "wordle"
+    action: string;
+}
+
+// Changes to the entities near you since the last update. Only sent when
+// something changed.
+export interface WorldUpdate {
+    // Entities that came into view
+    spawn?: Array<EntitySpawn>;
+    // Known entities that moved
+    move?: Array<EntityMove>;
+    // Entities that left view or the game
+    despawn?: Array<EntityID>;
+}
+
+export interface EntitySpawn {
+    id: EntityID;
+    kind: EntityKind;
+    name: string;
+    sprite: string;
     pos: Vec;
 }
 
-// Every connected player. Clients replace their view with each one,
-// so anyone missing from a snapshot has left.
-export interface Snapshot {
-    players: Array<PlayerSnap>;
-}
+// Sent as [id, x, y] to keep moves small
+export type EntityMove = [id: EntityID, x: number, y: number];
 
 export interface ChatReq {
     msg: string;
 }
 
 export interface ChatMsg {
-    // Player who said it
-    id: number;
+    // Entity who said it
+    id: EntityID;
     msg: string;
 }
 

@@ -8,6 +8,8 @@ export class DisplayDriver {
     canvas: HTMLCanvasElement;
     state: GameState;
     images: Map<string, HTMLImageElement>;
+    // Keys of images still downloading
+    loading: Set<string>;
     chats: Map<number, ChatData>;
     userData: UserData;
     middle: Vector2D;
@@ -17,6 +19,7 @@ export class DisplayDriver {
         this.canvas = ctx.canvas;
         this.state = startState;
         this.images = new Map();
+        this.loading = new Set();
         this.chats = new Map();
         this.userData = userData;
         this.middle = middle;
@@ -51,9 +54,9 @@ export class DisplayDriver {
             this.ctx.drawImage(sprite, this.middle.x, this.middle.y);
             this.ctx.font = "26px serif";
             this.ctx.fillText(this.userData.username, this.middle.x, this.middle.y-10);
-            let chatdata = this.chats.get(this.userData.id);
+            let chatdata = this.chats.get(this.state.selfId);
             if (chatdata && this.chatIsExpired(chatdata)) {
-                this.chats.delete(this.userData.id);
+                this.chats.delete(this.state.selfId);
                 chatdata = undefined;
             }
             if (chatdata) {
@@ -64,16 +67,15 @@ export class DisplayDriver {
 
     private drawOtherChars() {
         for (const id in this.state.otherChars) {
-            const charVec = this.state.otherChars[id].pos;
-            const username = this.state.otherChars[id].username;
-            const sprite = this.images.get(String(id)) as HTMLImageElement;
+            const other = this.state.otherChars[id];
+            const sprite = this.sprite(other.sprite);
 
-            const adjusted = new Vector2D(charVec.x, charVec.y);
+            const adjusted = new Vector2D(other.pos.x, other.pos.y);
             adjusted.subtract(this.state.charVec);
             if (sprite) {
                 this.ctx.drawImage(sprite, adjusted.x, adjusted.y);
                 this.ctx.font = "26px serif";
-                this.ctx.fillText(username, adjusted.x, adjusted.y-10);
+                this.ctx.fillText(other.name, adjusted.x, adjusted.y-10);
                 let chatdata = this.chats.get(Number(id));
                 if (chatdata && this.chatIsExpired(chatdata)) {
                     this.chats.delete(Number(id));
@@ -111,10 +113,19 @@ export class DisplayDriver {
         });
     }
 
-    // Forget everything about a player who left
+    // Forget everything about an entity that left
     public removePlayer(id: number) {
-        this.images.delete(String(id));
         this.chats.delete(id);
+    }
+
+    // An entity sprite by file name, loaded the first time it's needed and shared
+    private sprite(file: string): HTMLImageElement | undefined {
+        const key = "sprite/" + file;
+        const img = this.images.get(key);
+        if (!img && !this.loading.has(key)) {
+            this.loadImage(key, file);
+        }
+        return img;
     }
 
     private scaleCanvas() {
@@ -130,16 +141,17 @@ export class DisplayDriver {
     private loadImages() {
         this.loadImage("character", "Skoobyuboo.png");
 
-        this.loadImage("bg", "background.jpg");
     }
 
     public loadImage(key: string, filename: string) {
         const path: string = "./assets/" + filename;
 
+        this.loading.add(key);
         const image = new Image();
         image.src = path;
         image.onload = () => {
             this.images.set(key, image);
+            this.loading.delete(key);
         }
     }
 
