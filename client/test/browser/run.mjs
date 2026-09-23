@@ -170,7 +170,7 @@ test("wordle: play, reload, guesses come back; popups block the world", async ()
     await p.keyboard.type("crane");
     await p.keyboard.press("Enter");
     // Wait on the page, not the frame: the frame shows up before the page handles it
-    await waitFor(() => p.$$eval("#wordContainer0 input", (els) => els.every((e) => e.style.backgroundColor)), "first row colored");
+    await waitFor(() => p.$$eval("#wordContainer0 input", (els) => els.every((e) => /\btile-(green|yellow|grey)\b/.test(e.className))), "first row colored");
     assert(/^\d+:\d\d$/.test(await p.$eval("#timer", (e) => e.textContent)), "timer running");
 
     // Clicking the world under an open popup does nothing

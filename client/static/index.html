@@ -7,7 +7,7 @@
         <title>rpgdle</title>
         <script src="https://cdn.jsdelivr.net/npm/@msgpack/msgpack@3.1.1/dist.umd/msgpack.min.js"></script>
         <link rel="stylesheet" href="styles.css">
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap">
         <link rel="icon" href="/assets/favicon.ico" type="image/x-icon">
     </head>
     <body>
@@ -23,90 +23,127 @@
         </div>
 
         <template id="tpl-login">
-            <div id="loginPopup">
-                <div class="loginContainer" id="loginContainer">
+            <div id="loginPopup" class="overlay overlay-solid">
+                <div class="panel auth-panel loginContainer" id="loginContainer">
                     <h1 class="auth-title">rpgdle</h1>
+                    <p class="auth-sub">Daily puzzles, one shared world</p>
                     <p id="errorText"></p>
                     <label for="uname">Username</label>
-                    <input type="text" id="uname" placeholder="Enter username" name="uname" required>
+                    <input type="text" id="uname" placeholder="Enter username" name="uname" autocomplete="username" required>
                     <label for="psw">Password</label>
-                    <input type="password" id="psw" placeholder="Enter password" name="psw" required>
-                    <button id="submitLogin" type="submit">Login</button>
-                    <button id="openSignup">Create account</button>
+                    <input type="password" id="psw" placeholder="Enter password" name="psw" autocomplete="current-password" required>
+                    <button id="submitLogin" class="btn btn-primary" type="submit">Log in</button>
+                    <button id="openSignup" class="btn btn-ghost">Create account</button>
                 </div>
             </div>
         </template>
 
         <template id="tpl-signup">
-            <div id="signupPopup">
-                <div class="signupContainer" id="signupContainer">
+            <div id="signupPopup" class="overlay overlay-solid">
+                <div class="panel auth-panel signupContainer" id="signupContainer">
                     <h1 class="auth-title">rpgdle</h1>
+                    <p class="auth-sub">Create an account</p>
                     <div id="error"></div>
                     <label for="signupuname">Username</label>
-                    <input type="text" id="signupuname" placeholder="Enter username" name="signupuname" required>
+                    <input type="text" id="signupuname" placeholder="Choose a username" name="signupuname" autocomplete="username" required>
                     <label for="signuppsw">Password</label>
-                    <input type="password" id="signuppsw" placeholder="Enter password" name="signuppsw" required>
-                    <button id="submitSignup" type="submit">Sign up</button>
-                    <button id="deleteSignup">Back to login</button>
+                    <input type="password" id="signuppsw" placeholder="Choose a password" name="signuppsw" autocomplete="new-password" required>
+                    <button id="submitSignup" class="btn btn-primary" type="submit">Sign up</button>
+                    <button id="deleteSignup" class="btn btn-ghost">Back to login</button>
                 </div>
             </div>
         </template>
 
         <template id="tpl-wordle-game">
-            <div id="wordlePopup">
-                <div class="gameContainer" id="gameContainer">
-                    <div id="timer"></div>
-                    <div class="wordContainer" id="wordContainer0">
-                        <input type="text" class="letter" id="letter-0-0" maxlength="1" autocomplete="off">
+            <div id="wordlePopup" class="overlay">
+                <div class="panel wordle-panel">
+                    <header class="panel-head">
+                        <h1 class="panel-title">Wordle</h1>
+                        <div id="timer" class="timer">0:00</div>
+                        <button class="exit icon-btn" aria-label="Close">&times;</button>
+                    </header>
+                    <div class="gameContainer" id="gameContainer">
+                        <div class="wordContainer" id="wordContainer0">
+                            <input type="text" class="letter" id="letter-0-0" maxlength="1" autocomplete="off" spellcheck="false" placeholder=" ">
+                        </div>
                     </div>
+                    <p class="hint">Enter submits &middot; Backspace clears the row</p>
+                    <button id="submit" class="btn btn-primary btn-wide">Submit</button>
                 </div>
-                <button id="submit">Submit</button>
             </div>
         </template>
 
         <template id="tpl-wordle-played">
-            <div id="resultPopup">
-                <button class="exit">X</button>
-                <div class="resultContainer" id="resultContainer">
-                    <p>You already played the wordle today.</p>
+            <div id="resultPopup" class="overlay overlay-top">
+                <div class="panel result-panel resultContainer" id="resultContainer">
+                    <header class="panel-head">
+                        <h1 class="panel-title">Already played</h1>
+                        <button class="exit icon-btn" aria-label="Close">&times;</button>
+                    </header>
+                    <p class="result-text">You've finished today's Wordle. Come back tomorrow for a new word.</p>
+                    <button class="exit btn btn-ghost btn-wide">Close</button>
                 </div>
             </div>
         </template>
 
         <template id="tpl-wordle-result">
-            <div id="resultPopup">
-                <button class="exit">X</button>
-                <div class="resultContainer" id="resultContainer">
-                    <p id="resultText"></p>
-                    <p>The word was:</p>
-                    <p id="solutionText"></p>
+            <div id="resultPopup" class="overlay overlay-top">
+                <div class="panel result-panel resultContainer" id="resultContainer">
+                    <header class="panel-head">
+                        <h1 class="panel-title" id="resultTitle"></h1>
+                        <button class="exit icon-btn" aria-label="Close">&times;</button>
+                    </header>
+                    <p id="resultText" class="result-text"></p>
+                    <div class="stats">
+                        <div class="stat">
+                            <span class="stat-value" id="resultGuesses"></span>
+                            <span class="stat-label">Guesses</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-value" id="resultTime"></span>
+                            <span class="stat-label">Time</span>
+                        </div>
+                    </div>
+                    <p class="section-label">The word was</p>
+                    <div id="solutionText" class="solution"></div>
+                    <button class="exit btn btn-ghost btn-wide">Close</button>
                 </div>
             </div>
         </template>
 
         <template id="tpl-leaderboard">
-            <div id="leaderboardPopup">
-                <button class="exit">X</button>
-                <div class="leaderboardContainer" id="leaderboardContainer">
-                    <h1>Wordle Rankings</h1>
-                    <h2 id="date"></h2>
-                    <table id="lb">
-                        <thead>
-                            <tr id="h">
-                                <th>Place</th>
-                                <th>Name</th>
-                                <th>Guesses</th>
-                                <th>Time</th>
-                            </tr>
-                        </thead>
-                        <tbody id="lbBody"></tbody>
-                    </table>
-                    <button id="pageUp">Pgup</button>
-                    <button id="pageDown">Pgdn</button>
-                    <div id="days">
-                        <button id="prevDay">Previous Day</button>
-                        <button id="nextDay">Next Day</button>
+            <div id="leaderboardPopup" class="overlay">
+                <div class="panel lb-panel leaderboardContainer" id="leaderboardContainer">
+                    <header class="panel-head">
+                        <h1 class="panel-title">Wordle Rankings</h1>
+                        <button class="exit icon-btn" aria-label="Close">&times;</button>
+                    </header>
+                    <nav class="day-nav" id="days">
+                        <button id="prevDay" class="icon-btn" aria-label="Previous day" title="Previous day">&lsaquo;</button>
+                        <div class="day-label">
+                            <h2 id="date"></h2>
+                            <span id="dateTag" class="tag"></span>
+                        </div>
+                        <button id="nextDay" class="icon-btn" aria-label="Next day" title="Next day">&rsaquo;</button>
+                    </nav>
+                    <div class="table-wrap" id="lbWrap">
+                        <table id="lb">
+                            <thead>
+                                <tr id="h">
+                                    <th class="col-place">#</th>
+                                    <th class="col-name">Player</th>
+                                    <th class="col-num">Guesses</th>
+                                    <th class="col-num">Time</th>
+                                </tr>
+                            </thead>
+                            <tbody id="lbBody"></tbody>
+                        </table>
                     </div>
+                    <footer class="pager" id="pager">
+                        <button id="pageUp" class="btn btn-ghost">&lsaquo; Prev</button>
+                        <span id="pageInfo" class="page-info"></span>
+                        <button id="pageDown" class="btn btn-ghost">Next &rsaquo;</button>
+                    </footer>
                 </div>
             </div>
         </template>
