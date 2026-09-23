@@ -2,7 +2,7 @@ FROM golang:latest AS backend
 WORKDIR /nytrpg
 COPY . .
 RUN go mod download
-RUN go build -o app
+RUN go build -o app ./cmd/server
 
 FROM node:latest AS frontend
 WORKDIR /nytrpg

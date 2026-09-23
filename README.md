@@ -21,6 +21,18 @@ A multiplayer browser RPG where the gameplay is built around daily NYT-style puz
 
 ## Running
 
+Locally:
+
+```bash
+npm install
+npx tsc && JWT_SECRET=devsecret go run ./cmd/server
+go run ./cmd/bots --n 10   # optional, in another terminal
+```
+
+Settings come from the environment: `JWT_SECRET` (required), `PORT` (8080), `DB_PATH` (`db/nytrpg.db`), `STATIC_DIR` (`client/static`).
+
+With Docker:
+
 Uses a mount point, the db is written to disk outside of the container. `JWT_SECRET` is required, the server won't start without it.
 
 ```bash
