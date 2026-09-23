@@ -6,7 +6,11 @@
 // Every message is a msgpack array [type, payload].
 package protocol
 
-import "github.com/vmihailenco/msgpack/v5"
+import (
+	"bytes"
+
+	"github.com/vmihailenco/msgpack/v5"
+)
 
 //go:generate go run ../../cmd/protogen -out ../../client/src/protocol.gen.ts
 
@@ -39,11 +43,23 @@ type envelope struct {
 }
 
 func encode(t uint8, data any) ([]byte, error) {
-	raw, err := msgpack.Marshal(data)
+	raw, err := marshal(data)
 	if err != nil {
 		return nil, err
 	}
-	return msgpack.Marshal(envelope{Type: t, Data: raw})
+	return marshal(envelope{Type: t, Data: raw})
+}
+
+// Like msgpack.Marshal, but writes ints in as few bytes as they need. By default
+// int32/uint32 always take 5 bytes, which made an entity move 16 bytes, not 4.
+func marshal(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := msgpack.GetEncoder()
+	defer msgpack.PutEncoder(enc)
+	enc.Reset(&buf)
+	enc.UseCompactInts(true)
+	err := enc.Encode(v)
+	return buf.Bytes(), err
 }
 
 // Encodes a server message ready to write to the socket

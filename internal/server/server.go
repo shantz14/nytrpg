@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"nytrpg/internal/auth"
@@ -89,12 +90,19 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
-var publishOnce sync.Once
+var (
+	publishOnce sync.Once
+	// expvar names can only be published once per process, so the metrics
+	// report whichever server was created last
+	metricsServer atomic.Pointer[Server]
+)
 
 // Server metrics under "nytrpg" in /debug/vars
 func (s *Server) publishMetrics() {
+	metricsServer.Store(s)
 	publishOnce.Do(func() {
 		expvar.Publish("nytrpg", expvar.Func(func() any {
+			s := metricsServer.Load()
 			ws, cs := &s.world.Stats, &netconn.Stats
 			ms := func(nanos int64) float64 { return float64(nanos) / 1e6 }
 			avg := 0.0

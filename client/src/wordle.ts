@@ -23,6 +23,10 @@ export class Wordle {
     nextLetter: HTMLInputElement | null;
     currentGuess: number;
     stopwatch: number | null;
+    // The server's reply to starting has arrived. Guesses wait for it, or the
+    // reply (sent before the guess was counted) would reset currentGuess.
+    ready: boolean;
+    submitWhenReady: boolean;
 
     constructor(game: Game) {
         this.game = game;
@@ -31,6 +35,8 @@ export class Wordle {
         this.nextLetter = null;
         this.currentGuess = 0;
         this.stopwatch = null;
+        this.ready = false;
+        this.submitWhenReady = false;
     }
 
     // Opens the wordle. Returns false if another popup is already open.
@@ -86,6 +92,10 @@ export class Wordle {
     private displayGame(popup: Popup) {
         const submit = popup.q<HTMLButtonElement>("#submit");
         popup.on(submit, "click", () => {
+            if (!this.ready) {
+                this.submitWhenReady = true;
+                return;
+            }
             let guess = "";
             for (let i = 0; i < this.wordLength; i++) {
                 guess += this.getLetter(this.currentGuess, i)?.value ?? "";
@@ -143,8 +153,15 @@ export class Wordle {
             this.colorRow(row, colors[row] ?? []);
         }
         this.currentGuess = guesses.length;
-        this.getLetter(this.currentGuess, 0)?.focus();
         this.runStopwatch(resume.seconds);
+        this.ready = true;
+        if (guesses.length > 0) {
+            this.getLetter(this.currentGuess, 0)?.focus();
+        }
+        if (this.submitWhenReady) {
+            this.submitWhenReady = false;
+            this.popup?.q<HTMLButtonElement>("#submit").click();
+        }
     }
 
     public handleResponse(res: WordleRes) {
