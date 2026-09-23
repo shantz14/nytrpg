@@ -1,68 +1,96 @@
 // Package protocol defines every message sent over the websocket.
-// Keep in sync with client/src/messages.ts.
+//
+// This file is the single source of truth: client/src/protocol.gen.ts is generated
+// from it. After changing anything here run `go generate ./internal/protocol`.
+//
+// Every message is a msgpack array [type, payload].
 package protocol
 
 import "github.com/vmihailenco/msgpack/v5"
 
-type ServerMessageType int
+//go:generate go run ../../cmd/protogen -out ../../client/src/protocol.gen.ts
+
+// Messages sent by the client
+type ClientMsg uint8
 
 const (
-	// Data sent FROM the SERVER
-	ServerUpdatePos    ServerMessageType = 1
-	ServerSendWordle   ServerMessageType = 2
-	ServerWordleResume ServerMessageType = 3
-	ServerSendChat     ServerMessageType = 4
+	ClientMove        ClientMsg = 1 // Vec, the player's new position
+	ClientWordleGuess ClientMsg = 2 // WordleReq
+	ClientChat        ClientMsg = 3 // ChatReq
+	ClientWordleStart ClientMsg = 4 // empty, opens today's wordle
 )
 
-type ServerMessage struct {
-	UpdateType ServerMessageType `msgpack:"updateType"`
-	Data       []byte            `msgpack:"data"`
-}
-
-type ClientMessageType int
+// Messages sent by the server
+type ServerMsg uint8
 
 const (
-	// Data sent FROM the CLIENT
-	ClientUpdatePos   ClientMessageType = 1
-	ClientRecWordle   ClientMessageType = 2
-	ClientRecChat     ClientMessageType = 3
-	ClientStartWordle ClientMessageType = 4
+	ServerWelcome      ServerMsg = 1 // Welcome, first message after connecting
+	ServerWordleResult ServerMsg = 2 // WordleRes
+	ServerWordleResume ServerMsg = 3 // WordleResume
+	ServerChat         ServerMsg = 4 // ChatMsg
+	ServerSnapshot     ServerMsg = 5 // Snapshot
 )
 
-type ClientMessage struct {
-	UpdateType ClientMessageType `msgpack:"updateType"`
-	Data       []byte            `msgpack:"data"`
+type envelope struct {
+	_msgpack struct{} `msgpack:",as_array"`
+	Type     uint8
+	Data     msgpack.RawMessage
 }
 
-// Encodes a server message ready to write to the socket
-func Encode(t ServerMessageType, data any) ([]byte, error) {
-	dataBuff, err := msgpack.Marshal(data)
+func encode(t uint8, data any) ([]byte, error) {
+	raw, err := msgpack.Marshal(data)
 	if err != nil {
 		return nil, err
 	}
-	return msgpack.Marshal(ServerMessage{UpdateType: t, Data: dataBuff})
+	return msgpack.Marshal(envelope{Type: t, Data: raw})
 }
 
-type Vector2D struct {
-	X float64 `msgpack:"x"`
-	Y float64 `msgpack:"y"`
+// Encodes a server message ready to write to the socket
+func Encode(t ServerMsg, data any) ([]byte, error) {
+	return encode(uint8(t), data)
 }
 
-type PlayerData struct {
-	ID  int      `msgpack:"id"`
-	Pos Vector2D `msgpack:"pos"`
-	// True when this is the data of the player being sent to
-	Me       bool   `msgpack:"me"`
+// Encodes a client message, for bots and tests
+func EncodeClient(t ClientMsg, data any) ([]byte, error) {
+	return encode(uint8(t), data)
+}
+
+// Splits a message into its type and still encoded payload
+func Decode(msg []byte) (uint8, msgpack.RawMessage, error) {
+	var e envelope
+	err := msgpack.Unmarshal(msg, &e)
+	return e.Type, e.Data, err
+}
+
+// A position in world pixels
+type Vec struct {
+	X int32 `msgpack:"x"`
+	Y int32 `msgpack:"y"`
+}
+
+type Welcome struct {
+	PlayerID int    `msgpack:"playerId"`
 	Username string `msgpack:"username"`
 }
 
-// Full snapshot of every connected player. Clients replace their view with each one,
-// so anyone missing from a snapshot has left.
-type GameState struct {
-	Players map[int]*PlayerData `msgpack:"players"`
+type PlayerSnap struct {
+	ID       int    `msgpack:"id"`
+	Username string `msgpack:"username"`
+	Pos      Vec    `msgpack:"pos"`
 }
 
-type Chat struct {
+// Every connected player. Clients replace their view with each one,
+// so anyone missing from a snapshot has left.
+type Snapshot struct {
+	Players []PlayerSnap `msgpack:"players"`
+}
+
+type ChatReq struct {
+	Msg string `msgpack:"msg"`
+}
+
+type ChatMsg struct {
+	// Player who said it
 	ID  int    `msgpack:"id"`
 	Msg string `msgpack:"msg"`
 }
@@ -95,7 +123,7 @@ type WordleRes struct {
 	Seconds  float64       `msgpack:"seconds"`
 }
 
-// Sent in reply to ClientStartWordle, the guesses already made today
+// Sent in reply to ClientWordleStart, the guesses already made today
 type WordleResume struct {
 	Guesses []string        `msgpack:"guesses"`
 	Colors  [][]WordleColor `msgpack:"colors"`

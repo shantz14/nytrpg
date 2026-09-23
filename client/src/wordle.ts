@@ -1,5 +1,5 @@
 import { Game } from "./game.js";
-import { ClientSendWordle, ClientStartWordle, WordleReq, WordleResponse, WordleResume } from "./messages.js";
+import { ClientWordleGuess, ClientWordleStart, Green, Grey, WordleColor, WordleLose, WordleReq, WordleRes, WordleResume, WordleWin, Yellow } from "./protocol.gen.js";
 
 const GUESSES = 5;
 const wordleURL = "/haveIPlayed"
@@ -49,7 +49,7 @@ export class Wordle {
                 this.displayGame();
                 this.populateGame();
                 // Server starts the clock and replies with any guesses already made
-                this.game.send(ClientStartWordle, {});
+                this.game.send(ClientWordleStart, {});
             }
         });
     }
@@ -169,7 +169,7 @@ export class Wordle {
             guess: guess,
         };
 
-        this.game.send(ClientSendWordle, data);
+        this.game.send(ClientWordleGuess, data);
     }
 
     // Fill in guesses made before a reload and pick the timer back up
@@ -190,7 +190,7 @@ export class Wordle {
         this.runStopwatch(resume.seconds);
     }
 
-    public handleResponse(res: WordleResponse) {
+    public handleResponse(res: WordleRes) {
         if (!res.valid) {
             this.currentGuess--;
             this.cancelMove();
@@ -198,9 +198,9 @@ export class Wordle {
         }
         this.colorRow(this.currentGuess - 1, res.colors);
 
-        if (res.status == WIN) {
+        if (res.status == WordleWin) {
             this.displayResultDiv(true, res.solution, res.seconds);
-        } else if (res.status == LOSE) {
+        } else if (res.status == WordleLose) {
             this.displayResultDiv(false, res.solution, res.seconds);
         }
     }
@@ -264,11 +264,11 @@ export class Wordle {
             if (!box) {
                 continue;
             }
-            if (colors[i] == GREY) {
+            if (colors[i] == Grey) {
                 box.style.backgroundColor = "grey";
-            } else if (colors[i] == YELLOW) {
+            } else if (colors[i] == Yellow) {
                 box.style.backgroundColor = "yellow";
-            } else if (colors[i] == GREEN) {
+            } else if (colors[i] == Green) {
                 box.style.backgroundColor = "green";
             }
         }
@@ -325,13 +325,3 @@ export class Wordle {
         }
     }
 }
-
-export type WordleStatus = number;
-export const INGAME: WordleStatus = 0;
-export const WIN: WordleStatus = 1;
-export const LOSE: WordleStatus = 2;
-
-export type WordleColor = number;
-export const GREY: WordleColor = 0;
-export const YELLOW: WordleColor = 1;
-export const GREEN: WordleColor = 2;

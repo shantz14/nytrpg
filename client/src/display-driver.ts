@@ -1,6 +1,6 @@
 import { GameState } from "./game-objects.js";
 import { UserData } from "./login.js";
-import { Chat } from "./messages.js";
+import { ChatMsg } from "./protocol.gen.js";
 import { Vector2D } from "./vector2D.js";
 
 export class DisplayDriver {
@@ -102,7 +102,7 @@ export class DisplayDriver {
         return Date.now() > chatData.exp;
     }
 
-    public updateChat(chat: Chat) {
+    public updateChat(chat: ChatMsg) {
         let exp = Date.now();
         exp += 5 * 1000; // Add 5 seconds
         this.chats.set(chat.id, {
@@ -146,7 +146,7 @@ export class DisplayDriver {
 }
 
 type ChatData = {
-    chat: Chat,
+    chat: ChatMsg,
     exp: number
 }
 

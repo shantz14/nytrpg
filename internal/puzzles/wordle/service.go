@@ -30,16 +30,15 @@ func NewService(s *store.Store) *Service {
 }
 
 func (svc *Service) RegisterHandlers(r *netconn.Router) {
-	r.Handle(protocol.ClientStartWordle, func(s *netconn.Session, _ []byte) {
+	r.Handle(protocol.ClientWordleStart, func(s *netconn.Session, _ msgpack.RawMessage) {
 		s.SendMsg(protocol.ServerWordleResume, svc.sessions.start(s.PlayerID, time.Now()))
 	})
-	r.Handle(protocol.ClientRecWordle, func(s *netconn.Session, data []byte) {
+	r.Handle(protocol.ClientWordleGuess, func(s *netconn.Session, data msgpack.RawMessage) {
 		var req protocol.WordleReq
 		if err := msgpack.Unmarshal(data, &req); err != nil {
-			log.Println("Client data could not be asserted as type WordleReq.")
 			return
 		}
-		s.SendMsg(protocol.ServerSendWordle, svc.guess(s.PlayerID, req.Guess))
+		s.SendMsg(protocol.ServerWordleResult, svc.guess(s.PlayerID, req.Guess))
 	})
 }
 

@@ -14,36 +14,8 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/vmihailenco/msgpack/v5"
-)
 
-// Must match server msgpack tags exactly.
-
-type vector2D struct {
-	X float64 `msgpack:"x"`
-	Y float64 `msgpack:"y"`
-}
-
-type playerData struct {
-	ID       int      `msgpack:"id"`
-	Pos      vector2D `msgpack:"pos"`
-	Me       bool     `msgpack:"me"`
-	Username string   `msgpack:"username"`
-}
-
-type clientMessage struct {
-	UpdateType int    `msgpack:"updateType"`
-	Data       []byte `msgpack:"data"`
-}
-
-type chat struct {
-	ID  int    `msgpack:"id"`
-	Msg string `msgpack:"msg"`
-}
-
-const (
-	clientUpdatePos = 1
-	clientSendChat  = 3
+	"nytrpg/internal/protocol"
 )
 
 type credentials struct {
@@ -98,16 +70,12 @@ func login(baseURL, username, password string) (loginRes, error) {
 	return res, nil
 }
 
-func send(conn *websocket.Conn, updateType int, data any) error {
-	inner, err := msgpack.Marshal(data)
+func send(conn *websocket.Conn, t protocol.ClientMsg, data any) error {
+	msg, err := protocol.EncodeClient(t, data)
 	if err != nil {
 		return err
 	}
-	envelope, err := msgpack.Marshal(clientMessage{UpdateType: updateType, Data: inner})
-	if err != nil {
-		return err
-	}
-	return conn.WriteMessage(websocket.BinaryMessage, envelope)
+	return conn.WriteMessage(websocket.BinaryMessage, msg)
 }
 
 func clamp(v, lo, hi float64) float64 {
@@ -158,7 +126,7 @@ func runBot(baseURL, wsBase, username, password string, wg *sync.WaitGroup) {
 		}
 	}()
 
-	pos := vector2D{X: rand.Float64() * 2345, Y: rand.Float64() * 2345}
+	x, y := rand.Float64()*2345, rand.Float64()*2345
 	dx := (rand.Float64()*2 - 1) * 15
 	dy := (rand.Float64()*2 - 1) * 15
 
@@ -173,16 +141,16 @@ func runBot(baseURL, wsBase, username, password string, wg *sync.WaitGroup) {
 			dy = (rand.Float64()*2 - 1) * 15
 
 		case <-moveTicker.C:
-			pos.X = clamp(pos.X+dx, 50, 2345)
-			pos.Y = clamp(pos.Y+dy, 50, 2345)
-			if err := send(conn, clientUpdatePos, playerData{ID: id, Pos: pos}); err != nil {
+			x = clamp(x+dx, 50, 2345)
+			y = clamp(y+dy, 50, 2345)
+			if err := send(conn, protocol.ClientMove, protocol.Vec{X: int32(x), Y: int32(y)}); err != nil {
 				log.Printf("[%s] send error: %v", username, err)
 				return
 			}
 
 		case <-chatTicker.C:
 			msg := chatLines[rand.Intn(len(chatLines))]
-			if err := send(conn, clientSendChat, chat{ID: id, Msg: msg}); err != nil {
+			if err := send(conn, protocol.ClientChat, protocol.ChatReq{Msg: msg}); err != nil {
 				log.Printf("[%s] chat error: %v", username, err)
 				return
 			}

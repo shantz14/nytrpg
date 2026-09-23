@@ -1,28 +1,15 @@
 import { Vector2D } from "./vector2D.js"
+import { PlayerSnap } from "./protocol.gen.js";
 
 export class GameState {
     charVec: Vector2D;
-    otherChars: {[key: number]: PlayerState};
+    otherChars: {[key: number]: PlayerSnap};
     clickables: {[key: string]: Clickable};
 
     constructor() {
         this.charVec = new Vector2D(window.innerWidth/2, window.innerHeight/2);
         this.otherChars = {};
         this.clickables = {};
-    }
-}
-
-export class PlayerState {
-    id: number;
-    pos: Vector2D;
-    me: boolean;
-    username: string;
-    
-    constructor() {
-        this.id = -1;
-        this.pos = new Vector2D(0, 0); 
-        this.me = false;
-        this.username = "";
     }
 }
 

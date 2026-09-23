@@ -84,7 +84,7 @@ func (s *Session) Send(msg []byte) bool {
 }
 
 // Encodes and queues a message
-func (s *Session) SendMsg(t protocol.ServerMessageType, data any) bool {
+func (s *Session) SendMsg(t protocol.ServerMsg, data any) bool {
 	msg, err := protocol.Encode(t, data)
 	if err != nil {
 		log.Println("Error encoding message:", err)
@@ -221,18 +221,19 @@ func (s *Session) writeLoop() {
 	}
 }
 
-// Handles one message type. data is the message payload.
-type Handler func(s *Session, data []byte)
+// Handles one message type. data is the still encoded payload, unmarshal it
+// into the type the message carries.
+type Handler func(s *Session, data msgpack.RawMessage)
 
 type Router struct {
-	handlers map[protocol.ClientMessageType]Handler
+	handlers map[protocol.ClientMsg]Handler
 }
 
 func NewRouter() *Router {
-	return &Router{handlers: make(map[protocol.ClientMessageType]Handler)}
+	return &Router{handlers: make(map[protocol.ClientMsg]Handler)}
 }
 
-func (r *Router) Handle(t protocol.ClientMessageType, h Handler) {
+func (r *Router) Handle(t protocol.ClientMsg, h Handler) {
 	if _, ok := r.handlers[t]; ok {
 		panic("netconn: duplicate handler for message type")
 	}
@@ -240,15 +241,15 @@ func (r *Router) Handle(t protocol.ClientMessageType, h Handler) {
 }
 
 func (r *Router) dispatch(s *Session, raw []byte) {
-	var msg protocol.ClientMessage
-	if err := msgpack.Unmarshal(raw, &msg); err != nil {
-		log.Println("Error unpacking envelope data: ", err)
+	t, data, err := protocol.Decode(raw)
+	if err != nil {
+		log.Printf("player %d sent a bad message: %v", s.PlayerID, err)
 		return
 	}
-	h, ok := r.handlers[msg.UpdateType]
+	h, ok := r.handlers[protocol.ClientMsg(t)]
 	if !ok {
-		log.Println("No handler for message type", msg.UpdateType)
+		log.Printf("player %d sent unknown message type %d", s.PlayerID, t)
 		return
 	}
-	h(s, msg.Data)
+	h(s, data)
 }

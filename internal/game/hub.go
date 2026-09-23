@@ -18,14 +18,13 @@ const maxChatLen = 200
 
 type Hub struct {
 	// Only touched by the hub goroutine
-	players map[*netconn.Session]bool
-	state   map[int]*protocol.PlayerData
+	players map[*netconn.Session]*protocol.PlayerSnap
 	dirty   bool
 
-	in         chan protocol.PlayerData
+	in         chan move
 	register   chan *netconn.Session
 	unregister chan *netconn.Session
-	chatIn     chan protocol.Chat
+	chatIn     chan protocol.ChatMsg
 	closeAll   chan struct{}
 
 	// Shared with HTTP handlers and sessions
@@ -35,39 +34,39 @@ type Hub struct {
 
 func NewHub() *Hub {
 	return &Hub{
-		players:    make(map[*netconn.Session]bool),
-		state:      make(map[int]*protocol.PlayerData),
-		in:         make(chan protocol.PlayerData),
+		players:    make(map[*netconn.Session]*protocol.PlayerSnap),
+		in:         make(chan move),
 		register:   make(chan *netconn.Session),
 		unregister: make(chan *netconn.Session),
-		chatIn:     make(chan protocol.Chat),
+		chatIn:     make(chan protocol.ChatMsg),
 		closeAll:   make(chan struct{}),
 		online:     make(map[int]bool),
 	}
 }
 
+type move struct {
+	s   *netconn.Session
+	pos protocol.Vec
+}
+
 func (h *Hub) RegisterHandlers(r *netconn.Router) {
-	r.Handle(protocol.ClientUpdatePos, func(s *netconn.Session, data []byte) {
-		var pos protocol.PlayerData
+	r.Handle(protocol.ClientMove, func(s *netconn.Session, data msgpack.RawMessage) {
+		var pos protocol.Vec
 		if err := msgpack.Unmarshal(data, &pos); err != nil {
-			log.Println("Client data could not be asserted as type PlayerData.")
 			return
 		}
-		pos.ID = s.PlayerID
-		h.in <- pos
+		h.in <- move{s, pos}
 	})
-	r.Handle(protocol.ClientRecChat, func(s *netconn.Session, data []byte) {
-		var chat protocol.Chat
-		if err := msgpack.Unmarshal(data, &chat); err != nil {
-			log.Println("Client data could not be asserted as type Chat.")
+	r.Handle(protocol.ClientChat, func(s *netconn.Session, data msgpack.RawMessage) {
+		var req protocol.ChatReq
+		if err := msgpack.Unmarshal(data, &req); err != nil {
 			return
 		}
 		if !s.Allow("chat", 1, 3) {
 			return
 		}
-		// Never trust who the client says sent it
-		chat.ID = s.PlayerID
-		h.chatIn <- chat
+		// Who said it comes from the connection, never the client
+		h.chatIn <- protocol.ChatMsg{ID: s.PlayerID, Msg: req.Msg}
 	})
 }
 
@@ -95,21 +94,20 @@ func (h *Hub) step(tick <-chan time.Time) {
 	}()
 
 	select {
-	case update := <-h.in:
-		if p, ok := h.state[update.ID]; ok {
-			p.Pos = update.Pos
+	case m := <-h.in:
+		if p, ok := h.players[m.s]; ok {
+			p.Pos = m.pos
 			h.dirty = true
 		}
 
 	case s := <-h.unregister:
-		delete(h.state, s.PlayerID)
 		delete(h.players, s)
 		h.ReleaseOnline(s.PlayerID)
 		h.dirty = true
 
 	case s := <-h.register:
-		h.players[s] = true
-		h.state[s.PlayerID] = &protocol.PlayerData{ID: s.PlayerID, Username: s.Username}
+		h.players[s] = &protocol.PlayerSnap{ID: s.PlayerID, Username: s.Username}
+		s.SendMsg(protocol.ServerWelcome, protocol.Welcome{PlayerID: s.PlayerID, Username: s.Username})
 		h.dirty = true
 
 	case chat := <-h.chatIn:
@@ -128,20 +126,24 @@ func (h *Hub) step(tick <-chan time.Time) {
 	}
 }
 
+// Everyone gets the same snapshot, so it's encoded once
 func (h *Hub) broadcastState() {
+	snap := protocol.Snapshot{Players: make([]protocol.PlayerSnap, 0, len(h.players))}
+	for _, p := range h.players {
+		snap.Players = append(snap.Players, *p)
+	}
+	msg, err := protocol.Encode(protocol.ServerSnapshot, snap)
+	if err != nil {
+		log.Println("Error encoding snapshot:", err)
+		return
+	}
 	for s := range h.players {
-		state := protocol.GameState{Players: make(map[int]*protocol.PlayerData, len(h.state))}
-		for id, p := range h.state {
-			copied := *p
-			copied.Me = id == s.PlayerID
-			state.Players[id] = &copied
-		}
-		s.SendMsg(protocol.ServerUpdatePos, state)
+		s.Send(msg)
 	}
 }
 
 // Runs on the hub goroutine, so it must never block
-func (h *Hub) broadcastChat(chat protocol.Chat) {
+func (h *Hub) broadcastChat(chat protocol.ChatMsg) {
 	chat.Msg = strings.TrimSpace(chat.Msg)
 	if chat.Msg == "" {
 		return
@@ -150,7 +152,7 @@ func (h *Hub) broadcastChat(chat protocol.Chat) {
 		chat.Msg = string(runes[:maxChatLen])
 	}
 
-	msg, err := protocol.Encode(protocol.ServerSendChat, chat)
+	msg, err := protocol.Encode(protocol.ServerChat, chat)
 	if err != nil {
 		log.Println("Error encoding chat:", err)
 		return

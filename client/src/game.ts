@@ -1,36 +1,36 @@
 import { DisplayDriver } from "./display-driver.js";
 import { InputDriver } from "./input-driver.js";
-import { Clickable, GameState, PlayerState} from "./game-objects.js";
+import { Clickable, GameState } from "./game-objects.js";
 import { Vector2D } from "./vector2D.js";
 import { Wordle } from "./wordle.js";
 import { Leaderboard } from "./leaderboard.js";
-import { ClientUpdate, ClientUpdatePos, ClientUpdateType, ServerUpdate, ServerUpdatePos, ServerWordleResponse, ServerWordleResume, UpdateState, WordleReq, WordleResponse, WordleResume, Chat, ServerChat, ClientChat } from "./messages.js";
+import { ChatMsg, ChatReq, ClientChat, ClientMove, ClientMsg, PlayerSnap, ServerChat, ServerSnapshot, ServerWelcome, ServerWordleResult, ServerWordleResume, Snapshot, Vec, Welcome, WordleRes, WordleResume } from "./protocol.gen.js";
+import { Connection } from "./net.js";
 import { UserData, logout } from "./login.js";
-
-declare const MessagePack: typeof import("@msgpack/msgpack");
-const encode = MessagePack.encode;
-const decode = MessagePack.decode;
 
 const SERVER_URL = "/ws";
 
 export class Game {
-    sock: WebSocket;
+    conn: Connection;
     displayDriver: DisplayDriver;
     inputDriver: InputDriver;
     state: GameState;
     wordle: Wordle | null;
     userData: UserData;
+    // Last position sent, so we only send when we move
+    lastSent: Vec | null;
 
     constructor(ctx: CanvasRenderingContext2D, userData: UserData) {
         const canvas = ctx.canvas;
 
-        this.sock = new WebSocket(SERVER_URL + `?token=${encodeURIComponent(userData.jwt)}`);
+        this.conn = new Connection(SERVER_URL + `?token=${encodeURIComponent(userData.jwt)}`);
         this.state = new GameState();
         this.inputDriver = new InputDriver(canvas, this.state);
         const middle = this.findMiddle();
         this.displayDriver = new DisplayDriver(ctx, this.state, userData, middle);
         this.wordle = null;
         this.userData = userData;
+        this.lastSent = null;
     }
 
     public run() {
@@ -44,47 +44,22 @@ export class Game {
     }
 
     private handleMsgs() {
-        this.sock.onmessage = async (e) => {
-            let rawMsg: ArrayBuffer;
-
-            if (e.data instanceof Blob) {
-                rawMsg = await e.data.arrayBuffer();
-            } else {
-                rawMsg = e.data;
-            }
-            const msg = decode(new Uint8Array(rawMsg)) as ServerUpdate;
-
-            if (msg.updateType == ServerUpdatePos) {
-                const update = decode(msg.data) as UpdateState;
-                this.updatePos(update);
-            } else if (msg.updateType == ServerWordleResponse) {
-                const update = decode(msg.data) as WordleResponse;
-                if (this.wordle) {
-                    this.wordle.handleResponse(update);
-                } else {
-                    console.log("Guys there's no wordle why are we sending wordle updates.");
-                }
-            } else if (msg.updateType == ServerWordleResume) {
-                const update = decode(msg.data) as WordleResume;
-                this.wordle?.handleResume(update);
-            } else if (msg.updateType == ServerChat) {
-                const update = decode(msg.data) as Chat;
-                this.displayDriver.updateChat(update);
-            } else {
-                console.log("Wacky msg from server.");
-            }
-
-        }
+        this.conn.on<Welcome>(ServerWelcome, (welcome) => {
+            console.log("Connected as", welcome.username);
+        });
+        this.conn.on<Snapshot>(ServerSnapshot, (snap) => this.updatePos(snap));
+        this.conn.on<ChatMsg>(ServerChat, (chat) => this.displayDriver.updateChat(chat));
+        this.conn.on<WordleRes>(ServerWordleResult, (res) => this.wordle?.handleResponse(res));
+        this.conn.on<WordleResume>(ServerWordleResume, (resume) => this.wordle?.handleResume(resume));
     }
 
     // Each update is a full snapshot, so anyone not in it has left
-    private updatePos(update: UpdateState) {
-        const others: {[key: number]: PlayerState} = {};
+    private updatePos(snap: Snapshot) {
+        const others: {[key: number]: PlayerSnap} = {};
 
-        for (const id in update.players) {
-            const newState = update.players[id];
-            if (!newState.me) {
-                others[Number(id)] = newState;
+        for (const player of snap.players) {
+            if (player.id != this.userData.id) {
+                others[player.id] = player;
             }
         }
 
@@ -96,27 +71,22 @@ export class Game {
 
         this.state.otherChars = others;
     }
-    
-    private sendPlayerState() {
-        const data = new PlayerState();
-        data.pos.x = this.state.charVec.x + this.displayDriver.middle.x;
-        data.pos.y = this.state.charVec.y + this.displayDriver.middle.y;
-        data.id = this.userData.id;
 
-        this.send(ClientUpdatePos, data);
+    private sendPlayerState() {
+        const pos: Vec = {
+            x: Math.round(this.state.charVec.x + this.displayDriver.middle.x),
+            y: Math.round(this.state.charVec.y + this.displayDriver.middle.y),
+        };
+        if (this.lastSent && this.lastSent.x == pos.x && this.lastSent.y == pos.y) {
+            return;
+        }
+        if (this.conn.send(ClientMove, pos)) {
+            this.lastSent = pos;
+        }
     }
 
-    public send(type: ClientUpdateType, data: PlayerState | WordleReq | Chat | {}) {
-        const envelope: ClientUpdate = {
-            updateType: type,
-            data: encode(data)
-        };
-
-        const encoded: Uint8Array = encode(envelope);
-
-        if (this.sock.readyState === WebSocket.OPEN) {
-            this.sock.send(encoded);
-        }
+    public send(type: ClientMsg, data: unknown): boolean {
+        return this.conn.send(type, data);
     }
 
     private update() {
@@ -206,10 +176,7 @@ export class Game {
     private handleChats() {
         const chatbox = document.getElementById("chatbox") as HTMLInputElement;
         chatbox.addEventListener("sendChat", () => {
-            const chat: Chat = {
-                id: this.userData.id,
-                msg: chatbox.value
-            }
+            const chat: ChatReq = { msg: chatbox.value };
             this.send(ClientChat, chat);
         });
     }
