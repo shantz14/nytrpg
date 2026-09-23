@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"math"
 
 	"nytrpg/internal/protocol"
 )
@@ -41,4 +42,29 @@ func findInteractable(m *protocol.WorldMap, id string) (protocol.Interactable, b
 		}
 	}
 	return protocol.Interactable{}, false
+}
+
+// Distance from p to the nearest point of the interactable's rectangle
+func distToInteractable(p protocol.Vec, it protocol.Interactable) float64 {
+	dx := max(it.Pos.X-p.X, 0, p.X-(it.Pos.X+it.W))
+	dy := max(it.Pos.Y-p.Y, 0, p.Y-(it.Pos.Y+it.H))
+	return math.Hypot(float64(dx), float64(dy))
+}
+
+// True if the client's player is within range of the interactable
+func (w *World) InRange(c Client, interactableID string) bool {
+	it, ok := findInteractable(w.Map, interactableID)
+	if !ok {
+		return false
+	}
+	if it.Range == 0 {
+		return true
+	}
+	near := false
+	w.Query(func(w *World) {
+		if p, ok := w.players[c]; ok {
+			near = distToInteractable(p.ent.Pos, it) <= float64(it.Range)
+		}
+	})
+	return near
 }

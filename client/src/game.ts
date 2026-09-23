@@ -44,6 +44,7 @@ export class Game {
     public run() {
         this.handleMsgs();
         this.handleChats();
+        this.inputDriver.onTooFar = () => this.toast("Walk closer to use that");
         this.conn.onDisconnect = () => this.showReconnecting(true);
         this.conn.onReconnect = () => this.showReconnecting(false);
         this.conn.onReplaced = () => {
@@ -156,7 +157,7 @@ export class Game {
                 console.warn("Unknown interactable action", it.action);
                 continue;
             }
-            this.state.clickables[it.id] = new Clickable(it.id, new Vector2D(it.pos.x, it.pos.y), it.h, it.w, action);
+            this.state.clickables[it.id] = new Clickable(it.id, new Vector2D(it.pos.x, it.pos.y), it.h, it.w, action, it.range);
             this.displayDriver.loadImage(it.id, it.sprite);
         }
     }
@@ -179,6 +180,16 @@ export class Game {
         const step = this.moveSpeed * dt;
         this.state.selfPos.add(new Vector2D(x / len * step, y / len * step));
     }
+
+    // A short message at the top of the screen
+    public toast(msg: string) {
+        const el = document.getElementById("toast")!;
+        el.textContent = msg;
+        el.style.display = "flex";
+        clearTimeout(this.toastTimer);
+        this.toastTimer = setTimeout(() => el.style.display = "none", 2000);
+    }
+    private toastTimer: number | undefined;
 
     private showReconnecting(show: boolean) {
         document.getElementById("reconnecting")!.style.display = show ? "flex" : "none";

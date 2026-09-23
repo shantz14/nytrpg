@@ -51,7 +51,7 @@ func New(cfg config.Config) (*Server, error) {
 		store:    st,
 		world:    world,
 		auth:     auth.New(st, cfg.JWTSecret),
-		wordle:   wordle.NewService(st),
+		wordle:   wordle.NewService(st, func(s *netconn.Session) bool { return world.InRange(s, "wordle") }),
 		router:   netconn.NewRouter(),
 		sessions: make(map[*netconn.Session]bool),
 	}
@@ -75,7 +75,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/login", s.auth.HandleLogin)
 	mux.HandleFunc("/signup", s.auth.HandleSignup)
 	mux.HandleFunc("/token", s.auth.HandleToken)
-	mux.HandleFunc("/haveIPlayed", s.wordle.HandleHaveIPlayed)
 	mux.HandleFunc("/leaderboard", s.wordle.HandleLeaderboard)
 
 	// Metrics, as JSON. Counters only grow; diff two reads for rates.

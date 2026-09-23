@@ -89,11 +89,25 @@ export class Clickable {
     name: string;
     rect: Rect;
     action: Function;
+    // How close the player must be, px from the edge. 0 = anywhere.
+    range: number;
 
-    constructor(name: string, pos: Vector2D, height: number, width: number, action: Function) {
+    constructor(name: string, pos: Vector2D, height: number, width: number, action: Function, range = 0) {
         this.name = name;
         this.rect = new Rect(pos, height, width);
         this.action = action;
+        this.range = range;
+    }
+
+    // Same check as the server: distance from a world point to the rect's edge
+    public inRange(p: Vector2D): boolean {
+        if (this.range == 0) {
+            return true;
+        }
+        const r = this.rect;
+        const dx = Math.max(r.pos.x - p.x, 0, p.x - (r.pos.x + r.width));
+        const dy = Math.max(r.pos.y - p.y, 0, p.y - (r.pos.y + r.height));
+        return Math.hypot(dx, dy) <= this.range;
     }
 }
 

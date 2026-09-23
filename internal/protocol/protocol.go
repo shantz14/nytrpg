@@ -107,6 +107,8 @@ type Interactable struct {
 	H      int32  `json:"h" msgpack:"h"`
 	// What the client does when it's clicked, e.g. "wordle"
 	Action string `json:"action" msgpack:"action"`
+	// How close a player must be to use it, px from its edge. 0 = anywhere.
+	Range int32 `json:"range" msgpack:"range"`
 }
 
 // Changes to the entities near you since the last update. Only sent when
@@ -176,6 +178,10 @@ type WordleRes struct {
 
 // Sent in reply to ClientWordleStart, the guesses already made today
 type WordleResume struct {
+	// Already finished today's wordle, nothing else is set
+	Played bool `msgpack:"played"`
+	// Not close enough to the wordle board to start, nothing else is set
+	TooFar  bool            `msgpack:"tooFar"`
 	Guesses []string        `msgpack:"guesses"`
 	Colors  [][]WordleColor `msgpack:"colors"`
 	Seconds float64         `msgpack:"seconds"`

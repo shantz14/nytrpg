@@ -1,6 +1,7 @@
 package game
 
 import (
+	"context"
 	"math/rand"
 	"testing"
 	"time"
@@ -337,3 +338,49 @@ func benchmarkTick(b *testing.B, spread float64) {
 
 func BenchmarkWorldTickSpread(b *testing.B)  { benchmarkTick(b, 1) }
 func BenchmarkWorldTickCrowded(b *testing.B) { benchmarkTick(b, 0.2) }
+
+func TestInRange(t *testing.T) {
+	m := &protocol.WorldMap{
+		Width: 5000, Height: 5000, Spawn: protocol.Vec{X: 500, Y: 500},
+		Interactables: []protocol.Interactable{
+			{ID: "board", Pos: protocol.Vec{X: 1000, Y: 1000}, W: 100, H: 100, Range: 300},
+			{ID: "sign", Pos: protocol.Vec{X: 4000, Y: 4000}, W: 100, H: 100},
+		},
+	}
+	w := NewWorld(m)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go w.Run(ctx)
+
+	c := &fakeClient{}
+	w.Join(c, 1, "p")
+	at := func(x, y int32) {
+		w.Query(func(w *World) {
+			p := w.players[c]
+			p.ent.Pos = protocol.Vec{X: x, Y: y}
+			w.grid.moved(p.ent)
+		})
+	}
+
+	at(1050, 1050) // on it
+	if !w.InRange(c, "board") {
+		t.Fatal("on the board should be in range")
+	}
+	at(1100+300, 1050) // exactly at range from the right edge
+	if !w.InRange(c, "board") {
+		t.Fatal("at the range limit should be in range")
+	}
+	at(1100+301, 1100+1) // just past it, diagonally
+	if w.InRange(c, "board") {
+		t.Fatal("past the range should be out of range")
+	}
+	if !w.InRange(c, "sign") {
+		t.Fatal("range 0 means anywhere")
+	}
+	if w.InRange(c, "nope") {
+		t.Fatal("unknown interactable should be out of range")
+	}
+	if w.InRange(&fakeClient{}, "board") {
+		t.Fatal("unknown client should be out of range")
+	}
+}

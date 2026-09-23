@@ -60,6 +60,8 @@ export interface Interactable {
     h: number;
     // What the client does when it's clicked, e.g. "wordle"
     action: string;
+    // How close a player must be to use it, px from its edge. 0 = anywhere.
+    range: number;
 }
 
 // Changes to the entities near you since the last update. Only sent when
@@ -120,6 +122,10 @@ export interface WordleRes {
 
 // Sent in reply to ClientWordleStart, the guesses already made today
 export interface WordleResume {
+    // Already finished today's wordle, nothing else is set
+    played: boolean;
+    // Not close enough to the wordle board to start, nothing else is set
+    tooFar: boolean;
     guesses: Array<string>;
     colors: Array<Array<WordleColor>>;
     seconds: number;

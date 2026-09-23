@@ -19,6 +19,34 @@ A multiplayer browser RPG where the gameplay is built around daily NYT-style puz
 - **Backend:** Go, SQLite, WebSocket (gorilla)
 - **Frontend:** TypeScript, HTML5 Canvas
 
+## Layout
+
+```
+cmd/server             entry point: config, graceful shutdown
+cmd/bots               load-testing bots
+cmd/protogen           generates client/src/protocol.gen.ts
+internal/protocol      every websocket message (the source of truth)
+internal/netconn       a player's websocket: reader/writer, pings, limits, message router
+internal/game          the world: tick loop, entities, spatial grid, movement rules, replication
+internal/game/maps     map JSON (bounds, spawn, clickable things)
+internal/puzzles/...   daily puzzles (wordle)
+internal/auth          accounts and JWTs
+internal/store         SQLite and migrations
+internal/server        wires it all together
+client/src             TypeScript client
+```
+
+## Adding a feature
+
+- **New message:** add the type and payload struct to `internal/protocol/protocol.go`, then
+  `go generate ./internal/protocol` to update the client types (a test fails if you forget).
+  Register a handler with `router.Handle(...)` in the feature's package, and `conn.on(...)` on the client.
+- **Game logic:** world state lives on one goroutine. Change it from handlers with `world.Do(...)`,
+  read it with `world.Query(...)`, and put per-tick logic in a system (`world.AddSystem`).
+  Entities are replicated to nearby players automatically.
+- **Rate limit an action:** `session.Allow("name", perSecond, burst)`.
+- **Schema change:** append a migration to `internal/store/store.go`, never edit a shipped one.
+
 ## Running
 
 Locally:
@@ -29,7 +57,10 @@ npx tsc && JWT_SECRET=devsecret go run ./cmd/server
 go run ./cmd/bots --n 10   # optional, in another terminal
 ```
 
-Settings come from the environment: `JWT_SECRET` (required), `PORT` (8080), `DB_PATH` (`db/nytrpg.db`), `STATIC_DIR` (`client/static`).
+Settings come from the environment: `JWT_SECRET` (required), `PORT` (8080), `DB_PATH` (`db/nytrpg.db`), `STATIC_DIR` (`client/static`), `DEBUG=1` (debug logs and `/debug/pprof`).
+
+Metrics are at `/debug/vars`. To load test: `go run ./cmd/bots --n 200 --stagger 20ms --duration 30s --quiet`
+prints throughput, bandwidth per bot, the largest gap between updates, and disconnects.
 
 With Docker:
 

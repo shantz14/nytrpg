@@ -3,7 +3,6 @@ import { Popup } from "./popup.js";
 import { ClientWordleGuess, ClientWordleStart, Green, Grey, WordleColor, WordleLose, WordleReq, WordleRes, WordleResume, WordleWin, Yellow } from "./protocol.gen.js";
 
 const GUESSES = 5;
-const wordleURL = "/haveIPlayed"
 
 function letterId(row: number, col: number): string {
     return `letter-${row}-${col}`;
@@ -51,32 +50,9 @@ export class Wordle {
         this.displayGame(popup);
         this.populateGame(popup);
 
-        this.haveIPlayedToday().then(played => {
-            if (Popup.current !== popup) {
-                return; // closed while we waited
-            }
-            if (played) {
-                popup.addLayer("tpl-wordle-played");
-            } else {
-                // Server starts the clock and replies with any guesses already made
-                this.game.send(ClientWordleStart, {});
-            }
-        });
+        // Server starts the clock and replies with any guesses already made
+        this.game.send(ClientWordleStart, {});
         return true;
-    }
-
-    private async haveIPlayedToday(): Promise<boolean> {
-        return fetch(wordleURL + `?id=${this.game.userData.id}`)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`Error getting wordle thingy. Status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .catch(error => {
-            console.error('Error parsing haveIPlayedToday:', error);
-            return true;
-        });
     }
 
     // Timer display only, the server keeps the real time
@@ -146,6 +122,15 @@ export class Wordle {
 
     // Fill in guesses made before a reload and pick the timer back up
     public handleResume(resume: WordleResume) {
+        if (resume.played) {
+            this.popup?.addLayer("tpl-wordle-played");
+            return;
+        }
+        if (resume.tooFar) {
+            this.popup?.close();
+            this.game.toast("Walk closer to use that");
+            return;
+        }
         const guesses = resume.guesses ?? [];
         const colors = resume.colors ?? [];
         for (let row = 0; row < guesses.length; row++) {

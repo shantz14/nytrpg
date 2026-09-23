@@ -13,6 +13,8 @@ export class InputDriver {
     mousePos: Vector2D;
     state: GameState;
     inputMode: InputMode;
+    // Called when the player clicks something they're too far away to use
+    onTooFar: (() => void) | null;
 
     constructor(canvas: HTMLCanvasElement, state: GameState) {
         this.canvas = canvas;
@@ -20,6 +22,7 @@ export class InputDriver {
         this.mousePos = new Vector2D(0, 0);
         this.state = state;
         this.inputMode = InputMode.GameFocused;
+        this.onTooFar = null;
 
         const chatbox = document.getElementById("chatbox") as HTMLInputElement;
 
@@ -77,7 +80,11 @@ export class InputDriver {
         for (const key in this.state.clickables) {
             const obj = this.state.clickables[key];
             if (obj.rect.inRect(this.mousePos)) {
-                obj.action();
+                if (obj.inRange(this.state.selfPos)) {
+                    obj.action();
+                } else {
+                    this.onTooFar?.();
+                }
                 return;
             }
         }

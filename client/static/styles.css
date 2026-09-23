@@ -320,7 +320,7 @@ canvas {
     z-index: 2;
 }
 
-#reconnecting {
+#reconnecting, #toast {
     display: none;
     position: absolute;
     top: 20px;

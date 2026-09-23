@@ -21,17 +21,19 @@ type Service struct {
 	words    *Words
 	sessions *sessions
 	store    *store.Store
+	// Whether the player is close enough to the wordle board to start
+	inRange func(s *netconn.Session) bool
 }
 
-func NewService(s *store.Store) *Service {
+func NewService(s *store.Store, inRange func(s *netconn.Session) bool) *Service {
 	w := LoadWords()
 	slog.Info("wordle loaded", "today", w.For(gameday.Today()))
-	return &Service{words: w, sessions: newSessions(), store: s}
+	return &Service{words: w, sessions: newSessions(), store: s, inRange: inRange}
 }
 
 func (svc *Service) RegisterHandlers(r *netconn.Router) {
 	r.Handle(protocol.ClientWordleStart, func(s *netconn.Session, _ msgpack.RawMessage) {
-		s.SendMsg(protocol.ServerWordleResume, svc.sessions.start(s.PlayerID, time.Now()))
+		s.SendMsg(protocol.ServerWordleResume, svc.start(s))
 	})
 	r.Handle(protocol.ClientWordleGuess, func(s *netconn.Session, data msgpack.RawMessage) {
 		var req protocol.WordleReq
@@ -40,6 +42,21 @@ func (svc *Service) RegisterHandlers(r *netconn.Router) {
 		}
 		s.SendMsg(protocol.ServerWordleResult, svc.guess(s.PlayerID, req.Guess))
 	})
+}
+
+func (svc *Service) start(s *netconn.Session) protocol.WordleResume {
+	played, err := svc.store.PlayedWordleOn(s.PlayerID, gameday.Today())
+	if err != nil {
+		slog.Error("checking if player played", "err", err)
+	}
+	// If the db is broken don't let them play
+	if played || err != nil {
+		return protocol.WordleResume{Played: true}
+	}
+	if !svc.inRange(s) {
+		return protocol.WordleResume{TooFar: true}
+	}
+	return svc.sessions.start(s.PlayerID, time.Now())
 }
 
 func (svc *Service) guess(pid int, guess string) protocol.WordleRes {
@@ -72,25 +89,6 @@ func writeJSON(w http.ResponseWriter, v any) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		slog.Error("encoding response", "err", err)
 	}
-}
-
-func (svc *Service) HandleHaveIPlayed(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed, only GET allowed.", http.StatusMethodNotAllowed)
-		return
-	}
-	id, err := strconv.Atoi(r.URL.Query().Get("id"))
-	if err != nil {
-		http.Error(w, "Bad id.", http.StatusBadRequest)
-		return
-	}
-	played, err := svc.store.PlayedWordleOn(id, gameday.Today())
-	if err != nil {
-		slog.Error("checking if player played", "err", err)
-		http.Error(w, "Database error.", http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, played)
 }
 
 type leaderboardRes struct {
