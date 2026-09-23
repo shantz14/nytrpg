@@ -16,8 +16,9 @@
                 <canvas id="game"></canvas>
             </div>
             <div id="chat-container">
-                <input type="text", id="chatbox", name="chatbox">
+                <input type="text" id="chatbox" name="chatbox">
             </div>
+            <div id="reconnecting">Connection lost, reconnecting&hellip;</div>
         </div>
 
         <template id="tpl-login">
@@ -64,7 +65,7 @@
 
         <template id="tpl-wordle-played">
             <div id="resultPopup">
-                <button id="exit">X</button>
+                <button class="exit">X</button>
                 <div class="resultContainer" id="resultContainer">
                     <p>You already played the wordle today.</p>
                 </div>
@@ -73,7 +74,7 @@
 
         <template id="tpl-wordle-result">
             <div id="resultPopup">
-                <button id="exit">X</button>
+                <button class="exit">X</button>
                 <div class="resultContainer" id="resultContainer">
                     <p id="resultText"></p>
                     <p>The word was:</p>
@@ -84,7 +85,7 @@
 
         <template id="tpl-leaderboard">
             <div id="leaderboardPopup">
-                <button id="exit">X</button>
+                <button class="exit">X</button>
                 <div class="leaderboardContainer" id="leaderboardContainer">
                     <h1>Wordle Rankings</h1>
                     <h2 id="date"></h2>

@@ -114,9 +114,18 @@ func (s *Session) Close() {
 	})
 }
 
+// Close code telling the client this player connected from somewhere else.
+// Clients must not reconnect after it, or two tabs would keep kicking each other.
+const CloseReplaced = 4001
+
 // Tells the client the server is going away, then disconnects
 func (s *Session) CloseGoingAway() {
-	msg := websocket.FormatCloseMessage(websocket.CloseGoingAway, "server shutting down")
+	s.CloseWith(websocket.CloseGoingAway, "server shutting down")
+}
+
+// Sends a close frame with a code and reason, then disconnects
+func (s *Session) CloseWith(code int, reason string) {
+	msg := websocket.FormatCloseMessage(code, reason)
 	// Control frames may be written alongside the writer goroutine
 	s.conn.WriteControl(websocket.CloseMessage, msg, time.Now().Add(time.Second))
 	s.Close()

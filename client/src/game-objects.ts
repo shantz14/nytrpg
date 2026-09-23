@@ -1,25 +1,85 @@
 import { Vector2D } from "./vector2D.js"
 import { EntityID, Vec } from "./protocol.gen.js";
 
+// Draw other entities this far in the past, so there are always two known
+// positions to move smoothly between. Two server ticks.
+export const INTERP_DELAY_MS = 100;
+// The server sends moves this often
+const SERVER_TICK_MS = 50;
+
+type Sample = { t: number, x: number, y: number };
+
 // Another entity the server told us about
-export type RemoteEntity = {
+export class RemoteEntity {
     id: EntityID;
     name: string;
     sprite: string;
+    // Where to draw it, updated every frame by interpolate()
     pos: Vec;
+    // Positions from the server, oldest first
+    private samples: Sample[];
+
+    constructor(id: EntityID, name: string, sprite: string, pos: Vec) {
+        this.id = id;
+        this.name = name;
+        this.sprite = sprite;
+        this.pos = { x: pos.x, y: pos.y };
+        this.samples = [{ t: performance.now(), x: pos.x, y: pos.y }];
+    }
+
+    // A position from the server, now
+    public addSample(x: number, y: number) {
+        const now = performance.now();
+        // Starting to move after standing still: it was at rest one tick ago,
+        // not since the last sample, or it would jump instead of glide
+        const last = this.samples[this.samples.length - 1];
+        if (now - last.t > SERVER_TICK_MS * 1.5) {
+            this.samples.push({ t: now - SERVER_TICK_MS, x: last.x, y: last.y });
+        }
+        this.samples.push({ t: now, x, y });
+        // Keep one sample older than the render time to interpolate from
+        const renderTime = now - INTERP_DELAY_MS;
+        while (this.samples.length > 2 && this.samples[1].t <= renderTime) {
+            this.samples.shift();
+        }
+    }
+
+    // Sets pos to where the entity was INTERP_DELAY_MS ago
+    public interpolate(now: number) {
+        const renderTime = now - INTERP_DELAY_MS;
+        const s = this.samples;
+        let i = 0;
+        while (i < s.length - 2 && s[i + 1].t <= renderTime) {
+            i++;
+        }
+        const a = s[i];
+        const b = s[Math.min(i + 1, s.length - 1)];
+        if (b.t <= a.t || renderTime >= b.t) {
+            this.pos = { x: b.x, y: b.y };
+            return;
+        }
+        const f = Math.max(0, (renderTime - a.t) / (b.t - a.t));
+        this.pos = { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
+    }
 }
 
 export class GameState {
-    // Camera offset: our world position is charVec + the middle of the screen
+    // Our position in the world
+    selfPos: Vector2D;
+    // Camera: the world point at the top left of the screen. Set each frame so
+    // selfPos is in the middle.
     charVec: Vector2D;
-    // Our own entity, set by the welcome message
+    // Our own entity and name, set by the welcome message
     selfId: EntityID;
+    selfName: string;
     otherChars: {[key: number]: RemoteEntity};
     clickables: {[key: string]: Clickable};
 
     constructor() {
-        this.charVec = new Vector2D(window.innerWidth/2, window.innerHeight/2);
+        this.selfPos = new Vector2D(0, 0);
+        this.charVec = new Vector2D(0, 0);
         this.selfId = 0;
+        this.selfName = "";
         this.otherChars = {};
         this.clickables = {};
     }

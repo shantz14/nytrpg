@@ -1,3 +1,5 @@
+import { Popup } from "./popup.js";
+
 export { login, logout };
 
 const loginURL = "/login"
@@ -51,10 +53,10 @@ async function login(): Promise<UserData> {
         }
     }
 
-    createLoginPopup();
-    handleSignup();
-    const userData = await submit();
-    deleteLoginPopup();
+    const popup = Popup.open("tpl-login", null, false)!;
+    popup.on(popup.q("#openSignup"), "click", () => openSignup(popup));
+    const userData = await submit(popup);
+    popup.close();
     return userData;
 }
 
@@ -63,120 +65,73 @@ function logout() {
     window.location.reload();
 }
 
-async function submit(): Promise<UserData> {
-    const submitButton = document.getElementById("submitLogin") as HTMLButtonElement;
-    return new Promise((resolve, reject) => {
-        var listener = () => {
-            const unameEl = document.getElementById("uname") as HTMLInputElement;
-            const pswEl = document.getElementById("psw") as HTMLInputElement;
+async function postJSON(url: string, data: unknown): Promise<any> {
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+        throw new Error(await response.text() || `Status ${response.status}`);
+    }
+    return response.json();
+}
 
+// Resolves once the player logs in successfully
+function submit(popup: Popup): Promise<UserData> {
+    return new Promise((resolve) => {
+        const errtxt = popup.q<HTMLParagraphElement>("#errorText");
+        const attempt = async () => {
             const data = {
-                username: unameEl.value,
-                password: pswEl.value,
+                username: popup.q<HTMLInputElement>("#uname").value,
+                password: popup.q<HTMLInputElement>("#psw").value,
             };
-            let userData: UserData;
-            const options = {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(data),
-            };
-            fetch(loginURL, options)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`Error posting login data. Status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(responseData => {
-                userData = responseData;
+            try {
+                const userData: UserData = await postJSON(loginURL, data);
                 if (userData.validUser) {
-                    submitButton?.removeEventListener("click", listener);
                     window.localStorage.setItem("jwt", userData.jwt);
                     resolve(userData);
                 } else {
-                    const errtxt = document.getElementById("errorText") as HTMLParagraphElement;
                     errtxt.innerText = "Invalid username/password.";
                 }
-            })
-            .catch(error => {
-                console.error('Error parsing login response json:', error);
-                reject();
-            });
+            } catch (error) {
+                console.error('Error logging in:', error);
+                errtxt.innerText = "Couldn't reach the server, try again.";
+            }
         };
-        submitButton?.addEventListener("click", listener);
+        popup.on(popup.q("#submitLogin"), "click", attempt);
+        popup.on(popup.q("#psw"), "keydown", (e) => {
+            if ((e as KeyboardEvent).key === "Enter") {
+                attempt();
+            }
+        });
     });
 }
 
-function createLoginPopup() {
-    const tpl = document.getElementById("tpl-login") as HTMLTemplateElement;
-    document.getElementById("container")!.appendChild(tpl.content.cloneNode(true));
-}
+// The signup form, shown on top of the login form
+function openSignup(popup: Popup) {
+    const layer = popup.addLayer("tpl-signup");
+    const errDiv = layer.querySelector("#error") as HTMLDivElement;
+    const close = () => popup.removeLayer(layer);
 
-function handleSignup() {
-    const openSignup = document.getElementById("openSignup") as HTMLButtonElement;
-    openSignup.addEventListener("click", createSignupPopup);
-}
-
-function createSignupPopup() {
-    const tpl = document.getElementById("tpl-signup") as HTMLTemplateElement;
-    document.getElementById("container")!.appendChild(tpl.content.cloneNode(true));
-
-    const deleteSignup = document.getElementById("deleteSignup") as HTMLButtonElement;
-    deleteSignup?.addEventListener("click", deleteSignupPopup);
-
-    const signup = document.getElementById("submitSignup") as HTMLButtonElement;
-    signup.addEventListener("click", submitSignup);
-}
-
-function submitSignup() {
-    const unameEl = document.getElementById("signupuname") as HTMLInputElement;
-    const pswEl = document.getElementById("signuppsw") as HTMLInputElement;
-    const submitButton = document.getElementById("submitSignup") as HTMLButtonElement;
-
-    const data = {
-        username: unameEl.value,
-        password: pswEl.value,
-    };
-    let res: SignupRes;
-    const options = {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-    };
-    fetch(signupURL, options)
-    .then(response => {
-        if (!response.ok) {
-            throw new Error(`Error posting signup data. Status: ${response.status}`);
-        }
-        return response.json();
-    })
-    .then(responseData => {
-        res = responseData;
-        if (res.usernameAvailable) {
-            deleteSignupPopup();
-        } else {
-            const errDiv = document.getElementById("error") as HTMLDivElement;
-            errDiv.innerHTML = "Username Taken";
+    layer.querySelector("#deleteSignup")!.addEventListener("click", close);
+    layer.querySelector("#submitSignup")!.addEventListener("click", async () => {
+        const data = {
+            username: (layer.querySelector("#signupuname") as HTMLInputElement).value,
+            password: (layer.querySelector("#signuppsw") as HTMLInputElement).value,
+        };
+        try {
+            const res: SignupRes = await postJSON(signupURL, data);
+            if (res.usernameAvailable) {
+                close();
+            } else {
+                errDiv.textContent = "Username Taken";
+                errDiv.style.display = "block";
+            }
+        } catch (error) {
+            // The server explains what was wrong, e.g. the username is too long
+            errDiv.textContent = error instanceof Error ? error.message : "Signup failed";
             errDiv.style.display = "block";
-       }
-    })
-    .catch(error => {
-        console.error('Error parsing login response json:', error);
-        return;
+        }
     });
 }
-
-function deleteSignupPopup() {
-    const popup = document.getElementById("signupPopup") as HTMLDivElement;
-    popup.remove();
-}
-
-function deleteLoginPopup() {
-    const popup = document.getElementById("loginPopup") as HTMLDivElement;
-    popup.remove();
-}
-

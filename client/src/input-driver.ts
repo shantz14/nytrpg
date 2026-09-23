@@ -21,60 +21,71 @@ export class InputDriver {
         this.state = state;
         this.inputMode = InputMode.GameFocused;
 
+        const chatbox = document.getElementById("chatbox") as HTMLInputElement;
+
         document.addEventListener('keydown', (event) => {
-            if (event.key == "/") {
+            if (event.key == "/" && this.isGameFocused()) {
                 event.preventDefault();
-                const chatbox = document.getElementById("chatbox") as HTMLInputElement;
                 chatbox.focus();
                 this.setChatFocused();
-            } else if (event.key == "Enter" ){
-                const chatbox = document.getElementById("chatbox") as HTMLInputElement;
+                return;
+            }
+            if (event.key == "Enter" && this.inputMode == InputMode.ChatFocused) {
                 if (chatbox.value) {
-                    const event = new Event("sendChat");
-                    chatbox.dispatchEvent(event);
+                    chatbox.dispatchEvent(new Event("sendChat"));
                     chatbox.value = "";
-                    chatbox.blur();
-                    this.setGameFocused();
                 }
+                chatbox.blur();
+                this.setGameFocused();
+                return;
             }
-            if (this.inputMode == InputMode.GameFocused) {
-                const key = event.key.toLowerCase();
-                this.keysPressed.add(key);
+            if (this.isGameFocused()) {
+                this.keysPressed.add(event.key.toLowerCase());
             }
         });
 
+        // Always forget released keys, even if focus moved meanwhile
         document.addEventListener('keyup', (event) => {
-            if (this.inputMode == InputMode.GameFocused) {
-                const key = event.key.toLowerCase();
-                this.keysPressed.delete(key);
+            this.keysPressed.delete(event.key.toLowerCase());
+        });
+
+        // Keys released while the window is in the background never send keyup
+        window.addEventListener('blur', () => this.keysPressed.clear());
+
+        chatbox.addEventListener('focus', () => {
+            if (this.isGameFocused()) {
+                this.setChatFocused();
+            }
+        });
+        chatbox.addEventListener('blur', () => {
+            if (this.inputMode == InputMode.ChatFocused) {
+                this.setGameFocused();
             }
         });
 
-        document.addEventListener('mousemove', (event) => {
+        // Only clicks on the canvas itself reach the world, popups sit above it
+        this.canvas.addEventListener('click', (event) => {
             this.updateMousePos(event);
-        });
-
-        document.addEventListener('mouseup', (event) => {
-            this.click(event);
+            this.click();
         });
     }
 
-    private click(e: MouseEvent) {
+    private click() {
+        if (!this.isGameFocused()) {
+            return;
+        }
         for (const key in this.state.clickables) {
             const obj = this.state.clickables[key];
-            if (obj.rect.inRect(this.mousePos) && (this.inputMode = InputMode.GameFocused)) {
+            if (obj.rect.inRect(this.mousePos)) {
                 obj.action();
+                return;
             }
         }
     }
 
     private updateMousePos(e: MouseEvent) {
-        let rect = this.canvas.getBoundingClientRect();
-
-        let x = e.clientX - rect.left;
-        let y = e.clientY - rect.top;
-
-        this.mousePos.set(x, y);
+        const rect = this.canvas.getBoundingClientRect();
+        this.mousePos.set(e.clientX - rect.left, e.clientY - rect.top);
     }
 
     public isGameFocused(): boolean {
@@ -85,12 +96,15 @@ export class InputDriver {
         this.inputMode = InputMode.GameFocused;
     }
 
+    // Stops movement: keys held when a popup opens would otherwise stay pressed
     public setPopupFocused() {
         this.inputMode = InputMode.PopupFocused;
+        this.keysPressed.clear();
     }
 
     public setChatFocused() {
         this.inputMode = InputMode.ChatFocused;
+        this.keysPressed.clear();
     }
 
 }

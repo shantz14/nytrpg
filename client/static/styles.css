@@ -299,7 +299,7 @@ canvas {
     text-decoration: none;
 }
 
-#exit {
+.exit {
     grid-area: topButtons;
     place-self: start end;
     width: 50px;
@@ -318,4 +318,17 @@ canvas {
 
 #chatbox {
     z-index: 2;
+}
+
+#reconnecting {
+    display: none;
+    position: absolute;
+    top: 20px;
+    padding: 10px 20px;
+    align-items: center;
+    background-color: rgba(26, 25, 25, 0.9);
+    color: white;
+    font-family: Arial, Helvetica, sans-serif;
+    border-radius: 6px;
+    z-index: 3;
 }

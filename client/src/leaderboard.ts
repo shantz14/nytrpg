@@ -1,5 +1,6 @@
 import { InputDriver } from "./input-driver.js";
 import { UserData } from "./login.js";
+import { Popup } from "./popup.js";
 import { formatTime } from "./wordle.js";
 
 const URL = "/leaderboard";
@@ -34,6 +35,7 @@ export class Leaderboard {
     date: string;
     page: number;
     last: LeaderboardRes | null;
+    popup: Popup | null;
 
     constructor(userData: UserData, inputDriver: InputDriver) {
         this.userData = userData;
@@ -41,11 +43,19 @@ export class Leaderboard {
         this.date = "";
         this.page = 0;
         this.last = null;
+        this.popup = null;
     }
 
     public run() {
-        this.inputDriver.setPopupFocused();
-        this.createPopup();
+        const popup = Popup.open("tpl-leaderboard", this.inputDriver);
+        if (!popup) {
+            return;
+        }
+        this.popup = popup;
+        popup.on(popup.q("#pageUp"), "click", () => this.pageUp());
+        popup.on(popup.q("#pageDown"), "click", () => this.pageDown());
+        popup.on(popup.q("#nextDay"), "click", () => this.nextDay());
+        popup.on(popup.q("#prevDay"), "click", () => this.prevDay());
         this.populate();
     }
 
@@ -63,16 +73,15 @@ export class Leaderboard {
             return null;
         });
 
-        const body = document.getElementById("lbBody") as HTMLTableSectionElement | null;
-        if (!data || !body) {
+        if (!data || !this.popup) {
             return;
         }
+        const body = this.popup.q<HTMLTableSectionElement>("#lbBody");
         this.last = data;
         this.date = data.date;
         this.page = data.page;
 
-        const dateText = document.getElementById("date") as HTMLHeadingElement;
-        dateText.textContent = data.date;
+        this.popup.q("#date").textContent = data.date;
 
         body.replaceChildren();
         if (data.rows.length == 0) {
@@ -101,30 +110,11 @@ export class Leaderboard {
 
     private updateButtons() {
         const set = (id: string, disabled: boolean) => {
-            const button = document.getElementById(id) as HTMLButtonElement | null;
-            if (button) {
-                button.disabled = disabled;
-            }
+            this.popup!.q<HTMLButtonElement>("#" + id).disabled = disabled;
         };
         set("pageUp", this.page <= 0);
         set("pageDown", this.page >= this.lastPage());
         set("nextDay", !this.last || this.date >= this.last.today);
-    }
-
-    private createPopup() {
-        const tpl = document.getElementById("tpl-leaderboard") as HTMLTemplateElement;
-        document.getElementById("container")!.appendChild(tpl.content.cloneNode(true));
-
-        document.getElementById("pageUp")?.addEventListener("click", () => this.pageUp());
-        document.getElementById("pageDown")?.addEventListener("click", () => this.pageDown());
-        document.getElementById("nextDay")?.addEventListener("click", () => this.nextDay());
-        document.getElementById("prevDay")?.addEventListener("click", () => this.prevDay());
-        const exit = document.getElementById("exit");
-        exit?.addEventListener("click", () => {
-            this.inputDriver.setGameFocused();
-            const popup = document.getElementById("leaderboardPopup") as HTMLDivElement;
-            popup.remove();
-        });
     }
 
     private nextDay() {

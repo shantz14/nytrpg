@@ -1,4 +1,5 @@
 import { Game } from "./game.js";
+import { Popup } from "./popup.js";
 import { ClientWordleGuess, ClientWordleStart, Green, Grey, WordleColor, WordleLose, WordleReq, WordleRes, WordleResume, WordleWin, Yellow } from "./protocol.gen.js";
 
 const GUESSES = 5;
@@ -18,58 +19,59 @@ export function formatTime(secs: number): string {
 
 export class Wordle {
     game: Game;
+    popup: Popup | null;
     wordLength: number;
-    submitButton: HTMLButtonElement | null;
     nextLetter: HTMLInputElement | null;
     currentGuess: number;
     stopwatch: number | null;
-    onKeypress: ((e: KeyboardEvent) => void) | null;
-    onKeydown: ((e: KeyboardEvent) => void) | null;
 
     constructor(game: Game) {
         this.game = game;
+        this.popup = null;
         this.wordLength = this.getWordLength();
-        this.submitButton = null;
         this.nextLetter = null;
         this.currentGuess = 0;
         this.stopwatch = null;
-        this.onKeypress = null;
-        this.onKeydown = null;
     }
 
-    public run() {
-        this.game.inputDriver.setPopupFocused();
+    // Opens the wordle. Returns false if another popup is already open.
+    public run(): boolean {
+        const popup = Popup.open("tpl-wordle-game", this.game.inputDriver);
+        if (!popup) {
+            return false;
+        }
+        this.popup = popup;
+        popup.onCleanup(() => this.stopStopwatch());
+        popup.onClose = () => {
+            if (this.game.wordle === this) {
+                this.game.wordle = null;
+            }
+        };
 
-        this.haveIPlayedToday()
-        .then(played => {
+        this.displayGame(popup);
+        this.populateGame(popup);
+
+        this.haveIPlayedToday().then(played => {
+            if (Popup.current !== popup) {
+                return; // closed while we waited
+            }
             if (played) {
-                this.displayYouHavePlayed();
-                return;
+                popup.addLayer("tpl-wordle-played");
             } else {
-                this.displayGame();
-                this.populateGame();
                 // Server starts the clock and replies with any guesses already made
                 this.game.send(ClientWordleStart, {});
             }
         });
+        return true;
     }
 
     private async haveIPlayedToday(): Promise<boolean> {
-        const options = {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        }
-        return fetch(wordleURL + `?id=${this.game.userData.id}`, options)
+        return fetch(wordleURL + `?id=${this.game.userData.id}`)
         .then(response => {
             if (!response.ok) {
                 throw new Error(`Error getting wordle thingy. Status: ${response.status}`);
             }
             return response.json();
-        })
-        .then(responseData => {
-            return responseData;
         })
         .catch(error => {
             console.error('Error parsing haveIPlayedToday:', error);
@@ -77,23 +79,11 @@ export class Wordle {
         });
     }
 
-    private displayYouHavePlayed() {
-        const tpl = document.getElementById("tpl-wordle-played") as HTMLTemplateElement;
-        document.getElementById("container")!.appendChild(tpl.content.cloneNode(true));
-
-        const exitButton = document.getElementById("exit") as HTMLButtonElement;
-        exitButton.addEventListener("click", () => {
-            document.getElementById("resultPopup")!.remove();
-            this.game.inputDriver.setGameFocused();
-            this.game.wordle = null;
-        });
-    }
-
     // Timer display only, the server keeps the real time
     private runStopwatch(alreadyPlayed: number) {
         this.stopStopwatch();
         const start = Date.now() - alreadyPlayed * 1000;
-        const timer = document.getElementById("timer") as HTMLDivElement;
+        const timer = this.popup!.q<HTMLDivElement>("#timer");
         const tick = () => {
             timer.textContent = formatTime((Date.now() - start) / 1000);
         };
@@ -114,54 +104,36 @@ export class Wordle {
     }
 
     private getLetter(row: number, col: number): HTMLInputElement | null {
-        return document.getElementById(letterId(row, col)) as HTMLInputElement | null;
+        return this.popup?.root.querySelector("#" + letterId(row, col)) ?? null;
     }
 
-    private displayGame() {
-        const tpl = document.getElementById("tpl-wordle-game") as HTMLTemplateElement;
-        document.getElementById("container")!.appendChild(tpl.content.cloneNode(true));
-
-        const submit = document.getElementById("submit") as HTMLButtonElement;
-        if (!submit) {
-            console.error("Could not find submit button.");
-            return;
-        }
-        this.submitButton = submit;
-
-        this.submitButton.addEventListener("click", () => {
+    private displayGame(popup: Popup) {
+        const submit = popup.q<HTMLButtonElement>("#submit");
+        popup.on(submit, "click", () => {
             let guess = "";
-
             for (let i = 0; i < this.wordLength; i++) {
-                const box = this.getLetter(this.currentGuess, i);
-                if (box) {
-                    guess = guess + box.value;
-                }
+                guess += this.getLetter(this.currentGuess, i)?.value ?? "";
             }
 
             if (guess.length == this.wordLength) {
                 this.currentGuess++;
                 this.sendGuess(guess);
-
-                if (this.nextLetter) {
-                    this.nextLetter.focus();
-                }
+                this.nextLetter?.focus();
             }
         });
 
-        this.onKeypress = (e: KeyboardEvent) => {
-            if (e.key === "Enter" && !this.game.inputDriver.isGameFocused()) {
+        popup.on(document, "keypress", (e) => {
+            if ((e as KeyboardEvent).key === "Enter") {
                 e.preventDefault();
-                this.submitButton?.click();
+                submit.click();
             }
-        };
-        this.onKeydown = (e: KeyboardEvent) => {
-            if (e.key === "Backspace" && !this.game.inputDriver.isGameFocused()) {
+        });
+        popup.on(document, "keydown", (e) => {
+            if ((e as KeyboardEvent).key === "Backspace") {
                 e.preventDefault();
                 this.cancelMove();
             }
-        };
-        document.addEventListener("keypress", this.onKeypress);
-        document.addEventListener("keydown", this.onKeydown);
+        });
     }
 
     private sendGuess(guess: string) {
@@ -199,9 +171,9 @@ export class Wordle {
         this.colorRow(this.currentGuess - 1, res.colors);
 
         if (res.status == WordleWin) {
-            this.displayResultDiv(true, res.solution, res.seconds);
+            this.displayResult(true, res.solution, res.seconds);
         } else if (res.status == WordleLose) {
-            this.displayResultDiv(false, res.solution, res.seconds);
+            this.displayResult(false, res.solution, res.seconds);
         }
     }
 
@@ -215,47 +187,18 @@ export class Wordle {
         }
     }
 
-    private deleteGame() {
-        document.getElementById("resultPopup")?.remove();
-        document.getElementById("wordlePopup")?.remove();
+    private displayResult(win: boolean, word: string, seconds: number) {
         this.stopStopwatch();
-        if (this.onKeypress) {
-            document.removeEventListener("keypress", this.onKeypress);
-        }
-        if (this.onKeydown) {
-            document.removeEventListener("keydown", this.onKeydown);
-        }
-        this.game.inputDriver.setGameFocused();
-        this.game.wordle = null;
-    }
+        const layer = this.popup!.addLayer("tpl-wordle-result");
 
-    private displayResultDiv(win: boolean, word: string, seconds: number) {
-        this.stopStopwatch();
-        const tpl = document.getElementById("tpl-wordle-result") as HTMLTemplateElement;
-        document.getElementById("container")!.appendChild(tpl.content.cloneNode(true));
-
-        const exitButton = document.getElementById("exit") as HTMLButtonElement;
-        exitButton.addEventListener("click", () => {
-            this.deleteGame();
-        });
-
-        const resultText = document.getElementById("resultText");
-        if (resultText) {
-            if (win) {
-                const plural = this.currentGuess > 1 ? " Guesses!" : " Guess!";
-                resultText.textContent = "You Won In " + this.currentGuess + plural + " (" + formatTime(seconds) + ")";
-            } else {
-                resultText.textContent = "You Lose...";
-            }
+        const resultText = layer.querySelector("#resultText")!;
+        if (win) {
+            const plural = this.currentGuess > 1 ? " Guesses!" : " Guess!";
+            resultText.textContent = "You Won In " + this.currentGuess + plural + " (" + formatTime(seconds) + ")";
         } else {
-            console.log("No resultText element found.");
+            resultText.textContent = "You Lose...";
         }
-        const solutionText = document.getElementById("solutionText");
-        if (solutionText) {
-            solutionText.textContent = word;
-        } else {
-            console.log("No solutionText element found.");
-        }
+        layer.querySelector("#solutionText")!.textContent = word;
     }
 
     private colorRow(row: number, colors: Array<WordleColor>) {
@@ -274,10 +217,10 @@ export class Wordle {
         }
     }
 
-    private populateGame() {
-        const gameContainer = document.getElementById("gameContainer") as HTMLDivElement;
-        const wordContainer = document.getElementById("wordContainer0") as HTMLDivElement;
-        const template = this.getLetter(0, 0) as HTMLInputElement;
+    private populateGame(popup: Popup) {
+        const gameContainer = popup.q<HTMLDivElement>("#gameContainer");
+        const wordContainer = popup.q<HTMLDivElement>("#wordContainer0");
+        const template = popup.q<HTMLInputElement>("#" + letterId(0, 0));
         template.remove();
 
         for (let r = 1; r < GUESSES; r++) {

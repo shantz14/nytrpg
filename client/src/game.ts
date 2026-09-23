@@ -1,6 +1,6 @@
 import { DisplayDriver } from "./display-driver.js";
 import { InputDriver } from "./input-driver.js";
-import { Clickable, GameState } from "./game-objects.js";
+import { Clickable, GameState, RemoteEntity } from "./game-objects.js";
 import { Vector2D } from "./vector2D.js";
 import { Wordle } from "./wordle.js";
 import { Leaderboard } from "./leaderboard.js";
@@ -22,32 +22,51 @@ export class Game {
     // Last position sent, so we only send when we move
     lastSent: Vec | null;
     lastSentAt: number;
-    lastUpdate: number;
+    lastFrame: number;
     // px/s, from the server. 0 until the welcome arrives, so we can't move before then.
     moveSpeed: number;
 
     constructor(ctx: CanvasRenderingContext2D, userData: UserData) {
         const canvas = ctx.canvas;
 
-        this.conn = new Connection(SERVER_URL + `?token=${encodeURIComponent(userData.jwt)}`);
         this.state = new GameState();
         this.inputDriver = new InputDriver(canvas, this.state);
-        const middle = this.findMiddle();
-        this.displayDriver = new DisplayDriver(ctx, this.state, userData, middle);
+        this.displayDriver = new DisplayDriver(ctx, this.state);
         this.wordle = null;
         this.userData = userData;
         this.lastSent = null;
         this.lastSentAt = 0;
-        this.lastUpdate = performance.now();
+        this.lastFrame = performance.now();
         this.moveSpeed = 0;
+        this.conn = new Connection(SERVER_URL + `?token=${encodeURIComponent(userData.jwt)}`);
     }
 
     public run() {
         this.handleMsgs();
         this.handleChats();
-        setInterval(() => {
-            this.update();
-        }, 34);
+        this.conn.onDisconnect = () => this.showReconnecting(true);
+        this.conn.onReconnect = () => this.showReconnecting(false);
+        this.conn.onReplaced = () => {
+            const banner = document.getElementById("reconnecting")!;
+            banner.textContent = "You logged in somewhere else. Reload to play here.";
+            banner.style.display = "flex";
+        };
+        requestAnimationFrame((t) => this.frame(t));
+    }
+
+    private frame(now: number) {
+        const dt = Math.min((now - this.lastFrame) / 1000, 0.1);
+        this.lastFrame = now;
+
+        this.move(dt);
+        this.sendPlayerState(now);
+        for (const id in this.state.otherChars) {
+            this.state.otherChars[id].interpolate(now);
+        }
+        this.displayDriver.updateCamera();
+        this.displayDriver.draw();
+
+        requestAnimationFrame((t) => this.frame(t));
     }
 
     private handleMsgs() {
@@ -59,28 +78,31 @@ export class Game {
         this.conn.on<WordleResume>(ServerWordleResume, (resume) => this.wordle?.handleResume(resume));
     }
 
+    // Sent on every connect, including reconnects: start from a clean slate
     private welcome(welcome: Welcome) {
         this.state.selfId = welcome.entityId;
+        this.state.selfName = welcome.username;
         this.moveSpeed = welcome.moveSpeed;
+        for (const id in this.state.otherChars) {
+            this.displayDriver.removePlayer(Number(id));
+        }
+        this.state.otherChars = {};
         this.setPosition(welcome.pos);
         this.createMap(welcome.map);
     }
 
     // Moves us to a world position, e.g. when the server corrects us
     private setPosition(pos: Vec) {
-        this.state.charVec.set(pos.x - this.displayDriver.middle.x, pos.y - this.displayDriver.middle.y);
+        this.state.selfPos.set(pos.x, pos.y);
         this.lastSent = pos;
     }
 
     private applyWorldUpdate(upd: WorldUpdate) {
         for (const e of upd.spawn ?? []) {
-            this.state.otherChars[e.id] = { id: e.id, name: e.name, sprite: e.sprite, pos: e.pos };
+            this.state.otherChars[e.id] = new RemoteEntity(e.id, e.name, e.sprite, e.pos);
         }
         for (const [id, x, y] of upd.move ?? []) {
-            const e = this.state.otherChars[id];
-            if (e) {
-                e.pos = { x, y };
-            }
+            this.state.otherChars[id]?.addSample(x, y);
         }
         for (const id of upd.despawn ?? []) {
             delete this.state.otherChars[id];
@@ -88,15 +110,14 @@ export class Game {
         }
     }
 
-    private sendPlayerState() {
-        const now = performance.now();
+    private sendPlayerState(now: number) {
         // No faster than the server ticks
         if (this.moveSpeed == 0 || now - this.lastSentAt < 1000 / SEND_RATE) {
             return;
         }
         const pos: Vec = {
-            x: Math.round(this.state.charVec.x + this.displayDriver.middle.x),
-            y: Math.round(this.state.charVec.y + this.displayDriver.middle.y),
+            x: Math.round(this.state.selfPos.x),
+            y: Math.round(this.state.selfPos.y),
         };
         if (this.lastSent && this.lastSent.x == pos.x && this.lastSent.y == pos.y) {
             return;
@@ -111,24 +132,19 @@ export class Game {
         return this.conn.send(type, data);
     }
 
-    private update() {
-        const now = performance.now();
-        const dt = (now - this.lastUpdate) / 1000;
-        this.lastUpdate = now;
-
-        this.move(dt);
-        this.sendPlayerState();
-        this.displayDriver.draw();
-    }
-
     // What clicking each kind of interactable does
     private actions: {[action: string]: () => void} = {
         wordle: () => {
-            this.wordle = new Wordle(this);
-            this.wordle.run();
+            const wordle = new Wordle(this);
+            if (wordle.run()) {
+                this.wordle = wordle;
+            }
         },
         leaderboard: () => new Leaderboard(this.userData, this.inputDriver).run(),
-        logout: logout,
+        logout: () => {
+            this.conn.close();
+            logout();
+        },
     };
 
     private createMap(map: WorldMap) {
@@ -160,14 +176,12 @@ export class Game {
             return;
         }
         const len = Math.hypot(x, y);
-        const step = this.moveSpeed * Math.min(dt, 0.1);
-        this.state.charVec.add(new Vector2D(x / len * step, y / len * step));
+        const step = this.moveSpeed * dt;
+        this.state.selfPos.add(new Vector2D(x / len * step, y / len * step));
     }
 
-    private findMiddle(): Vector2D {
-        const x = window.innerWidth / 2;
-        const y = window.innerHeight / 2;
-        return new Vector2D(x, y);
+    private showReconnecting(show: boolean) {
+        document.getElementById("reconnecting")!.style.display = show ? "flex" : "none";
     }
 
     private handleChats() {

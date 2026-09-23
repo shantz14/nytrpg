@@ -17,19 +17,15 @@ import (
 
 const MaxUsernameLen = 20
 
-// Tells auth who is connected, so a player can't log in twice
-type Presence interface {
-	IsOnline(playerID int) bool
-}
-
+// Logging in doesn't check whether the player is already connected: a new
+// websocket connection replaces the old one, so there's still only ever one.
 type Service struct {
-	store    *store.Store
-	secret   []byte
-	presence Presence
+	store  *store.Store
+	secret []byte
 }
 
-func New(s *store.Store, secret []byte, presence Presence) *Service {
-	return &Service{store: s, secret: secret, presence: presence}
+func New(s *store.Store, secret []byte) *Service {
+	return &Service{store: s, secret: secret}
 }
 
 type loginData struct {
@@ -116,12 +112,6 @@ func (a *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, invalidUser)
 		return
 	}
-	if a.presence.IsOnline(p.ID) {
-		log.Println("Already logged in")
-		writeJSON(w, invalidUser)
-		return
-	}
-
 	jwtStr, err := a.CreateToken(p.Username)
 	if err != nil {
 		http.Error(w, "Could not create token.", http.StatusInternalServerError)
@@ -145,7 +135,7 @@ func (a *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	p, ok := a.PlayerFromToken(token)
-	if !ok || a.presence.IsOnline(p.ID) {
+	if !ok {
 		writeJSON(w, invalidUser)
 		return
 	}

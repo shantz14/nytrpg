@@ -1,7 +1,11 @@
 import { GameState } from "./game-objects.js";
-import { UserData } from "./login.js";
 import { ChatMsg } from "./protocol.gen.js";
 import { Vector2D } from "./vector2D.js";
+
+// How long a chat bubble stays up
+const CHAT_MS = 5000;
+// Entities this far off screen are still drawn, so big sprites don't pop in
+const CULL_MARGIN = 200;
 
 export class DisplayDriver {
     ctx: CanvasRenderingContext2D;
@@ -11,111 +15,133 @@ export class DisplayDriver {
     // Keys of images still downloading
     loading: Set<string>;
     chats: Map<number, ChatData>;
-    userData: UserData;
-    middle: Vector2D;
+    // Canvas size in CSS pixels
+    width: number;
+    height: number;
 
-    constructor(ctx: CanvasRenderingContext2D, startState: GameState, userData: UserData, middle: Vector2D) {
+    constructor(ctx: CanvasRenderingContext2D, state: GameState) {
         this.ctx = ctx;
         this.canvas = ctx.canvas;
-        this.state = startState;
+        this.state = state;
         this.images = new Map();
         this.loading = new Set();
         this.chats = new Map();
-        this.userData = userData;
-        this.middle = middle;
+        this.width = 0;
+        this.height = 0;
 
         this.scaleCanvas();
+        window.addEventListener("resize", () => this.scaleCanvas());
 
-        this.loadImages();
+        this.loadImage("character", "Skoobyuboo.png");
+    }
 
-        this.draw();
+    // Screen point our own player is drawn at
+    get middle(): Vector2D {
+        return new Vector2D(this.width / 2, this.height / 2);
+    }
+
+    // Points the camera at us and moves click areas to match. Call before draw.
+    public updateCamera() {
+        const cam = this.state.charVec;
+        cam.set(this.state.selfPos.x - this.width / 2, this.state.selfPos.y - this.height / 2);
+        for (const name in this.state.clickables) {
+            this.state.clickables[name].rect.adjust(cam);
+        }
     }
 
     public draw() {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
+        this.ctx.clearRect(0, 0, this.width, this.height);
         this.drawBackground();
-        this.drawCharacter();
+        this.drawClickables();
         this.drawOtherChars();
+        this.drawCharacter();
     }
 
     private drawBackground() {
-        const bg = this.images.get("bg") as HTMLImageElement;
-        const pP = this.state.charVec;
-        
+        const bg = this.images.get("bg");
         if (bg) {
-            this.ctx.drawImage(bg, 0-pP.x, 0-pP.y);
+            this.ctx.drawImage(bg, -this.state.charVec.x, -this.state.charVec.y);
         }
     }
 
-    private drawCharacter() {
-        const sprite = this.images.get("character") as HTMLImageElement;
-        if (sprite) {
-            this.ctx.drawImage(sprite, this.middle.x, this.middle.y);
-            this.ctx.font = "26px serif";
-            this.ctx.fillText(this.userData.username, this.middle.x, this.middle.y-10);
-            let chatdata = this.chats.get(this.state.selfId);
-            if (chatdata && this.chatIsExpired(chatdata)) {
-                this.chats.delete(this.state.selfId);
-                chatdata = undefined;
-            }
-            if (chatdata) {
-                this.ctx.fillText(chatdata.chat.msg, this.middle.x, this.middle.y-35);
-            }
-        }
-    }
-
-    private drawOtherChars() {
-        for (const id in this.state.otherChars) {
-            const other = this.state.otherChars[id];
-            const sprite = this.sprite(other.sprite);
-
-            const adjusted = new Vector2D(other.pos.x, other.pos.y);
-            adjusted.subtract(this.state.charVec);
-            if (sprite) {
-                this.ctx.drawImage(sprite, adjusted.x, adjusted.y);
-                this.ctx.font = "26px serif";
-                this.ctx.fillText(other.name, adjusted.x, adjusted.y-10);
-                let chatdata = this.chats.get(Number(id));
-                if (chatdata && this.chatIsExpired(chatdata)) {
-                    this.chats.delete(Number(id));
-                    chatdata = undefined;
-                }
-                if (chatdata) {
-                    this.ctx.fillStyle = "white";
-                    this.ctx.fillText(chatdata.chat.msg, adjusted.x, adjusted.y-35);
-                    this.ctx.fillStyle = "black";
-                }
-            }
-        }
-
+    private drawClickables() {
         for (const name in this.state.clickables) {
-            const sprite = this.images.get(name) as HTMLImageElement;
-            this.state.clickables[name].rect.adjust(this.state.charVec);
+            const sprite = this.images.get(name);
             const pos = this.state.clickables[name].rect.tl;
-
-            if (sprite) {
+            if (sprite && this.onScreen(pos.x, pos.y)) {
                 this.ctx.drawImage(sprite, pos.x, pos.y);
             }
         }
     }
 
-    private chatIsExpired(chatData: ChatData): boolean {
-        return Date.now() > chatData.exp;
+    private drawCharacter() {
+        const sprite = this.images.get("character");
+        if (sprite) {
+            const m = this.middle;
+            this.ctx.drawImage(sprite, m.x, m.y);
+            this.drawLabels(this.state.selfName, this.state.selfId, m.x, m.y, "black");
+        }
+    }
+
+    private drawOtherChars() {
+        const cam = this.state.charVec;
+        for (const id in this.state.otherChars) {
+            const other = this.state.otherChars[id];
+            const x = other.pos.x - cam.x;
+            const y = other.pos.y - cam.y;
+            if (!this.onScreen(x, y)) {
+                continue;
+            }
+            const sprite = this.sprite(other.sprite);
+            if (sprite) {
+                this.ctx.drawImage(sprite, x, y);
+                this.drawLabels(other.name, other.id, x, y, "white");
+            }
+        }
+    }
+
+    // Name above an entity, and its chat bubble above that
+    private drawLabels(name: string, id: number, x: number, y: number, chatColor: string) {
+        this.ctx.font = "26px serif";
+        this.ctx.fillStyle = "black";
+        this.ctx.fillText(name, x, y - 10);
+
+        const chat = this.chats.get(id);
+        if (chat && Date.now() > chat.exp) {
+            this.chats.delete(id);
+        } else if (chat) {
+            this.ctx.fillStyle = chatColor;
+            this.ctx.fillText(chat.chat.msg, x, y - 35);
+            this.ctx.fillStyle = "black";
+        }
+    }
+
+    private onScreen(x: number, y: number): boolean {
+        return x > -CULL_MARGIN && y > -CULL_MARGIN && x < this.width + CULL_MARGIN && y < this.height + CULL_MARGIN;
     }
 
     public updateChat(chat: ChatMsg) {
-        let exp = Date.now();
-        exp += 5 * 1000; // Add 5 seconds
-        this.chats.set(chat.id, {
-            chat: chat,
-            exp: exp
-        });
+        this.chats.set(chat.id, { chat: chat, exp: Date.now() + CHAT_MS });
     }
 
     // Forget everything about an entity that left
     public removePlayer(id: number) {
         this.chats.delete(id);
+    }
+
+    // Sharp on high DPI screens: the backing store is scaled up, drawing stays
+    // in CSS pixels
+    private scaleCanvas() {
+        const dpr = window.devicePixelRatio || 1;
+        this.width = window.innerWidth;
+        this.height = window.innerHeight;
+        this.canvas.width = Math.round(this.width * dpr);
+        this.canvas.height = Math.round(this.height * dpr);
+        this.canvas.style.width = this.width + "px";
+        this.canvas.style.height = this.height + "px";
+        // Resizing resets the context
+        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        this.ctx.imageSmoothingEnabled = false;
     }
 
     // An entity sprite by file name, loaded the first time it's needed and shared
@@ -128,31 +154,14 @@ export class DisplayDriver {
         return img;
     }
 
-    private scaleCanvas() {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
-
-        window.addEventListener("resize", () => {
-            this.canvas.width = window.innerWidth;
-            this.canvas.height = window.innerHeight;
-        });
-    }
-
-    private loadImages() {
-        this.loadImage("character", "Skoobyuboo.png");
-
-    }
-
     public loadImage(key: string, filename: string) {
-        const path: string = "./assets/" + filename;
-
         this.loading.add(key);
         const image = new Image();
-        image.src = path;
+        image.src = "./assets/" + filename;
         image.onload = () => {
             this.images.set(key, image);
             this.loading.delete(key);
-        }
+        };
     }
 
 }
@@ -161,4 +170,3 @@ type ChatData = {
     chat: ChatMsg,
     exp: number
 }
-

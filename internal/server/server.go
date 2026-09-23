@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"nytrpg/internal/auth"
 	"nytrpg/internal/config"
@@ -47,7 +48,7 @@ func New(cfg config.Config) (*Server, error) {
 		cfg:      cfg,
 		store:    st,
 		world:    world,
-		auth:     auth.New(st, cfg.JWTSecret, world),
+		auth:     auth.New(st, cfg.JWTSecret),
 		wordle:   wordle.NewService(st),
 		router:   netconn.NewRouter(),
 		sessions: make(map[*netconn.Session]bool),
@@ -113,6 +114,32 @@ func (s *Server) leave(sess *netconn.Session) {
 	s.world.Leave(sess)
 }
 
+// Claims the player's online slot. If they're already connected, e.g. a
+// reconnect while the server still holds their dead connection, the old
+// session is closed and this one takes its place.
+func (s *Server) takeOver(playerID int) bool {
+	if s.world.ClaimOnline(playerID) {
+		return true
+	}
+	s.sessionsMu.Lock()
+	for sess := range s.sessions {
+		if sess.PlayerID == playerID {
+			go sess.CloseWith(netconn.CloseReplaced, "logged in somewhere else")
+		}
+	}
+	s.sessionsMu.Unlock()
+
+	// The old session releases the slot once the world has removed it
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(50 * time.Millisecond)
+		if s.world.ClaimOnline(playerID) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	// Authenticate before upgrading, the id comes from the token not the client
 	p, ok := s.auth.PlayerFromToken(r.URL.Query().Get("token"))
@@ -120,7 +147,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid token.", http.StatusUnauthorized)
 		return
 	}
-	if !s.world.ClaimOnline(p.ID) {
+	if !s.takeOver(p.ID) {
 		http.Error(w, "Already connected.", http.StatusConflict)
 		return
 	}
