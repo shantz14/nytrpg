@@ -103,18 +103,18 @@ export class DisplayDriver {
     }
 
     public updateChat(chat: Chat) {
-        let pos: Vector2D;
-        if (chat.id == this.userData.id) {
-            pos = this.state.charVec;
-        } else {
-            pos = this.state.otherChars[chat.id].pos;
-        }
         let exp = Date.now();
         exp += 5 * 1000; // Add 5 seconds
         this.chats.set(chat.id, {
             chat: chat,
             exp: exp
         });
+    }
+
+    // Forget everything about a player who left
+    public removePlayer(id: number) {
+        this.images.delete(String(id));
+        this.chats.delete(id);
     }
 
     private scaleCanvas() {

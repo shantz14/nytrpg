@@ -55,7 +55,7 @@
                 <div class="gameContainer" id="gameContainer">
                     <div id="timer"></div>
                     <div class="wordContainer" id="wordContainer0">
-                        <input type="text" class="letter" id="letter00" maxlength="1" autocomplete="off">
+                        <input type="text" class="letter" id="letter-0-0" maxlength="1" autocomplete="off">
                     </div>
                 </div>
                 <button id="submit">Submit</button>
@@ -89,13 +89,15 @@
                     <h1>Wordle Rankings</h1>
                     <h2 id="date"></h2>
                     <table id="lb">
-                        <tr id="h">
-                            <th>Place</th>
-                            <th>Name</th>
-                            <th>Guesses</th>
-                            <th>Time</th>
-                        </tr>
-                        <tr></tr>
+                        <thead>
+                            <tr id="h">
+                                <th>Place</th>
+                                <th>Name</th>
+                                <th>Guesses</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="lbBody"></tbody>
                     </table>
                     <button id="pageUp">Pgup</button>
                     <button id="pageDown">Pgdn</button>

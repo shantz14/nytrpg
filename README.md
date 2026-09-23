@@ -21,9 +21,9 @@ A multiplayer browser RPG where the gameplay is built around daily NYT-style puz
 
 ## Running
 
-Uses a mount point, the db is written to disk outside of the container.
+Uses a mount point, the db is written to disk outside of the container. `JWT_SECRET` is required, the server won't start without it.
 
 ```bash
 docker build -t nytrpg .
-docker run -p 8080:8080 -v $(pwd)/db:/nytrpg/db nytrpg
+docker run -p 8080:8080 -e JWT_SECRET=<some long random string> -v $(pwd)/db:/nytrpg/db nytrpg
 ```

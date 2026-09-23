@@ -8,6 +8,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -51,8 +52,9 @@ type credentials struct {
 }
 
 type loginRes struct {
-	ValidUser bool `json:"validUser"`
-	Id        int  `json:"id"`
+	ValidUser bool   `json:"validUser"`
+	Id        int    `json:"id"`
+	Jwt       string `json:"jwt"`
 }
 
 var chatLines = []string{
@@ -79,21 +81,21 @@ func signup(baseURL, username, password string) {
 	}
 }
 
-func login(baseURL, username, password string) (int, error) {
+func login(baseURL, username, password string) (loginRes, error) {
+	var res loginRes
 	body, _ := json.Marshal(credentials{Username: username, Password: password})
 	resp, err := http.Post(baseURL+"/login", "application/json", bytes.NewReader(body))
 	if err != nil {
-		return 0, err
+		return res, err
 	}
 	defer resp.Body.Close()
-	var res loginRes
 	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return 0, err
+		return res, err
 	}
 	if !res.ValidUser {
-		return 0, fmt.Errorf("server rejected credentials")
+		return res, fmt.Errorf("server rejected credentials")
 	}
-	return res.Id, nil
+	return res, nil
 }
 
 func send(conn *websocket.Conn, updateType int, data any) error {
@@ -123,14 +125,15 @@ func runBot(baseURL, wsBase, username, password string, wg *sync.WaitGroup) {
 
 	signup(baseURL, username, password)
 
-	id, err := login(baseURL, username, password)
+	res, err := login(baseURL, username, password)
 	if err != nil {
 		log.Printf("[%s] login failed: %v", username, err)
 		return
 	}
+	id := res.Id
 	log.Printf("[%s] logged in (id=%d)", username, id)
 
-	conn, _, err := websocket.DefaultDialer.Dial(fmt.Sprintf("%s/ws?id=%d", wsBase, id), nil)
+	conn, _, err := websocket.DefaultDialer.Dial(fmt.Sprintf("%s/ws?token=%s", wsBase, url.QueryEscape(res.Jwt)), nil)
 	if err != nil {
 		log.Printf("[%s] ws connect failed: %v", username, err)
 		return

@@ -4,7 +4,7 @@ import { Clickable, GameState, PlayerState} from "./game-objects.js";
 import { Vector2D } from "./vector2D.js";
 import { Wordle } from "./wordle.js";
 import { Leaderboard } from "./leaderboard.js";
-import { ClientUpdate, ClientUpdatePos, ClientUpdateType, ServerUpdate, ServerUpdatePos, ServerWordleResponse, UpdateState, WordleReq, WordleResponse, Chat, ServerChat, ClientChat } from "./messages.js";
+import { ClientUpdate, ClientUpdatePos, ClientUpdateType, ServerUpdate, ServerUpdatePos, ServerWordleResponse, ServerWordleResume, UpdateState, WordleReq, WordleResponse, WordleResume, Chat, ServerChat, ClientChat } from "./messages.js";
 import { UserData, logout } from "./login.js";
 
 declare const MessagePack: typeof import("@msgpack/msgpack");
@@ -24,7 +24,7 @@ export class Game {
     constructor(ctx: CanvasRenderingContext2D, userData: UserData) {
         const canvas = ctx.canvas;
 
-        this.sock = new WebSocket(SERVER_URL + `?id=${userData.id}`);
+        this.sock = new WebSocket(SERVER_URL + `?token=${encodeURIComponent(userData.jwt)}`);
         this.state = new GameState();
         this.inputDriver = new InputDriver(canvas, this.state);
         const middle = this.findMiddle();
@@ -64,6 +64,9 @@ export class Game {
                 } else {
                     console.log("Guys there's no wordle why are we sending wordle updates.");
                 }
+            } else if (msg.updateType == ServerWordleResume) {
+                const update = decode(msg.data) as WordleResume;
+                this.wordle?.handleResume(update);
             } else if (msg.updateType == ServerChat) {
                 const update = decode(msg.data) as Chat;
                 this.displayDriver.updateChat(update);
@@ -74,28 +77,24 @@ export class Game {
         }
     }
 
+    // Each update is a full snapshot, so anyone not in it has left
     private updatePos(update: UpdateState) {
-        this.unregister(update.unregister);
+        const others: {[key: number]: PlayerState} = {};
 
         for (const id in update.players) {
             const newState = update.players[id];
-            if (newState.me) {
-                // This is the players own data
-
-            } else {
-                // Another players data
-                this.state.otherChars[Number(id)] = structuredClone(newState);
+            if (!newState.me) {
+                others[Number(id)] = newState;
             }
-
         }
 
-    }
+        for (const id in this.state.otherChars) {
+            if (!(id in others)) {
+                this.displayDriver.removePlayer(Number(id));
+            }
+        }
 
-    private unregister(id: number) {
-        delete this.state.otherChars[id];
-        delete this.displayDriver.state.otherChars[id];
-
-        this.displayDriver.images.delete(String(id));
+        this.state.otherChars = others;
     }
     
     private sendPlayerState() {
@@ -107,7 +106,7 @@ export class Game {
         this.send(ClientUpdatePos, data);
     }
 
-    public send(type: ClientUpdateType, data: PlayerState | WordleReq | Chat) {
+    public send(type: ClientUpdateType, data: PlayerState | WordleReq | Chat | {}) {
         const envelope: ClientUpdate = {
             updateType: type,
             data: encode(data)

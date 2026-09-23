@@ -6,6 +6,7 @@ const (
 	// Data sent FROM the SERVER
 	ServerUpdatePos ServerMessageType = 1
 	ServerSendWordle ServerMessageType = 2
+	ServerWordleResume ServerMessageType = 3
 	ServerSendChat ServerMessageType = 4
 )
 
@@ -21,6 +22,7 @@ const (
 	ClientUpdatePos ClientMessageType = 1
 	ClientRecWordle ClientMessageType = 2
 	ClientRecChat ClientMessageType = 3
+	ClientStartWordle ClientMessageType = 4
 )
 
 type ClientMessage struct {
@@ -29,10 +31,7 @@ type ClientMessage struct {
 }
 
 type WordleReq struct {
-	ID int `msgpack:"id"`
 	Guess string `msgpack:"guess"`
-	GuessCount int `msgpack:"guessCount"`
-	Time int `msgpack:"time"`
 }
 
 type WordleRes struct {
@@ -40,6 +39,7 @@ type WordleRes struct {
 	Status WordleStatus `msgpack:"status"`
 	Colors []WordleColor `msgpack:"colors"`
 	Solution string `msgpack:"solution"`
+	Seconds float64 `msgpack:"seconds"`
 }
 
 type Chat struct {
@@ -48,3 +48,10 @@ type Chat struct {
 }
 
 
+
+// Sent in reply to ClientStartWordle, the guesses already made today
+type WordleResume struct {
+	Guesses []string `msgpack:"guesses"`
+	Colors [][]WordleColor `msgpack:"colors"`
+	Seconds float64 `msgpack:"seconds"`
+}

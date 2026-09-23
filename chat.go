@@ -1,20 +1,26 @@
 package main
 
 import (
-	"log"
+	"strings"
 )
 
-func broadcastChat(chat Chat, h *Hub) {
-	//chat.Msg = addUsername(chat, h.db)
-	for p := range h.players {
-		p.chatOut <- chat
-	}
-}
+const MAX_CHAT_LEN = 200
 
-func addUsername(chat Chat, db *Connection) string {
-	pRow, found := db.getPlayerById(chat.ID)
-	if !found {
-		log.Println("Could not find player by ID in addUsername.")
+// Runs on the hub goroutine, so it must never block
+func broadcastChat(chat Chat, h *Hub) {
+	chat.Msg = strings.TrimSpace(chat.Msg)
+	if chat.Msg == "" {
+		return
 	}
-	return pRow.username + ": " + chat.Msg
+	if runes := []rune(chat.Msg); len(runes) > MAX_CHAT_LEN {
+		chat.Msg = string(runes[:MAX_CHAT_LEN])
+	}
+
+	for p := range h.players {
+		select {
+		case p.chatOut <- chat:
+		default:
+			// Player is backed up, drop it rather than stall everyone
+		}
+	}
 }

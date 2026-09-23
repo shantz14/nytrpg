@@ -5,7 +5,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -29,6 +31,15 @@ type SignupRes struct {
 	UsernameAvailable bool `json:"usernameAvailable"`
 }
 
+const MAX_USERNAME_LEN = 20
+
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Println("Error encoding response:", err)
+	}
+}
+
 func handleSignup(h *Hub, w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed, only POST allowed.", http.StatusMethodNotAllowed)
@@ -38,70 +49,41 @@ func handleSignup(h *Hub, w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		log.Println("Error decoding login request:", err)
+		log.Println("Error decoding signup request:", err)
 		return
 	}
-	var res SignupRes
 
-	sql := `
-	SELECT username FROM Player
-	WHERE username = ?
-	`
-	rows, err := h.db.pool.Query(sql, req.Username)
-	if err != nil {
-		log.Fatal(err)
+	req.Username = strings.TrimSpace(req.Username)
+	if n := utf8.RuneCountInString(req.Username); n == 0 || n > MAX_USERNAME_LEN {
+		http.Error(w, "Username must be 1-20 characters.", http.StatusBadRequest)
+		return
 	}
-	if (rows.Next()) {
-		log.Println("Username already taken")
-		res.UsernameAvailable = false
-		w.Header().Set("Content-Type", "application/json")
-		err = json.NewEncoder(w).Encode(res)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			log.Println("Error encoding signup response:", err)
-		}
+	if req.Password == "" {
+		http.Error(w, "Password required.", http.StatusBadRequest)
 		return
 	}
 
 	hashBytes, err := bcrypt.GenerateFromPassword([]byte(req.Password), 10)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Could not hash password.", http.StatusInternalServerError)
 		log.Println("Error hashing password:", err)
 		return
 	}
-	hash := string(hashBytes)
 
-	db := h.db
-	sql = `
-	INSERT INTO Player (username, password)
-	VALUES (?, ?);
-	`
-	db.pool.Exec(sql, req.Username, hash)
-
-	res.UsernameAvailable = true
-	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(res)
+	taken, err := h.db.insertPlayer(req.Username, string(hashBytes))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log.Println("Error encoding signup response:", err)
+		http.Error(w, "Database error.", http.StatusInternalServerError)
+		log.Println("Error inserting player:", err)
 		return
 	}
+	if taken {
+		log.Println("Username already taken")
+	}
+
+	writeJSON(w, SignupRes{UsernameAvailable: !taken})
 }
 
 func handleLogin(h *Hub, w http.ResponseWriter, r *http.Request) {
-	var res UserData
-	res.ValidUser = false
-	res.Jwt = ""
-	res.Id = -999
-	res.Username = ""
-	defer func() {
-		w.Header().Set("Content-Type", "application/json")
-		err := json.NewEncoder(w).Encode(res)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			log.Println("Error encoding login response:", err)
-		}
-	}()
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed, only POST allowed.", http.StatusMethodNotAllowed)
 		return
@@ -114,45 +96,39 @@ func handleLogin(h *Hub, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check against DB
-	sql := `
-	SELECT player_id, username, password FROM Player
-	WHERE username = ?
-	`
+	invalid := UserData{ValidUser: false, Id: -999}
 
-	rows, err := h.db.pool.Query(sql, req.Username)
+	id, username, storedPass, found, err := h.db.getPlayerAuth(strings.TrimSpace(req.Username))
 	if err != nil {
+		http.Error(w, "Database error.", http.StatusInternalServerError)
 		log.Println("Broke db login thing:", err)
 		return
 	}
-	if (!rows.Next()) {
+	if !found {
 		log.Println("Invalid credentials (username)")
+		writeJSON(w, invalid)
 		return
 	}
-	var id int
-	var username string
-	var storedPass string
-	err = rows.Scan(&id, &username, &storedPass)
-	if err != nil {
-		log.Println("Error scanning player row:", err)
-		return
-	}
-	if (!checkPassword(req.Password, storedPass)) {
+	if !checkPassword(req.Password, storedPass) {
 		log.Println("Invalid credentials (password)")
+		writeJSON(w, invalid)
 		return
 	}
 
-	if h.state.Players[id] != nil {
+	if h.isOnline(id) {
 		log.Println("Already logged in")
+		writeJSON(w, invalid)
 		return
 	}
 
-	jwtStr, err := createToken(req.Username)
+	jwtStr, err := createToken(username)
+	if err != nil {
+		http.Error(w, "Could not create token.", http.StatusInternalServerError)
+		log.Println("Error creating token:", err)
+		return
+	}
 
-	res.ValidUser = true
-	res.Jwt = jwtStr
-	res.Id = id
-	res.Username = username
+	writeJSON(w, UserData{ValidUser: true, Jwt: jwtStr, Id: id, Username: username})
 }
 
 func checkPassword(password string, storedHash string) bool {
@@ -184,17 +160,18 @@ func checkToken(h *Hub, w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		log.Println("Error decoding login request:", err)
+		log.Println("Error decoding token request:", err)
 		return
 	}
 	var res UserData
 	if verified, uname := verifyToken(req); verified {
 		row, found := h.db.getPlayerByUname(uname) 
 		if !found {
-			http.Error(w, "Couldn't find player row by username.", http.StatusInternalServerError)
-			return
-		}
-		if h.state.Players[row.id] != nil {
+			// Token for a player that doesn't exist (anymore), make them log in
+			log.Println("Couldn't find player row by username.")
+			res.Id = -999
+			res.ValidUser = false
+		} else if h.isOnline(row.id) {
 			log.Println("Already logged in")
 			res.Id = -999
 			res.Username = ""
@@ -212,13 +189,7 @@ func checkToken(h *Hub, w http.ResponseWriter, r *http.Request) {
 		res.Jwt = ""
 		res.ValidUser = false
 	}
-	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(res)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log.Println("Error encoding login response:", err)
-		return
-	}
+	writeJSON(w, res)
 }
 
 func verifyToken(tokenStr string) (bool, string) {
@@ -226,8 +197,8 @@ func verifyToken(tokenStr string) (bool, string) {
 		return false, ""
 	}
 	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (any, error) {
-		return []byte(os.Getenv("JWT_SECRET")), nil
-	})
+		return secretKey, nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 	if err != nil {
 		log.Println("Invalid jwt:", err)
 		return false, ""
@@ -237,8 +208,9 @@ func verifyToken(tokenStr string) (bool, string) {
 		return false, ""
 	}
 	if claims, ok := token.Claims.(jwt.MapClaims); ok {
-		username := claims["username"].(string)
-		return true, username
+		if username, ok := claims["username"].(string); ok {
+			return true, username
+		}
 	}
 	return false, ""
 }

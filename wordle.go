@@ -4,23 +4,24 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"nytrpg/resources"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 const GUESSES_ALLOWED = 5
 
-func colorMyBoxes(guess string, guessCount int, word string, guessables *map[string]bool) (bool, WordleStatus, []WordleColor){
-	var status WordleStatus
-	var valid bool
-	_, ok := (*guessables)[strings.ToLower(guess)]; if !ok {
-		// TODO: wordles of different lengths
-		valid = false
-		status = INGAME
-		colors := []WordleColor{GREY, GREY, GREY, GREY, GREY}
-		return valid, status, colors
+// Scores a guess against the word. Returns false if the guess isn't a guessable word.
+func colorMyBoxes(guess string, word string, guessables *map[string]bool) (bool, []WordleColor) {
+	guess = strings.ToUpper(guess)
+	if len(guess) != len(word) {
+		return false, nil
 	}
-	valid = true
+	if _, ok := (*guessables)[strings.ToLower(guess)]; !ok {
+		return false, nil
+	}
 
 	letterCounts := countLetters(word)
 	colors := make([]WordleColor, len(word))
@@ -43,26 +44,101 @@ func colorMyBoxes(guess string, guessCount int, word string, guessables *map[str
 	}
 	//yellows
 	for i, letter := range guess {
-		if (lettersCounted[letter] < letterCounts[letter] && strings.ContainsRune(word, letter) && colors[i] == GREY) {
+		if (lettersCounted[letter] < letterCounts[letter] && colors[i] == GREY) {
 			colors[i] = YELLOW
 			lettersCounted[letter]++
 		}
 	}
 
-	for _, value := range colors {
-		if value == YELLOW || value == GREY {
-			status = INGAME
-			if guessCount == GUESSES_ALLOWED {
-				status = LOSE
-			}
-			break
-		}
-		status = WIN
-	}
-
-	return valid, status, colors
+	return true, colors
 }
 
+func allGreen(colors []WordleColor) bool {
+	for _, c := range colors {
+		if c != GREEN {
+			return false
+		}
+	}
+	return true
+}
+
+// Server side record of a player's wordle for one day. Lives across reconnects
+// so the clock and guess count can't be reset by the client.
+type WordleSession struct {
+	date string
+	start time.Time
+	guesses []string
+	colors [][]WordleColor
+	done bool
+}
+
+type WordleSessions struct {
+	mu sync.Mutex
+	sessions map[int]*WordleSession
+}
+
+func newWordleSessions() *WordleSessions {
+	return &WordleSessions{sessions: make(map[int]*WordleSession)}
+}
+
+// Starts the clock for today, unless it's already running. Returns the guesses so
+// far so a reloaded client can pick up where it left off.
+func (ws *WordleSessions) start(pid int, now time.Time) WordleResume {
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
+	today := resources.DateOf(now)
+	s, ok := ws.sessions[pid]
+	if !ok || s.date != today {
+		s = &WordleSession{date: today, start: now}
+		ws.sessions[pid] = s
+	}
+	return WordleResume{
+		Guesses: append([]string{}, s.guesses...),
+		Colors: append([][]WordleColor{}, s.colors...),
+		Seconds: now.Sub(s.start).Seconds(),
+	}
+}
+
+// Scores a guess for the player's current session. finished is set once the game
+// is won or lost, the caller should then record the result.
+func (ws *WordleSessions) guess(pid int, guess string, now time.Time, rm *resources.ResourceManager, played func(date string) bool) (res WordleRes, finished *WordleSession) {
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
+
+	res.Status = INGAME
+	s, ok := ws.sessions[pid]
+	if !ok || s.done {
+		return res, nil
+	}
+	if played(s.date) {
+		return res, nil
+	}
+
+	word := rm.WordleFor(s.date)
+	valid, colors := colorMyBoxes(guess, word, &rm.GuessableWords)
+	if !valid {
+		return res, nil
+	}
+	s.guesses = append(s.guesses, strings.ToUpper(guess))
+	s.colors = append(s.colors, colors)
+
+	res.Valid = true
+	res.Colors = colors
+	res.Seconds = now.Sub(s.start).Seconds()
+
+	if allGreen(colors) {
+		res.Status = WIN
+	} else if len(s.guesses) >= GUESSES_ALLOWED {
+		res.Status = LOSE
+	}
+	if res.Status != INGAME {
+		s.done = true
+		res.Solution = word
+		copied := *s
+		return res, &copied
+	}
+	return res, nil
+}
 
 func countLetters(word string) map[rune]int {
 	letters := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -83,12 +159,14 @@ func handleHaveIPlayed(h *Hub, w http.ResponseWriter, r *http.Request) {
 	}
 	idStr := r.URL.Query().Get("id")
 	id, err := strconv.Atoi(idStr); if err != nil {
-		log.Println("ID not a int?", err)
+		http.Error(w, "Bad id.", http.StatusBadRequest)
 		return
 	}
-	var res bool
-
-	res = h.db.playedToday(id)
+	res, err := h.db.playedOn(id, resources.Today())
+	if err != nil {
+		http.Error(w, "Database error.", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(res)

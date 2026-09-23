@@ -12,6 +12,9 @@ const PORT = 8080
 var addr = ""
 
 func main() {
+	if len(secretKey) == 0 {
+		log.Fatal("JWT_SECRET must be set.")
+	}
 
     static := http.Dir("client/static")
 
@@ -39,5 +42,5 @@ func main() {
 	})
 
     log.Println("Server running on port", PORT)
-    http.ListenAndServe(":" + strconv.Itoa(PORT), nil)
+    log.Fatal(http.ListenAndServe(":" + strconv.Itoa(PORT), nil))
 }

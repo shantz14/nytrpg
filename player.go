@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -25,6 +24,17 @@ type Player struct {
 	conn *websocket.Conn
 	stateOut chan GameState
 	chatOut chan Chat
+	wordleOut chan outMsg
+	// Closed when the reader exits, tells the writer to stop
+	done chan struct{}
+	// Closed when the writer exits, so nothing blocks queueing for it
+	writerDone chan struct{}
+}
+
+// A message waiting for the writer goroutine
+type outMsg struct {
+	msgType ServerMessageType
+	data any
 }
 
 type PlayerData struct {
@@ -36,27 +46,41 @@ type PlayerData struct {
 }
 
 func handleWS(h *Hub, w http.ResponseWriter, r *http.Request) {
+	// Authenticate before upgrading, the id comes from the token not the client
+	verified, uname := verifyToken(r.URL.Query().Get("token"))
+	if !verified {
+		http.Error(w, "Invalid token.", http.StatusUnauthorized)
+		return
+	}
+	pRow, found := h.db.getPlayerByUname(uname)
+	if !found {
+		http.Error(w, "Unknown player.", http.StatusUnauthorized)
+		return
+	}
+	if !h.claimOnline(pRow.id) {
+		http.Error(w, "Already connected.", http.StatusConflict)
+		return
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("Connection failed at Upgrader: ", err)
-		return
-	}
-	idStr := r.URL.Query().Get("id")
-	id, err := strconv.Atoi(idStr); if err != nil {
-		log.Println("ID not a int?", err)
+		h.releaseOnline(pRow.id)
 		return
 	}
 
 	log.Println("New connection coming from: ", conn.RemoteAddr())
 
 	newPlayer := Player{
-		id: id, 
-		conn: conn, 
+		id: pRow.id,
+		conn: conn,
 		chatOut: make(chan Chat, 30),
-		stateOut: make(chan GameState, 2),
+		stateOut: make(chan GameState, 1),
+		wordleOut: make(chan outMsg, 4),
+		done: make(chan struct{}),
+		writerDone: make(chan struct{}),
 	}
 
-	pRow, _ := h.db.getPlayerById(id)
 	playerState := PlayerData{ID: newPlayer.id, Pos: Vector2D{X: 0, Y: 0}, Me: false, Username: pRow.username}
 
 	h.register <- PlayerConnAndState {
@@ -64,92 +88,100 @@ func handleWS(h *Hub, w http.ResponseWriter, r *http.Request) {
 		&playerState,
 	}
 
-	go newPlayer.handlePlayer(h)
+	go newPlayer.writeLoop()
+	go newPlayer.readLoop(h)
 }
 
-func (p *Player) handlePlayer(h *Hub) {
+// Handles everything the client sends. Exiting this is what disconnects a player.
+func (p *Player) readLoop(h *Hub) {
 	defer func() {
+		close(p.done)
+		p.conn.Close()
 		h.unregister <- p
+	}()
+
+	for {
+		_, inBuff, err := p.conn.ReadMessage() // No use for msg type yet
+		if err != nil {
+			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+				log.Println("Player disconnected")
+			} else {
+				log.Println("Error reading msg from player: ", err)
+			}
+			return
+		}
+		p.handleMsg(inBuff, h)
+	}
+}
+
+// The only goroutine that writes to the connection
+func (p *Player) writeLoop() {
+	defer func() {
+		close(p.writerDone)
 		p.conn.Close()
 	}()
 
-	updateInterval := time.Second / 30
+	ticker := time.NewTicker(time.Second / 30)
+	defer ticker.Stop()
 
-	for range time.Tick(updateInterval) {
-		// Read
-		_, inBuff, err := p.conn.ReadMessage() // No use for msg type yet
-		if err != nil {
-			if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
-				log.Println("Player disconnected")
-			} else if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Println("Error reading msg from player: ", err)
-			}
-			break
+	var lastState GameState
+	haveState := false
 
-		} else {
-			p.handleMsg(inBuff, h)
-		}
-
-		// Write
-		var playerData GameState
-		playerData.Players = make(map[int]*PlayerData)
-		
-		var state GameState
+	for {
+		var err error
 		select {
-		case state = <-p.stateOut:
-		default:
-		}
-		for id, player := range state.Players {
-			var newPlayer PlayerData
-			newPlayer.ID = id
-			newPlayer.Pos = player.Pos
-			newPlayer.Username = player.Username
+		case <-p.done:
+			return
 
-			if (id == p.id) {
-				newPlayer.Me = true
-			} else {
-				newPlayer.Me = false
-			}
+		case state := <-p.stateOut:
+			lastState = state
+			haveState = true
+			continue
 
-			playerData.Players[id] = &newPlayer
-		}
+		case msg := <-p.wordleOut:
+			err = p.send(msg.data, msg.msgType)
 
-
-		playerData.Unregister = state.Unregister
-
-		select {
 		case chat := <-p.chatOut:
-			p.send(chat, ServerSendChat)
-		default:
-			//nothing just dont want it to block
+			err = p.send(chat, ServerSendChat)
+
+		case <-ticker.C:
+			if !haveState {
+				continue
+			}
+			err = p.send(p.personalize(lastState), ServerUpdatePos)
+			haveState = false
 		}
 
-		p.send(playerData, ServerUpdatePos)
-
-		if h.state.Unregister != -999 {
-			h.state.Unregister = -999
+		if err != nil {
+			log.Println("Error writing msg to player: ", err)
+			return
 		}
-
 	}
-
 }
 
-func (p *Player) send(data any, msgType ServerMessageType) {
-	var envelope ServerMessage
-	envelope.UpdateType = msgType
-	var asserted any
+// Copies the shared state, marking this player's own entry
+func (p *Player) personalize(state GameState) GameState {
+	var playerData GameState
+	playerData.Players = make(map[int]*PlayerData, len(state.Players))
 
-	if (msgType == ServerUpdatePos) {
-		asserted = data.(GameState)
-	} else if (msgType == ServerSendWordle) {
-		asserted = data.(WordleRes)
-	} else if (msgType == ServerSendChat) {
-		asserted = data.(Chat)
+	for id, player := range state.Players {
+		newPlayer := *player
+		newPlayer.ID = id
+		newPlayer.Me = id == p.id
+		playerData.Players[id] = &newPlayer
 	}
 
-	dataBuff, err := msgpack.Marshal(asserted)
+	return playerData
+}
+
+func (p *Player) send(data any, msgType ServerMessageType) error {
+	var envelope ServerMessage
+	envelope.UpdateType = msgType
+
+	dataBuff, err := msgpack.Marshal(data)
 	if err != nil {
-		log.Println("Error encoding pos data: ", err)
+		log.Println("Error encoding data: ", err)
+		return nil
 	}
 
 	envelope.Data = dataBuff
@@ -157,17 +189,17 @@ func (p *Player) send(data any, msgType ServerMessageType) {
 	outBuff, err := msgpack.Marshal(envelope)
 	if err != nil {
 		log.Println("Error encoding envelope: ", err)
+		return nil
 	}
 
-	if err := p.conn.WriteMessage(websocket.BinaryMessage, outBuff); err != nil {
-		log.Println("Error writing msg to player: ", err)
-	}
+	return p.conn.WriteMessage(websocket.BinaryMessage, outBuff)
 }
 
 func (p *Player) handleMsg(rawData []byte, h *Hub) {
 	var inData ClientMessage
 	if err := msgpack.Unmarshal(rawData, &inData); err != nil {
 		log.Println("Error unpacking envelope data: ", err)
+		return
 	}
 
 	if inData.UpdateType == ClientUpdatePos {
@@ -177,19 +209,23 @@ func (p *Player) handleMsg(rawData []byte, h *Hub) {
 		} else {
 			p.updatePos(posData, h)
 		}
+	} else if inData.UpdateType == ClientStartWordle {
+		resume := h.wordles.start(p.id, time.Now())
+		p.queueWordle(outMsg{ServerWordleResume, resume})
 	} else if inData.UpdateType == ClientRecWordle {
 		var wordleData WordleReq
 		if err := msgpack.Unmarshal(inData.Data, &wordleData); err != nil {
 			log.Println("Client data could not be asserted as type WordleReq.")
 		} else {
-			wordOfTheDay := h.resourceManager.GetWordle()
-			p.updateWordle(wordleData, wordOfTheDay, &h.resourceManager.GuessableWords, h.db)
+			p.updateWordle(wordleData, h)
 		}
 	} else if inData.UpdateType == ClientRecChat {
 		var chat Chat
 		if err := msgpack.Unmarshal(inData.Data, &chat); err != nil {
 			log.Println("Client data could not be asserted as type Chat.")
 		} else {
+			// Never trust who the client says sent it
+			chat.ID = p.id
 			h.chatIn <- chat
 		}
 	}
@@ -201,32 +237,24 @@ func (p *Player) updatePos(posData PlayerData, h *Hub) {
 	h.in <- posData
 }
 
-func (p *Player) updateWordle(data WordleReq, word string, guessables *map[string]bool, db *Connection) {
-	// the colors 4 da letters
-	valid, status, colors := colorMyBoxes(data.Guess, data.GuessCount, word, guessables)
-
-	var response WordleRes
-	response.Valid = valid
-	response.Status = status
-	response.Colors = colors
-	if status == WIN {
-		response.Solution = word
-		p.submitWordle(true, data, db)
-	} else if status == LOSE {
-		response.Solution = word
-		p.submitWordle(false, data, db)
-	} else {
-		response.Solution = ""
+func (p *Player) updateWordle(data WordleReq, h *Hub) {
+	played := func(date string) bool {
+		played, err := h.db.playedOn(p.id, date)
+		// If the db is broken don't let them play
+		return played || err != nil
+	}
+	response, finished := h.wordles.guess(p.id, data.Guess, time.Now(), h.resourceManager, played)
+	if finished != nil {
+		win := response.Status == WIN
+		h.db.insertWordle(finished.date, win, float32(response.Seconds), len(finished.guesses), p.id)
 	}
 
-	p.send(response, ServerSendWordle)
+	p.queueWordle(outMsg{ServerSendWordle, response})
 }
 
-func (p *Player) submitWordle(win bool, data WordleReq, db *Connection) {
-	//TODO time zones or something idk
-	now := time.Now().UTC()
-	now = now.Add(time.Duration(-7) * time.Hour)
-	date := now.Format("2006-01-02")
-	db.insertWordle(date, win, float32(data.Time), data.GuessCount, p.id)
+func (p *Player) queueWordle(msg outMsg) {
+	select {
+	case p.wordleOut <- msg:
+	case <-p.writerDone:
+	}
 }
-

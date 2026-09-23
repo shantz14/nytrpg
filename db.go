@@ -2,11 +2,11 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"log"
 	"os"
-	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/mattn/go-sqlite3"
 )
 
 type Connection struct {
@@ -58,65 +58,50 @@ func (c *Connection) migrate() {
 	}
 }
 
-// Returns (row, exists) of first player with given id in a PlayerRow struct
-func (c *Connection) getPlayerById(id int) (PlayerRow, bool) {
-	var p PlayerRow
-	rows, err := c.pool.Query("select player_id, username from Player where player_id = ?", id)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer rows.Close()
-	if rows.Next() {
-		err := rows.Scan(&p.id, &p.username)
-		if err != nil {
-			log.Fatal(err)
-		}
-		return p, true
-	}
-	err = rows.Err()
-	if err != nil {
-		log.Fatal(err)
-	}
-	return p, false
-}
-
+// Returns (row, exists) of the player with the given username
 func (c *Connection) getPlayerByUname(uname string) (PlayerRow, bool) {
 	var p PlayerRow
-	rows, err := c.pool.Query("select player_id, username from Player where username = ?", uname)
+	err := c.pool.QueryRow("SELECT player_id, username FROM Player WHERE username = ?", uname).Scan(&p.id, &p.username)
+	if err == sql.ErrNoRows {
+		return p, false
+	}
 	if err != nil {
-		log.Fatal(err)
+		log.Println("Error getting player by username:", err)
+		return p, false
 	}
-	defer rows.Close()
-	for rows.Next() {
-		err := rows.Scan(&p.id, &p.username)
-		if err != nil {
-			log.Fatal(err)
-		}
-		return p, true
-	}
-	err = rows.Err()
-	if err != nil {
-		log.Fatal(err)
-	}
-	return p, false
+	return p, true
 }
 
-func (c *Connection) playedToday(pid int) bool {
-	currentTime := time.Now()
-	date := currentTime.Format("2006-01-02")
-	sql := `
-	SELECT * FROM Wordle
-	WHERE player_id = ? AND date = ?;
-	`
-	rows, err := c.pool.Query(sql, pid, date)
+// Returns the id, username, and password hash for logging in
+func (c *Connection) getPlayerAuth(uname string) (id int, username string, hash string, found bool, err error) {
+	err = c.pool.QueryRow("SELECT player_id, username, password FROM Player WHERE username = ?", uname).Scan(&id, &username, &hash)
+	if err == sql.ErrNoRows {
+		return 0, "", "", false, nil
+	}
 	if err != nil {
-		log.Fatal(err)
+		return 0, "", "", false, err
 	}
-	defer rows.Close()
-	if rows.Next() {
-		return true
+	return id, username, hash, true, nil
+}
+
+// Returns taken = true if the username already exists
+func (c *Connection) insertPlayer(uname string, hash string) (taken bool, err error) {
+	_, err = c.pool.Exec("INSERT INTO Player (username, password) VALUES (?, ?);", uname, hash)
+	var sqlErr sqlite3.Error
+	if errors.As(err, &sqlErr) && sqlErr.ExtendedCode == sqlite3.ErrConstraintUnique {
+		return true, nil
 	}
-	return false
+	return false, err
+}
+
+func (c *Connection) playedOn(pid int, date string) (bool, error) {
+	var n int
+	err := c.pool.QueryRow("SELECT COUNT(*) FROM Wordle WHERE player_id = ? AND date = ?;", pid, date).Scan(&n)
+	if err != nil {
+		log.Println("Error checking if player played:", err)
+		return false, err
+	}
+	return n > 0, nil
 }
 
 func (c *Connection) insertWordle(date string, win bool, seconds float32, guessCount int, pid int) {
@@ -134,41 +119,40 @@ func (c *Connection) insertWordle(date string, win bool, seconds float32, guessC
 	}
 }
 
-func (c *Connection) getLeaderboard(date string) []lbRow {
-	var result []lbRow
+// One page of winners for a date, and the total number of winners
+func (c *Connection) getLeaderboard(date string, limit int, offset int) ([]lbRow, int, error) {
+	result := make([]lbRow, 0, limit)
+
+	var total int
+	err := c.pool.QueryRow("SELECT COUNT(*) FROM Wordle WHERE date = ? AND win = 1;", date).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
 	sql := `
 	SELECT p.username, w.guessCount, w.seconds FROM Wordle w
 	INNER JOIN Player p ON w.player_id = p.player_id
 	WHERE w.date = ? AND w.win = 1
-	ORDER BY w.guessCount ASC, w.seconds ASC;
+	ORDER BY w.guessCount ASC, w.seconds ASC
+	LIMIT ? OFFSET ?;
 	`
-	rows, err := c.pool.Query(sql, date)
+	rows, err := c.pool.Query(sql, date, limit, offset)
 	if err != nil {
-		log.Panicln(err)
+		return nil, 0, err
 	}
 	defer rows.Close()
-	place := 1
+	place := offset + 1
 	for rows.Next() {
 		var row lbRow
-		err := rows.Scan(&row.Uname, &row.Guesses, &row.Time)
-		if err != nil {
-			log.Println(err)
+		if err := rows.Scan(&row.Uname, &row.Guesses, &row.Time); err != nil {
+			return nil, 0, err
 		}
 		row.Place = place
 		result = append(result, row)
 		place++
 	}
-	if len(result) == 0 {
-		var fakeRow lbRow
-		fakeRow.Uname = "No records for today..."
-		fakeRow.Guesses = 0
-		fakeRow.Place = 1
-		fakeRow.Time = 0
-		result = append(result, fakeRow)
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
 	}
-	return result
+	return result, total, nil
 }
-
-
-
-
