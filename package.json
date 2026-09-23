@@ -1,6 +1,16 @@
 {
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p .",
+    "test": "tsc -p . && node --test 'client/test/*.test.mjs'",
+    "test:browser": "tsc -p . && node client/test/browser/run.mjs"
+  },
   "dependencies": {
     "@msgpack/msgpack": "^3.1.1",
     "typescript": "^5.8.3"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^23.11.1"
   }
 }

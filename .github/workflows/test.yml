@@ -1,0 +1,27 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Go vet + tests (race)
+        run: make test-go
+      - name: Client unit tests
+        run: make test-client
+      - name: Browser tests
+        run: make test-browser
+        env:
+          CHROME_PATH: /usr/bin/google-chrome

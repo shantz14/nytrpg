@@ -22,7 +22,7 @@ type LeaderboardRes = {
 }
 
 // Shift a YYYY-MM-DD date by some days
-function shiftDate(date: string, days: number): string {
+export function shiftDate(date: string, days: number): string {
     const d = new Date(date + "T00:00:00Z");
     d.setUTCDate(d.getUTCDate() + days);
     return d.toISOString().slice(0, 10);

@@ -47,6 +47,20 @@ client/src             TypeScript client
 - **Rate limit an action:** `session.Allow("name", perSecond, burst)`.
 - **Schema change:** append a migration to `internal/store/store.go`, never edit a shipped one.
 
+## Testing
+
+```bash
+make test           # Go (with -race) + client unit tests, a few seconds. Run before every commit.
+make test-browser   # headless Chromium end to end: login, movement, chat, wordle, reconnect
+make check          # everything, as CI runs it
+```
+
+- **World rules** are unit tested with a fake clock (`internal/game`).
+- **Anything sent over the websocket** gets an integration test against a real in-process server: `internal/testkit` signs players up, connects them, and waits for messages.
+- **Client logic** is tested in Node (`client/test`), and the UI in a real browser (`client/test/browser`).
+
+New features and bug fixes come with tests. The `nytrpg-testing` Claude Code skill (`.claude/skills/`) describes where each kind of test goes, with templates.
+
 ## Running
 
 Locally:

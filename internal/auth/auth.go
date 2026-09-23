@@ -17,6 +17,9 @@ import (
 
 const MaxUsernameLen = 20
 
+// Password hashing cost. Tests lower it (see testkit) because hashing is slow on purpose.
+var BcryptCost = 10
+
 // Logging in doesn't check whether the player is already connected: a new
 // websocket connection replaces the old one, so there's still only ever one.
 type Service struct {
@@ -74,7 +77,7 @@ func (a *Service) HandleSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hashBytes, err := bcrypt.GenerateFromPassword([]byte(req.Password), 10)
+	hashBytes, err := bcrypt.GenerateFromPassword([]byte(req.Password), BcryptCost)
 	if err != nil {
 		http.Error(w, "Could not hash password.", http.StatusInternalServerError)
 		slog.Error("hashing password", "err", err)
