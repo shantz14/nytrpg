@@ -28,6 +28,15 @@ export function shiftDate(date: string, days: number): string {
     return d.toISOString().slice(0, 10);
 }
 
+// "2026-09-23" to "Wed, Sep 23, 2026"
+export function formatDate(date: string): string {
+    const d = new Date(date + "T00:00:00Z");
+    if (isNaN(d.getTime())) {
+        return date;
+    }
+    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+}
+
 export class Leaderboard {
     userData: UserData;
     inputDriver: InputDriver;
@@ -60,6 +69,7 @@ export class Leaderboard {
     }
 
     private async populate() {
+        this.popup?.q("#lbWrap").classList.add("loading");
         const params = new URLSearchParams({ date: this.date, page: String(this.page) });
         const data: LeaderboardRes | null = await fetch(URL + "?" + params.toString())
         .then(response => {
@@ -73,7 +83,11 @@ export class Leaderboard {
             return null;
         });
 
-        if (!data || !this.popup) {
+        if (!this.popup) {
+            return;
+        }
+        this.popup.q("#lbWrap").classList.remove("loading");
+        if (!data) {
             return;
         }
         const body = this.popup.q<HTMLTableSectionElement>("#lbBody");
@@ -81,22 +95,38 @@ export class Leaderboard {
         this.date = data.date;
         this.page = data.page;
 
-        this.popup.q("#date").textContent = data.date;
+        this.popup.q("#date").textContent = formatDate(data.date);
+        this.popup.q("#dateTag").textContent = data.date == data.today ? "Today" : "";
 
         body.replaceChildren();
         if (data.rows.length == 0) {
             const tr = body.insertRow();
             const td = tr.insertCell();
             td.colSpan = 4;
-            td.textContent = "No records for this day...";
+            td.className = "empty";
+            td.textContent = "No results for this day.";
         }
+        const columns = ["col-place", "col-name", "col-num", "col-num"];
         for (const row of data.rows) {
             const tr = body.insertRow();
-            // textContent, never innerHTML: usernames come from users
-            for (const text of [String(row.place), row.uname, String(row.guesses), formatTime(row.time)]) {
-                tr.insertCell().textContent = text;
+            if (row.place <= 3) {
+                tr.classList.add("place-" + row.place);
             }
+            if (row.uname == this.userData.username) {
+                tr.classList.add("me");
+            }
+            // textContent, never innerHTML: usernames come from users
+            const cells = [String(row.place), row.uname, String(row.guesses), formatTime(row.time)];
+            cells.forEach((text, i) => {
+                const td = tr.insertCell();
+                td.className = columns[i];
+                td.textContent = text;
+            });
         }
+
+        const pages = this.lastPage() + 1;
+        this.popup.q("#pageInfo").textContent = "Page " + (this.page + 1) + " of " + pages;
+        this.popup.q("#pager").classList.toggle("hidden", pages <= 1);
 
         this.updateButtons();
     }

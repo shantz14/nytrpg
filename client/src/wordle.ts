@@ -103,6 +103,7 @@ export class Wordle {
 
             if (guess.length == this.wordLength) {
                 this.currentGuess++;
+                this.markActiveRow();
                 this.sendGuess(guess);
                 this.nextLetter?.focus();
             }
@@ -153,6 +154,7 @@ export class Wordle {
             this.colorRow(row, colors[row] ?? []);
         }
         this.currentGuess = guesses.length;
+        this.markActiveRow();
         this.runStopwatch(resume.seconds);
         this.ready = true;
         if (guesses.length > 0) {
@@ -167,7 +169,10 @@ export class Wordle {
     public handleResponse(res: WordleRes) {
         if (!res.valid) {
             this.currentGuess--;
+            this.markActiveRow();
             this.cancelMove();
+            this.shakeRow(this.currentGuess);
+            this.game.toast("Not in word list");
             return;
         }
         this.colorRow(this.currentGuess - 1, res.colors);
@@ -177,6 +182,27 @@ export class Wordle {
         } else if (res.status == WordleLose) {
             this.displayResult(false, res.solution, res.seconds);
         }
+    }
+
+    private row(row: number): HTMLDivElement | null {
+        return this.popup?.root.querySelector("#wordContainer" + row) ?? null;
+    }
+
+    // Highlights the row the player is typing into
+    private markActiveRow() {
+        for (let r = 0; r < GUESSES; r++) {
+            this.row(r)?.classList.toggle("active", r == this.currentGuess);
+        }
+    }
+
+    private shakeRow(row: number) {
+        const el = this.row(row);
+        if (!el) {
+            return;
+        }
+        el.classList.remove("shake");
+        void el.offsetWidth; // restart the animation
+        el.classList.add("shake");
     }
 
     private cancelMove() {
@@ -193,14 +219,28 @@ export class Wordle {
         this.stopStopwatch();
         const layer = this.popup!.addLayer("tpl-wordle-result");
 
-        const resultText = layer.querySelector("#resultText")!;
+        const set = (id: string, text: string) => layer.querySelector("#" + id)!.textContent = text;
         if (win) {
-            const plural = this.currentGuess > 1 ? " Guesses!" : " Guess!";
-            resultText.textContent = "You Won In " + this.currentGuess + plural + " (" + formatTime(seconds) + ")";
+            set("resultTitle", "Solved");
+            const plural = this.currentGuess == 1 ? "guess" : "guesses";
+            set("resultText", "You got it in " + this.currentGuess + " " + plural + ".");
+            set("resultGuesses", this.currentGuess + "/" + GUESSES);
         } else {
-            resultText.textContent = "You Lose...";
+            set("resultTitle", "Out of guesses");
+            set("resultText", "Better luck tomorrow.");
+            set("resultGuesses", "X/" + GUESSES);
         }
-        layer.querySelector("#solutionText")!.textContent = word;
+        set("resultTime", formatTime(seconds));
+
+        const solution = layer.querySelector<HTMLDivElement>("#solutionText")!;
+        solution.classList.toggle("lost", !win);
+        solution.replaceChildren();
+        [...word.toUpperCase()].forEach((ch, i) => {
+            const tile = document.createElement("span");
+            tile.textContent = ch;
+            tile.style.setProperty("--delay", i * 90 + "ms");
+            solution.appendChild(tile);
+        });
     }
 
     private colorRow(row: number, colors: Array<WordleColor>) {
@@ -209,13 +249,12 @@ export class Wordle {
             if (!box) {
                 continue;
             }
-            if (colors[i] == Grey) {
-                box.style.backgroundColor = "grey";
-            } else if (colors[i] == Yellow) {
-                box.style.backgroundColor = "yellow";
-            } else if (colors[i] == Green) {
-                box.style.backgroundColor = "green";
+            const tile = colors[i] == Green ? "tile-green" : colors[i] == Yellow ? "tile-yellow" : colors[i] == Grey ? "tile-grey" : null;
+            if (!tile) {
+                continue;
             }
+            box.classList.add("revealed", tile);
+            box.style.setProperty("--delay", i * 120 + "ms");
         }
     }
 
@@ -232,6 +271,7 @@ export class Wordle {
             gameContainer.appendChild(newWord);
         }
         this.populateWord(wordContainer, 0, template);
+        this.markActiveRow();
 
         this.getLetter(0, 0)?.focus();
     }
