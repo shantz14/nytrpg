@@ -1,5 +1,6 @@
 import { Vector2D } from "./vector2D.js"
 import { EntityID, Vec } from "./protocol.gen.js";
+import { Animator } from "./animation.js";
 
 // Draw other entities this far in the past, so there are always two known
 // positions to move smoothly between. Two server ticks.
@@ -16,8 +17,11 @@ export class RemoteEntity {
     sprite: string;
     // Where to draw it, updated every frame by interpolate()
     pos: Vec;
+    // Walking and facing, worked out from how pos changes
+    anim: Animator;
     // Positions from the server, oldest first
     private samples: Sample[];
+    private lastInterpolated: number | null;
 
     constructor(id: EntityID, name: string, sprite: string, pos: Vec) {
         this.id = id;
@@ -25,6 +29,8 @@ export class RemoteEntity {
         this.sprite = sprite;
         this.pos = { x: pos.x, y: pos.y };
         this.samples = [{ t: performance.now(), x: pos.x, y: pos.y }];
+        this.anim = new Animator();
+        this.lastInterpolated = null;
     }
 
     // A position from the server, now
@@ -44,9 +50,17 @@ export class RemoteEntity {
         }
     }
 
-    // Sets pos to where the entity was INTERP_DELAY_MS ago
+    // Sets pos to where the entity was INTERP_DELAY_MS ago, and animates it by
+    // how far that moved it
     public interpolate(now: number) {
-        const renderTime = now - INTERP_DELAY_MS;
+        const before = this.pos;
+        this.pos = this.positionAt(now - INTERP_DELAY_MS);
+        const dt = this.lastInterpolated === null ? 0 : (now - this.lastInterpolated) / 1000;
+        this.lastInterpolated = now;
+        this.anim.update(this.pos.x - before.x, this.pos.y - before.y, dt);
+    }
+
+    private positionAt(renderTime: number): Vec {
         const s = this.samples;
         let i = 0;
         while (i < s.length - 2 && s[i + 1].t <= renderTime) {
@@ -55,11 +69,10 @@ export class RemoteEntity {
         const a = s[i];
         const b = s[Math.min(i + 1, s.length - 1)];
         if (b.t <= a.t || renderTime >= b.t) {
-            this.pos = { x: b.x, y: b.y };
-            return;
+            return { x: b.x, y: b.y };
         }
         const f = Math.max(0, (renderTime - a.t) / (b.t - a.t));
-        this.pos = { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
+        return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
     }
 }
 
@@ -72,6 +85,9 @@ export class GameState {
     // Our own entity and name, set by the welcome message
     selfId: EntityID;
     selfName: string;
+    // Our sprite and how it's animating
+    selfSprite: string;
+    selfAnim: Animator;
     otherChars: {[key: number]: RemoteEntity};
     clickables: {[key: string]: Clickable};
 
@@ -80,6 +96,8 @@ export class GameState {
         this.charVec = new Vector2D(0, 0);
         this.selfId = 0;
         this.selfName = "";
+        this.selfSprite = "Skoobyuboo.png";
+        this.selfAnim = new Animator();
         this.otherChars = {};
         this.clickables = {};
     }

@@ -164,21 +164,21 @@ export class Game {
 
     // Moves at moveSpeed px/s in the pressed direction, diagonals aren't faster
     private move(dt: number) {
-        if (!this.inputDriver.isGameFocused() || this.moveSpeed == 0) {
-            return;
-        }
-        const keys = this.inputDriver.keysPressed;
         let x = 0, y = 0;
-        if (keys.has("w")) y -= 1;
-        if (keys.has("s")) y += 1;
-        if (keys.has("a")) x -= 1;
-        if (keys.has("d")) x += 1;
-        if (x == 0 && y == 0) {
-            return;
+        if (this.inputDriver.isGameFocused() && this.moveSpeed > 0) {
+            const keys = this.inputDriver.keysPressed;
+            if (keys.has("w")) y -= 1;
+            if (keys.has("s")) y += 1;
+            if (keys.has("a")) x -= 1;
+            if (keys.has("d")) x += 1;
         }
         const len = Math.hypot(x, y);
-        const step = this.moveSpeed * dt;
-        this.state.selfPos.add(new Vector2D(x / len * step, y / len * step));
+        const step = len > 0 ? this.moveSpeed * dt / len : 0;
+        // Every frame, standing still too, so the animation knows when we stop
+        this.state.selfAnim.update(x * step, y * step, dt);
+        if (step > 0) {
+            this.state.selfPos.add(new Vector2D(x * step, y * step));
+        }
     }
 
     // A short message at the top of the screen

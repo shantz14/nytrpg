@@ -47,6 +47,25 @@ test("the sample buffer stays small", () => {
     }
 });
 
+test("other players animate from their movement: walking left, then idle", () => {
+    const clock = fakeClock(1000);
+    try {
+        const e = new RemoteEntity(1, "b", "Skoobyuboo.png", { x: 500, y: 0 });
+        for (let i = 1; i <= 6; i++) { clock.set(1000 + i * 50); e.addSample(500 - i * 20, 0); }
+        // Draw frames every 16ms while the samples play out
+        let t = 1000;
+        for (; t <= 1300 + INTERP_DELAY_MS; t += 16) e.interpolate(t);
+        assert.ok(e.anim.walking, "walking while moving");
+        assert.equal(e.anim.facing, -1, "facing left");
+        // No more samples: it stops, and after the grace period is idle
+        for (let end = t + 500; t <= end; t += 16) e.interpolate(t);
+        assert.ok(!e.anim.walking, "idle after stopping");
+        assert.equal(e.anim.facing, -1, "still facing left");
+    } finally {
+        clock.restore();
+    }
+});
+
 test("Clickable.inRange matches the server's distance to the rectangle's edge", () => {
     const board = new Clickable("wordle", new Vector2D(100, 100), 50, 50, () => {}, 10);
     assert.ok(board.inRange(new Vector2D(120, 120)), "inside");

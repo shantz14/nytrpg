@@ -26,7 +26,7 @@ Lots of real-time, multiplayer features are going into this game. Those break in
 | HTTP handlers (auth, leaderboard, new endpoints) | `httptest` recorder or integration | `internal/auth/auth_test.go`, `server_test.go` | `call(handler, method, body)`, `ts.PostJSON` / `ts.GetJSON` |
 | Puzzle logic (scoring, sessions) | Unit test, plus service test on a temp DB | `internal/puzzles/<name>/*_test.go` | fake `inRange` func, `store.Open(t.TempDir())` |
 | Client logic that doesn't need the DOM: interpolation, math, `Connection` | Node unit test | `client/test/*.test.mjs` | `fakeClock()` from `setup.mjs`, `FakeSocket` in `net.test.mjs`, `mock.timers` |
-| Anything a player sees or clicks: popups, input, rendering flow, reconnect | Browser test (headless Chromium) | `client/test/browser/run.mjs` | `player()`, `toScreen`, `hold`, `received(page, type)`, `waitFor`, `visible` |
+| Anything a player sees or clicks: popups, input, rendering, animation, reconnect | Browser test (headless Chromium) | `client/test/browser/run.mjs` | `player()`, `toScreen`, `hold`, `received(page, type)`, `waitFor`, `visible`, `draws(page, since, self)` for what got drawn on the canvas |
 
 Copy-ready templates for each layer are in `references/templates.md`. Read it when writing a kind of test you haven't written here yet.
 
@@ -48,6 +48,7 @@ Copy-ready templates for each layer are in `references/templates.md`. Read it wh
 - **Integration tests use `t.Parallel()`**, since each test has its own server and database. Keep it that way.
 - **gorilla/websocket:** after a read deadline fires the connection is dead; don't reuse it. The testkit client reads on its own goroutine for this reason.
 - **msgpack:** slices of `uint8`-based types encode as binary (the browser gets a `Uint8Array`), so enums used in slices are `int`. Maps with int keys don't decode into `map[string]any`. Decode into the protocol structs.
+- **Canvas output: check the recorded draw calls, not pixels.** `recordCharacterDraws` wraps `drawImage` before the page loads; `draws(page, t, self)` returns `{file, sx, mirrored, x}` for character sprites. Extend its file filter for new sprites. Screenshots are for your own eyes only, since the camera and background move.
 - **Browser tests: wait on the DOM, not on frames.** The DevTools frame event fires before the page's JS handles the message. Use `waitFor(() => page.$eval(...))`.
 - **Imports:** `testkit` imports the whole server, so only tests *outside* `internal/server`'s dependencies (e.g. `package server_test`) can use it. Package-internal tests of `store`, `wordle`, `game` etc. use their own small helpers.
 

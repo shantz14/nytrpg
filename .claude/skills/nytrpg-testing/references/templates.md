@@ -197,6 +197,7 @@ Helpers:
 - `received(page, type)` and `page.frames` are the decoded websocket frames, `{dir: "in"|"out", t, d}`.
 - `visible(page, selector)`, `waitFor(fn, what, timeout)`.
 - `stopServer()` / `startServer()` restart the server (same db) for reconnect tests.
+- `draws(page, sinceT, self)` returns the character sprites drawn on the canvas since page time `sinceT` (`pageNow(page)`), for your own player (`self = true`) or others: `{file, sx, mirrored, x}`. Use it for animation and rendering checks; to track a new sprite file, add it to `recordCharacterDraws`.
 - World coordinates of interactables come from `internal/game/maps/town.json`.
 
 Any page error or `console.error` fails the test, so fix those rather than ignoring them.

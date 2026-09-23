@@ -106,6 +106,7 @@ async function player() {
     cdp.on("Network.webSocketFrameReceived", onFrame("in"));
     cdp.on("Network.webSocketFrameSent", onFrame("out"));
 
+    await page.evaluateOnNewDocument(recordCharacterDraws);
     await page.goto(base(), { waitUntil: "networkidle0" });
     await page.type("#uname", name);
     await page.type("#psw", "pw");
@@ -137,6 +138,39 @@ async function hold(page, key, ms) {
 
 const received = (page, type) => page.frames.filter((f) => f.dir === "in" && f.t === type);
 const visible = (page, sel) => page.$eval(sel, (e) => getComputedStyle(e).display !== "none").catch(() => false);
+
+// Runs in the page before any game code: records every character sprite drawn
+// on the canvas (which file, which frame, mirrored or not, where) into
+// window.__draws, so tests can check animation without comparing pixels.
+function recordCharacterDraws() {
+    window.__draws = [];
+    const drawImage = CanvasRenderingContext2D.prototype.drawImage;
+    CanvasRenderingContext2D.prototype.drawImage = function (img, ...args) {
+        const file = (img.src || "").split("/").pop();
+        if (file === "Skoobyuboo.png" || file === "player-walk.png") {
+            const m = this.getTransform();
+            const dpr = window.devicePixelRatio || 1;
+            const dx = args.length === 8 ? args[4] : args[0];
+            window.__draws.push({
+                file,
+                sx: args.length === 8 ? args[0] : null,
+                mirrored: m.a < 0,
+                // Left edge on screen in CSS px: a mirrored draw is translated to x + width
+                x: m.e / dpr + dx - (m.a < 0 ? 64 : 0),
+                t: performance.now(),
+            });
+            if (window.__draws.length > 5000) window.__draws.splice(0, 2500);
+        }
+        return drawImage.call(this, img, ...args);
+    };
+}
+
+// Character draws since page time t. self: our own player (drawn mid-screen) or everyone else.
+async function draws(page, t, self) {
+    const all = await page.evaluate((t) => window.__draws.filter((d) => d.t >= t), t);
+    return all.filter((d) => (d.x === VIEW.width / 2) === self);
+}
+const pageNow = (page) => page.evaluate(() => performance.now());
 
 // World positions from internal/game/maps/town.json
 const BOARD = { x: 750 + 64, y: 500 + 64 };
@@ -207,6 +241,50 @@ test("walking is never corrected; far things say walk closer; leaderboard opens"
     await p.waitForSelector("#leaderboardPopup", { timeout: 3000 });
     await waitFor(async () => (await p.$$("#lbBody tr")).length > 0, "leaderboard rows");
     assert(await p.$eval("#nextDay", (b) => b.disabled), "next day is disabled on today");
+    await p.browserContext().close();
+});
+
+test("character walks with the sprite sheet, flips left, and faces the camera when idle", async () => {
+    const watcher = await player();
+    const p = await player();
+    await sleep(300);
+
+    let t = await pageNow(p);
+    await sleep(200);
+    let own = await draws(p, t, true);
+    assert(own.length && own.every((d) => d.file === "Skoobyuboo.png"), `idle should face the camera: ${JSON.stringify(own.slice(-3))}`);
+
+    // Walking right: the sheet, not mirrored, cycling through frames
+    t = await pageNow(p);
+    await hold(p, "d", 700);
+    own = (await draws(p, t, true)).filter((d) => d.file === "player-walk.png");
+    assert(own.length > 10, `walking should draw the sheet, drew ${own.length}`);
+    assert(own.every((d) => !d.mirrored), "walking right is drawn mirrored");
+    const frames = new Set(own.map((d) => d.sx));
+    assert(frames.size >= 4, `frames should cycle, saw ${[...frames]}`);
+
+    // Walking left: mirrored
+    t = await pageNow(p);
+    const tWatch = await pageNow(watcher);
+    await hold(p, "a", 700);
+    own = (await draws(p, t, true)).filter((d) => d.file === "player-walk.png");
+    assert(own.length > 10 && own.every((d) => d.mirrored), "walking left should be mirrored");
+
+    // The other player sees it too, mirrored while walking left
+    const seen = await draws(watcher, tWatch, false);
+    assert(seen.some((d) => d.file === "player-walk.png" && d.mirrored), `watcher should see p walk left: ${JSON.stringify(seen.slice(-3))}`);
+
+    // Stopped: back to facing the camera, for both of them
+    await sleep(500);
+    t = await pageNow(p);
+    const tw = await pageNow(watcher);
+    await sleep(200);
+    own = await draws(p, t, true);
+    assert(own.length && own.every((d) => d.file === "Skoobyuboo.png"), "idle again after stopping");
+    const seenIdle = await draws(watcher, tw, false);
+    assert(seenIdle.length && seenIdle.every((d) => d.file === "Skoobyuboo.png"), "watcher should see p idle");
+
+    await watcher.browserContext().close();
     await p.browserContext().close();
 });
 

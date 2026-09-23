@@ -1,4 +1,5 @@
 import { GameState } from "./game-objects.js";
+import { ANIMATIONS, Animator, pose } from "./animation.js";
 import { ChatMsg } from "./protocol.gen.js";
 import { Vector2D } from "./vector2D.js";
 
@@ -32,7 +33,11 @@ export class DisplayDriver {
         this.scaleCanvas();
         window.addEventListener("resize", () => this.scaleCanvas());
 
-        this.loadImage("character", "Skoobyuboo.png");
+        // Load the player's sprites up front so there's no blank first frame
+        for (const a of Object.values(ANIMATIONS)) {
+            this.sprite(a.idle);
+            this.sprite(a.walk.image);
+        }
     }
 
     // Screen point our own player is drawn at
@@ -75,10 +80,8 @@ export class DisplayDriver {
     }
 
     private drawCharacter() {
-        const sprite = this.images.get("character");
-        if (sprite) {
-            const m = this.middle;
-            this.ctx.drawImage(sprite, m.x, m.y);
+        const m = this.middle;
+        if (this.drawEntity(this.state.selfSprite, m.x, m.y, this.state.selfAnim)) {
             this.drawLabels(this.state.selfName, this.state.selfId, m.x, m.y, "black");
         }
     }
@@ -92,12 +95,36 @@ export class DisplayDriver {
             if (!this.onScreen(x, y)) {
                 continue;
             }
-            const sprite = this.sprite(other.sprite);
-            if (sprite) {
-                this.ctx.drawImage(sprite, x, y);
+            if (this.drawEntity(other.sprite, x, y, other.anim)) {
                 this.drawLabels(other.name, other.id, x, y, "white");
             }
         }
+    }
+
+    // Draws an entity's current pose at x, y. False if its image hasn't loaded yet.
+    private drawEntity(sprite: string, x: number, y: number, anim: Animator): boolean {
+        const p = pose(sprite, anim);
+        const img = this.sprite(p.image);
+        if (!img) {
+            return false;
+        }
+        if (!("sheet" in p)) {
+            this.ctx.drawImage(img, x, y);
+            return true;
+        }
+        const { frameWidth: w, frameHeight: h } = p.sheet;
+        const sx = p.frame * w;
+        if (p.mirrored) {
+            // Flip around the sprite's own box so it stays in the same place
+            this.ctx.save();
+            this.ctx.translate(x + w, y);
+            this.ctx.scale(-1, 1);
+            this.ctx.drawImage(img, sx, 0, w, h, 0, 0, w, h);
+            this.ctx.restore();
+        } else {
+            this.ctx.drawImage(img, sx, 0, w, h, x, y, w, h);
+        }
+        return true;
     }
 
     // Name above an entity, and its chat bubble above that
