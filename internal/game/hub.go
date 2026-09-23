@@ -3,6 +3,7 @@ package game
 
 import (
 	"log"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +26,7 @@ type Hub struct {
 	register   chan *netconn.Session
 	unregister chan *netconn.Session
 	chatIn     chan protocol.Chat
+	closeAll   chan struct{}
 
 	// Shared with HTTP handlers and sessions
 	onlineMu sync.Mutex
@@ -39,6 +41,7 @@ func NewHub() *Hub {
 		register:   make(chan *netconn.Session),
 		unregister: make(chan *netconn.Session),
 		chatIn:     make(chan protocol.Chat),
+		closeAll:   make(chan struct{}),
 		online:     make(map[int]bool),
 	}
 }
@@ -59,6 +62,9 @@ func (h *Hub) RegisterHandlers(r *netconn.Router) {
 			log.Println("Client data could not be asserted as type Chat.")
 			return
 		}
+		if !s.Allow("chat", 1, 3) {
+			return
+		}
 		// Never trust who the client says sent it
 		chat.ID = s.PlayerID
 		h.chatIn <- chat
@@ -68,37 +74,56 @@ func (h *Hub) RegisterHandlers(r *netconn.Router) {
 func (h *Hub) Join(s *netconn.Session)  { h.register <- s }
 func (h *Hub) Leave(s *netconn.Session) { h.unregister <- s }
 
+// Disconnects everyone, for shutting down
+func (h *Hub) CloseAll() { h.closeAll <- struct{}{} }
+
 func (h *Hub) Run() {
 	ticker := time.NewTicker(time.Second / 30)
 	defer ticker.Stop()
 
 	for {
-		select {
-		case update := <-h.in:
-			if p, ok := h.state[update.ID]; ok {
-				p.Pos = update.Pos
-				h.dirty = true
-			}
+		h.step(ticker.C)
+	}
+}
 
-		case s := <-h.unregister:
-			delete(h.state, s.PlayerID)
-			delete(h.players, s)
-			h.ReleaseOnline(s.PlayerID)
+// Handles one event. A panic is logged instead of taking the server down.
+func (h *Hub) step(tick <-chan time.Time) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("panic in hub: %v\n%s", r, debug.Stack())
+		}
+	}()
+
+	select {
+	case update := <-h.in:
+		if p, ok := h.state[update.ID]; ok {
+			p.Pos = update.Pos
 			h.dirty = true
+		}
 
-		case s := <-h.register:
-			h.players[s] = true
-			h.state[s.PlayerID] = &protocol.PlayerData{ID: s.PlayerID, Username: s.Username}
-			h.dirty = true
+	case s := <-h.unregister:
+		delete(h.state, s.PlayerID)
+		delete(h.players, s)
+		h.ReleaseOnline(s.PlayerID)
+		h.dirty = true
 
-		case chat := <-h.chatIn:
-			h.broadcastChat(chat)
+	case s := <-h.register:
+		h.players[s] = true
+		h.state[s.PlayerID] = &protocol.PlayerData{ID: s.PlayerID, Username: s.Username}
+		h.dirty = true
 
-		case <-ticker.C:
-			if h.dirty {
-				h.broadcastState()
-				h.dirty = false
-			}
+	case chat := <-h.chatIn:
+		h.broadcastChat(chat)
+
+	case <-h.closeAll:
+		for s := range h.players {
+			go s.CloseGoingAway()
+		}
+
+	case <-tick:
+		if h.dirty {
+			h.broadcastState()
+			h.dirty = false
 		}
 	}
 }

@@ -2,8 +2,10 @@
 package server
 
 import (
+	"context"
 	"log"
 	"net/http"
+	"sync"
 
 	"nytrpg/internal/auth"
 	"nytrpg/internal/config"
@@ -20,6 +22,8 @@ type Server struct {
 	auth   *auth.Service
 	wordle *wordle.Service
 	router *netconn.Router
+	// Open websocket connections, so shutdown can wait for them
+	conns sync.WaitGroup
 }
 
 func New(cfg config.Config) (*Server, error) {
@@ -58,7 +62,21 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
-func (s *Server) Close() error {
+// Disconnects every player and closes the database. Call after the HTTP server
+// has stopped accepting connections.
+func (s *Server) Shutdown(ctx context.Context) error {
+	s.hub.CloseAll()
+
+	done := make(chan struct{})
+	go func() {
+		s.conns.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		log.Println("Timed out waiting for connections to close")
+	}
 	return s.store.Close()
 }
 
@@ -73,6 +91,9 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Already connected.", http.StatusConflict)
 		return
 	}
+
+	s.conns.Add(1)
+	defer s.conns.Done()
 
 	// The hub releases the claim when the player leaves
 	err := netconn.Serve(w, r, p.ID, p.Username, s.router, s.hub.Join, s.hub.Leave)

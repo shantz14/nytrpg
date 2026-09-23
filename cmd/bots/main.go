@@ -120,6 +120,9 @@ func clamp(v, lo, hi float64) float64 {
 	return v
 }
 
+// Stop reading and sending after connecting, like a client whose network died
+var freeze = flag.Bool("freeze", false, "connect, then go silent (tests dead connection detection)")
+
 func runBot(baseURL, wsBase, username, password string, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -140,6 +143,11 @@ func runBot(baseURL, wsBase, username, password string, wg *sync.WaitGroup) {
 	}
 	defer conn.Close()
 	log.Printf("[%s] connected", username)
+
+	if *freeze {
+		log.Printf("[%s] frozen", username)
+		select {}
+	}
 
 	// Drain server messages so the connection stays healthy.
 	go func() {

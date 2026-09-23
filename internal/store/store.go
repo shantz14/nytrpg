@@ -18,7 +18,9 @@ func Open(path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite3", "file:"+path+"?mode=rwc&_txlock=immediate&_journal=WAL")
+	// busy_timeout: wait for a lock instead of failing when writes overlap.
+	// synchronous=NORMAL is safe with WAL and much faster than FULL.
+	db, err := sql.Open("sqlite3", "file:"+path+"?mode=rwc&_txlock=immediate&_journal=WAL&_busy_timeout=5000&_synchronous=NORMAL&_foreign_keys=on")
 	if err != nil {
 		return nil, err
 	}
