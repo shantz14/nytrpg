@@ -1,7 +1,7 @@
 package game
 
 import (
-	"log"
+	"log/slog"
 
 	"nytrpg/internal/protocol"
 )
@@ -39,7 +39,7 @@ func (w *World) replicate() {
 		}
 		msg, err := protocol.Encode(protocol.ServerWorld, upd)
 		if err != nil {
-			log.Println("Error encoding world update:", err)
+			slog.Error("encoding world update", "err", err)
 			continue
 		}
 		w.Stats.BytesOut.Add(int64(len(msg)))

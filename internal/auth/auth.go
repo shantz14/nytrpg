@@ -3,7 +3,7 @@ package auth
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -49,7 +49,7 @@ var invalidUser = UserData{ValidUser: false, Id: -999}
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		log.Println("Error encoding response:", err)
+		slog.Error("encoding response", "err", err)
 	}
 }
 
@@ -77,14 +77,14 @@ func (a *Service) HandleSignup(w http.ResponseWriter, r *http.Request) {
 	hashBytes, err := bcrypt.GenerateFromPassword([]byte(req.Password), 10)
 	if err != nil {
 		http.Error(w, "Could not hash password.", http.StatusInternalServerError)
-		log.Println("Error hashing password:", err)
+		slog.Error("hashing password", "err", err)
 		return
 	}
 
 	taken, err := a.store.InsertPlayer(req.Username, string(hashBytes))
 	if err != nil {
 		http.Error(w, "Database error.", http.StatusInternalServerError)
-		log.Println("Error inserting player:", err)
+		slog.Error("inserting player", "err", err)
 		return
 	}
 
@@ -105,7 +105,7 @@ func (a *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	p, hash, found, err := a.store.PlayerAuth(strings.TrimSpace(req.Username))
 	if err != nil {
 		http.Error(w, "Database error.", http.StatusInternalServerError)
-		log.Println("Error looking up player:", err)
+		slog.Error("looking up player", "err", err)
 		return
 	}
 	if !found || bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.Password)) != nil {
@@ -115,7 +115,7 @@ func (a *Service) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	jwtStr, err := a.CreateToken(p.Username)
 	if err != nil {
 		http.Error(w, "Could not create token.", http.StatusInternalServerError)
-		log.Println("Error creating token:", err)
+		slog.Error("creating token", "err", err)
 		return
 	}
 
@@ -150,7 +150,7 @@ func (a *Service) PlayerFromToken(token string) (store.Player, bool) {
 	}
 	p, found, err := a.store.PlayerByUsername(uname)
 	if err != nil {
-		log.Println("Error looking up player:", err)
+		slog.Error("looking up player", "err", err)
 		return p, false
 	}
 	return p, found

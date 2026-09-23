@@ -9,7 +9,7 @@ package game
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"math/rand"
 	"runtime/debug"
 	"time"
@@ -115,7 +115,7 @@ func (w *World) safely(fn func()) {
 	defer func() {
 		if r := recover(); r != nil {
 			w.Stats.Panics.Add(1)
-			log.Printf("panic in world: %v\n%s", r, debug.Stack())
+			slog.Error("panic in world", "panic", r, "stack", string(debug.Stack()))
 		}
 	}()
 	fn()
@@ -176,7 +176,7 @@ func (w *World) entityMoved(e *Entity) {
 func (w *World) send(c Client, t protocol.ServerMsg, data any) {
 	msg, err := protocol.Encode(t, data)
 	if err != nil {
-		log.Println("Error encoding message:", err)
+		slog.Error("encoding message", "err", err)
 		return
 	}
 	w.Stats.BytesOut.Add(int64(len(msg)))

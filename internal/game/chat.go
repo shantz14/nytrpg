@@ -1,7 +1,7 @@
 package game
 
 import (
-	"log"
+	"log/slog"
 	"strings"
 
 	"nytrpg/internal/protocol"
@@ -26,7 +26,7 @@ func (w *World) Chat(c Client, msg string) {
 		}
 		out, err := protocol.Encode(protocol.ServerChat, protocol.ChatMsg{ID: speaker.ent.ID, Msg: msg})
 		if err != nil {
-			log.Println("Error encoding chat:", err)
+			slog.Error("encoding chat", "err", err)
 			return
 		}
 		for _, p := range w.players {

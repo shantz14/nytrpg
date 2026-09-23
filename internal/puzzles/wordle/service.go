@@ -2,7 +2,7 @@ package wordle
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -25,7 +25,7 @@ type Service struct {
 
 func NewService(s *store.Store) *Service {
 	w := LoadWords()
-	log.Println("The word of the day is: ", w.For(gameday.Today()))
+	slog.Info("wordle loaded", "today", w.For(gameday.Today()))
 	return &Service{words: w, sessions: newSessions(), store: s}
 }
 
@@ -46,7 +46,7 @@ func (svc *Service) guess(pid int, guess string) protocol.WordleRes {
 	played := func(date string) bool {
 		played, err := svc.store.PlayedWordleOn(pid, date)
 		if err != nil {
-			log.Println("Error checking if player played:", err)
+			slog.Error("checking if player played", "err", err)
 		}
 		// If the db is broken don't let them play
 		return played || err != nil
@@ -61,7 +61,7 @@ func (svc *Service) guess(pid int, guess string) protocol.WordleRes {
 			PlayerID:   pid,
 		})
 		if err != nil {
-			log.Println("Failed to insert wordle record.", err)
+			slog.Error("insert wordle record", "err", err)
 		}
 	}
 	return res
@@ -70,7 +70,7 @@ func (svc *Service) guess(pid int, guess string) protocol.WordleRes {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		log.Println("Error encoding response:", err)
+		slog.Error("encoding response", "err", err)
 	}
 }
 
@@ -86,7 +86,7 @@ func (svc *Service) HandleHaveIPlayed(w http.ResponseWriter, r *http.Request) {
 	}
 	played, err := svc.store.PlayedWordleOn(id, gameday.Today())
 	if err != nil {
-		log.Println("Error checking if player played:", err)
+		slog.Error("checking if player played", "err", err)
 		http.Error(w, "Database error.", http.StatusInternalServerError)
 		return
 	}
@@ -129,7 +129,7 @@ func (svc *Service) HandleLeaderboard(w http.ResponseWriter, r *http.Request) {
 
 	rows, total, err := svc.store.WordleLeaderboard(res.Date, leaderboardPageSize, res.Page*leaderboardPageSize)
 	if err != nil {
-		log.Println("Error getting leaderboard:", err)
+		slog.Error("getting leaderboard", "err", err)
 		http.Error(w, "Database error.", http.StatusInternalServerError)
 		return
 	}

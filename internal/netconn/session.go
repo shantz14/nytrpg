@@ -3,10 +3,11 @@
 package netconn
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -33,6 +34,17 @@ const (
 	maxDropped = 100
 )
 
+// Counters across all sessions, for monitoring
+var Stats struct {
+	Open            atomic.Int64 // connections open right now
+	Total           atomic.Int64 // connections ever opened
+	SlowClientKicks atomic.Int64
+	FloodKicks      atomic.Int64
+	RateLimited     atomic.Int64 // messages dropped by the per-session rate limit
+	BadMessages     atomic.Int64 // undecodable or unknown message types
+	HandlerPanics   atomic.Int64
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -43,6 +55,7 @@ type Session struct {
 	Username string
 
 	conn      *websocket.Conn
+	log       *slog.Logger
 	send      chan []byte
 	closed    chan struct{}
 	closeOnce sync.Once
@@ -58,6 +71,7 @@ func newSession(conn *websocket.Conn, playerID int, username string) *Session {
 		PlayerID: playerID,
 		Username: username,
 		conn:     conn,
+		log:      slog.With("player", playerID, "user", username, "addr", conn.RemoteAddr().String()),
 		send:     make(chan []byte, sendQueueSize),
 		closed:   make(chan struct{}),
 		msgLimit: rate.NewLimiter(msgRate, msgBurst),
@@ -77,7 +91,8 @@ func (s *Session) Send(msg []byte) bool {
 	case s.send <- msg:
 		return true
 	default:
-		log.Printf("player %d can't keep up, disconnecting", s.PlayerID)
+		s.log.Warn("client can't keep up, disconnecting", "queued", len(s.send))
+		Stats.SlowClientKicks.Add(1)
 		s.Close()
 		return false
 	}
@@ -87,7 +102,7 @@ func (s *Session) Send(msg []byte) bool {
 func (s *Session) SendMsg(t protocol.ServerMsg, data any) bool {
 	msg, err := protocol.Encode(t, data)
 	if err != nil {
-		log.Println("Error encoding message:", err)
+		s.log.Error("encoding message", "type", t, "err", err)
 		return false
 	}
 	return s.Send(msg)
@@ -138,9 +153,12 @@ func Serve(w http.ResponseWriter, r *http.Request, playerID int, username string
 	if err != nil {
 		return err
 	}
-	log.Println("New connection coming from: ", conn.RemoteAddr())
-
 	s := newSession(conn, playerID, username)
+	s.log.Info("connected")
+	Stats.Open.Add(1)
+	Stats.Total.Add(1)
+	defer Stats.Open.Add(-1)
+
 	onJoin(s)
 	defer onLeave(s)
 	s.run(router)
@@ -166,9 +184,9 @@ func (s *Session) readLoop(router *Router) {
 		_, data, err := s.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-				log.Printf("player %d disconnected", s.PlayerID)
+				s.log.Info("disconnected")
 			} else {
-				log.Printf("player %d read error: %v", s.PlayerID, err)
+				s.log.Info("disconnected", "err", err)
 			}
 			return
 		}
@@ -176,9 +194,11 @@ func (s *Session) readLoop(router *Router) {
 		s.conn.SetReadDeadline(time.Now().Add(pongWait))
 
 		if !s.msgLimit.Allow() {
+			Stats.RateLimited.Add(1)
 			dropped++
 			if dropped > maxDropped {
-				log.Printf("player %d is flooding, disconnecting", s.PlayerID)
+				s.log.Warn("flooding, disconnecting")
+				Stats.FloodKicks.Add(1)
 				return
 			}
 			continue
@@ -195,7 +215,8 @@ func (s *Session) readLoop(router *Router) {
 func (s *Session) dispatch(router *Router, data []byte) (ok bool) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("panic handling message from player %d: %v\n%s", s.PlayerID, r, debug.Stack())
+			Stats.HandlerPanics.Add(1)
+			s.log.Error("panic handling message", "panic", r, "stack", string(debug.Stack()))
 			ok = false
 		}
 	}()
@@ -218,7 +239,7 @@ func (s *Session) writeLoop() {
 		case msg := <-s.send:
 			s.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := s.conn.WriteMessage(websocket.BinaryMessage, msg); err != nil {
-				log.Printf("player %d write error: %v", s.PlayerID, err)
+				s.log.Info("write failed", "err", err)
 				return
 			}
 		case <-ticker.C:
@@ -252,12 +273,14 @@ func (r *Router) Handle(t protocol.ClientMsg, h Handler) {
 func (r *Router) dispatch(s *Session, raw []byte) {
 	t, data, err := protocol.Decode(raw)
 	if err != nil {
-		log.Printf("player %d sent a bad message: %v", s.PlayerID, err)
+		Stats.BadMessages.Add(1)
+		s.log.Debug("bad message", "err", err)
 		return
 	}
 	h, ok := r.handlers[protocol.ClientMsg(t)]
 	if !ok {
-		log.Printf("player %d sent unknown message type %d", s.PlayerID, t)
+		Stats.BadMessages.Add(1)
+		s.log.Debug("unknown message type", "type", t)
 		return
 	}
 	h(s, data)

@@ -3,8 +3,10 @@ package server
 
 import (
 	"context"
-	"log"
+	"expvar"
+	"log/slog"
 	"net/http"
+	"net/http/pprof"
 	"sync"
 	"time"
 
@@ -58,6 +60,8 @@ func New(cfg config.Config) (*Server, error) {
 	s.world.RegisterHandlers(s.router)
 	s.wordle.RegisterHandlers(s.router)
 
+	s.publishMetrics()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	s.stopWorld = cancel
 	go world.Run(ctx)
@@ -73,7 +77,50 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/token", s.auth.HandleToken)
 	mux.HandleFunc("/haveIPlayed", s.wordle.HandleHaveIPlayed)
 	mux.HandleFunc("/leaderboard", s.wordle.HandleLeaderboard)
+
+	// Metrics, as JSON. Counters only grow; diff two reads for rates.
+	mux.Handle("/debug/vars", expvar.Handler())
+	if s.cfg.Debug {
+		mux.HandleFunc("/debug/pprof/", pprof.Index)
+		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	}
 	return mux
+}
+
+var publishOnce sync.Once
+
+// Server metrics under "nytrpg" in /debug/vars
+func (s *Server) publishMetrics() {
+	publishOnce.Do(func() {
+		expvar.Publish("nytrpg", expvar.Func(func() any {
+			ws, cs := &s.world.Stats, &netconn.Stats
+			ms := func(nanos int64) float64 { return float64(nanos) / 1e6 }
+			avg := 0.0
+			if t := ws.Ticks.Load(); t > 0 {
+				avg = ms(ws.TotalTickNanos.Load()) / float64(t)
+			}
+			return map[string]any{
+				"players_online":    s.world.Count(),
+				"connections_open":  cs.Open.Load(),
+				"connections_total": cs.Total.Load(),
+				"ticks":             ws.Ticks.Load(),
+				"tick_last_ms":      ms(ws.LastTickNanos.Load()),
+				"tick_max_ms":       ms(ws.MaxTickNanos.Load()),
+				"tick_avg_ms":       avg,
+				"world_bytes_out":   ws.BytesOut.Load(),
+				"rejected_moves":    ws.RejectedMoves.Load(),
+				"world_panics":      ws.Panics.Load(),
+				"slow_client_kicks": cs.SlowClientKicks.Load(),
+				"flood_kicks":       cs.FloodKicks.Load(),
+				"rate_limited_msgs": cs.RateLimited.Load(),
+				"bad_msgs":          cs.BadMessages.Load(),
+				"handler_panics":    cs.HandlerPanics.Load(),
+			}
+		}))
+	})
 }
 
 // Disconnects every player, stops the world, and closes the database. Call after
@@ -93,7 +140,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	select {
 	case <-done:
 	case <-ctx.Done():
-		log.Println("Timed out waiting for connections to close")
+		slog.Warn("timed out waiting for connections to close")
 	}
 	s.stopWorld()
 	return s.store.Close()
@@ -157,7 +204,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 
 	err := netconn.Serve(w, r, p.ID, p.Username, s.router, s.join, s.leave)
 	if err != nil {
-		log.Println("Connection failed at Upgrader: ", err)
+		slog.Info("websocket upgrade failed", "player", p.ID, "err", err)
 		s.world.ReleaseOnline(p.ID)
 	}
 }

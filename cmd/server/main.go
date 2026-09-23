@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -21,6 +22,12 @@ func main() {
 		log.Fatal(err)
 	}
 
+	level := slog.LevelInfo
+	if cfg.Debug {
+		level = slog.LevelDebug
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
+
 	srv, err := server.New(cfg)
 	if err != nil {
 		log.Fatal(err)
@@ -36,23 +43,23 @@ func main() {
 	defer stop()
 
 	go func() {
-		log.Println("Server running on port", cfg.Port)
+		slog.Info("server running", "port", cfg.Port, "debug", cfg.Debug)
 		if err := httpServer.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal(err)
 		}
 	}()
 
 	<-ctx.Done()
-	log.Println("Shutting down...")
+	slog.Info("shutting down")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	// Stop taking new requests, then disconnect players and close the db
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		log.Println("HTTP shutdown:", err)
+		slog.Error("http shutdown", "err", err)
 	}
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Println("Shutdown:", err)
+		slog.Error("shutdown", "err", err)
 	}
-	log.Println("Stopped")
+	slog.Info("stopped")
 }
