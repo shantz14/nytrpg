@@ -159,6 +159,15 @@ func (a *Service) PlayerFromToken(token string) (store.Player, bool) {
 	return p, found
 }
 
+// The player from an "Authorization: Bearer <jwt>" header
+func (a *Service) PlayerFromRequest(r *http.Request) (store.Player, bool) {
+	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok {
+		return store.Player{}, false
+	}
+	return a.PlayerFromToken(token)
+}
+
 func (a *Service) CreateToken(uname string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"username": uname,

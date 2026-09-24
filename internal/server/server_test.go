@@ -21,7 +21,7 @@ func TestWebsocketRequiresValidToken(t *testing.T) {
 	t.Parallel()
 	ts := testkit.NewServer(t)
 	for _, token := range []string{"", "garbage", "a.b.c"} {
-		if _, status, err := ts.DialRaw(token); err == nil || status != http.StatusUnauthorized {
+		if _, status, err := ts.DialRaw(token, 1); err == nil || status != http.StatusUnauthorized {
 			t.Errorf("token %q: want 401, got %d %v", token, status, err)
 		}
 	}

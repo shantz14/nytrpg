@@ -61,21 +61,35 @@ func TestPlayers(t *testing.T) {
 	}
 }
 
+// A player with one character
+func newCharacter(t *testing.T, s *Store, name string) Character {
+	t.Helper()
+	s.InsertPlayer(name, "h")
+	p, _, _ := s.PlayerByUsername(name)
+	c, _, err := s.InsertCharacter(p.ID, 0, name+"-char", "rogue")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
 func TestWordleResultsAndLeaderboard(t *testing.T) {
 	s := open(t)
-	ids := map[string]int{}
+	chars := map[string]Character{}
 	for _, name := range []string{"a", "b", "c", "d"} {
-		s.InsertPlayer(name, "h")
-		p, _, _ := s.PlayerByUsername(name)
-		ids[name] = p.ID
+		chars[name] = newCharacter(t, s, name)
+	}
+	result := func(name, date string, win bool, secs float64, guesses int) WordleResult {
+		c := chars[name]
+		return WordleResult{Date: date, Win: win, Seconds: secs, GuessCount: guesses, PlayerID: c.PlayerID, CharacterID: c.ID}
 	}
 	const day = "2026-09-23"
 	results := []WordleResult{
-		{Date: day, Win: true, Seconds: 90, GuessCount: 3, PlayerID: ids["a"]},
-		{Date: day, Win: true, Seconds: 30, GuessCount: 3, PlayerID: ids["b"]}, // same guesses, faster
-		{Date: day, Win: true, Seconds: 10, GuessCount: 4, PlayerID: ids["c"]},
-		{Date: day, Win: false, Seconds: 5, GuessCount: 5, PlayerID: ids["d"]}, // losses aren't ranked
-		{Date: "2026-09-22", Win: true, Seconds: 1, GuessCount: 1, PlayerID: ids["a"]},
+		result("a", day, true, 90, 3),
+		result("b", day, true, 30, 3), // same guesses, faster
+		result("c", day, true, 10, 4),
+		result("d", day, false, 5, 5), // losses aren't ranked
+		result("a", "2026-09-22", true, 1, 1),
 	}
 	for _, r := range results {
 		if err := s.InsertWordle(r); err != nil {
@@ -86,10 +100,10 @@ func TestWordleResultsAndLeaderboard(t *testing.T) {
 		t.Fatal("second result for the same player and day was accepted")
 	}
 
-	if played, _ := s.PlayedWordleOn(ids["d"], day); !played {
+	if played, _ := s.PlayedWordleOn(chars["d"].PlayerID, day); !played {
 		t.Fatal("d played (and lost) but PlayedWordleOn says no")
 	}
-	if played, _ := s.PlayedWordleOn(ids["d"], "2026-09-22"); played {
+	if played, _ := s.PlayedWordleOn(chars["d"].PlayerID, "2026-09-22"); played {
 		t.Fatal("d didn't play on the 22nd")
 	}
 
@@ -99,6 +113,9 @@ func TestWordleResultsAndLeaderboard(t *testing.T) {
 	}
 	if rows[0].Uname != "b" || rows[0].Place != 1 || rows[1].Uname != "a" || rows[1].Place != 2 {
 		t.Fatalf("wrong order, want fewest guesses then fastest: %+v", rows)
+	}
+	if r := rows[0]; r.Char != "b-char" || r.Class != "rogue" || r.CharacterID != chars["b"].ID {
+		t.Fatalf("rows should say which character played: %+v", r)
 	}
 	rows, _, _ = s.WordleLeaderboard(day, 2, 2)
 	if len(rows) != 1 || rows[0].Uname != "c" || rows[0].Place != 3 {

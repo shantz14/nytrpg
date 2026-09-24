@@ -14,6 +14,7 @@ import (
 	"runtime/debug"
 	"time"
 
+	"nytrpg/internal/classes"
 	"nytrpg/internal/protocol"
 )
 
@@ -32,9 +33,12 @@ type Client interface {
 }
 
 type Entity struct {
-	ID     protocol.EntityID
-	Kind   protocol.EntityKind
-	Name   string
+	ID   protocol.EntityID
+	Kind protocol.EntityKind
+	Name string
+	// Players only, the character name and class ID
+	Char   string
+	Class  string
 	Sprite string
 	Pos    protocol.Vec
 
@@ -44,7 +48,7 @@ type Entity struct {
 }
 
 func (e *Entity) spawnMsg() protocol.EntitySpawn {
-	return protocol.EntitySpawn{ID: e.ID, Kind: e.Kind, Name: e.Name, Sprite: e.Sprite, Pos: e.Pos}
+	return protocol.EntitySpawn{ID: e.ID, Kind: e.Kind, Name: e.Name, Char: e.Char, Class: e.Class, Sprite: e.Sprite, Pos: e.Pos}
 }
 
 type player struct {
@@ -183,8 +187,8 @@ func (w *World) send(c Client, t protocol.ServerMsg, data any) {
 	c.Send(msg)
 }
 
-// Adds a connected player to the world
-func (w *World) Join(c Client, playerID int, username string) {
+// Adds a connected player to the world, playing the given character
+func (w *World) Join(c Client, playerID int, username string, ch protocol.CharacterInfo) {
 	w.Do(func(w *World) {
 		spawn := w.Map.Spawn
 		spawn.X = clamp(spawn.X+w.rng.Int31n(2*spawnSpread+1)-spawnSpread, 0, w.Map.Width)
@@ -196,6 +200,8 @@ func (w *World) Join(c Client, playerID int, username string) {
 			ent:      w.newEntity(protocol.EntityPlayer, username, playerSprite, spawn),
 			known:    make(map[protocol.EntityID]uint64),
 		}
+		p.ent.Char = ch.Name
+		p.ent.Class = ch.Class
 		p.moveBudget.reset(w.now())
 		w.players[c] = p
 
@@ -207,6 +213,8 @@ func (w *World) Join(c Client, playerID int, username string) {
 			Map:       *w.Map,
 			MoveSpeed: MoveSpeed,
 			TickRate:  TickRate,
+			Character: ch,
+			Classes:   classes.Infos(),
 		})
 	})
 }

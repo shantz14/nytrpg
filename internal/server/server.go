@@ -7,11 +7,13 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/pprof"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"nytrpg/internal/auth"
+	"nytrpg/internal/characters"
 	"nytrpg/internal/config"
 	"nytrpg/internal/game"
 	"nytrpg/internal/netconn"
@@ -24,6 +26,7 @@ type Server struct {
 	store  *store.Store
 	world  *game.World
 	auth   *auth.Service
+	chars  *characters.Service
 	wordle *wordle.Service
 	router *netconn.Router
 
@@ -58,6 +61,8 @@ func New(cfg config.Config) (*Server, error) {
 	}
 
 	// Each feature registers the websocket messages it handles
+	s.chars = characters.New(st, s.auth)
+
 	s.world.RegisterHandlers(s.router)
 	s.wordle.RegisterHandlers(s.router)
 
@@ -76,6 +81,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/login", s.auth.HandleLogin)
 	mux.HandleFunc("/signup", s.auth.HandleSignup)
 	mux.HandleFunc("/token", s.auth.HandleToken)
+	mux.HandleFunc("/characters", s.chars.Handle)
 	mux.HandleFunc("/leaderboard", s.wordle.HandleLeaderboard)
 
 	// Metrics, as JSON. Counters only grow; diff two reads for rates.
@@ -153,11 +159,11 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	return s.store.Close()
 }
 
-func (s *Server) join(sess *netconn.Session) {
+func (s *Server) join(sess *netconn.Session, ch store.Character) {
 	s.sessionsMu.Lock()
 	s.sessions[sess] = true
 	s.sessionsMu.Unlock()
-	s.world.Join(sess, sess.PlayerID, sess.Username)
+	s.world.Join(sess, sess.PlayerID, sess.Username, characters.Info(ch))
 }
 
 func (s *Server) leave(sess *netconn.Session) {
@@ -201,6 +207,16 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid token.", http.StatusUnauthorized)
 		return
 	}
+	charID, err := strconv.Atoi(r.URL.Query().Get("character"))
+	if err != nil {
+		http.Error(w, "Choose a character.", http.StatusBadRequest)
+		return
+	}
+	ch, ok := s.chars.Playable(p, charID)
+	if !ok {
+		http.Error(w, "Not your character.", http.StatusForbidden)
+		return
+	}
 	if !s.takeOver(p.ID) {
 		http.Error(w, "Already connected.", http.StatusConflict)
 		return
@@ -209,7 +225,8 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	s.conns.Add(1)
 	defer s.conns.Done()
 
-	err := netconn.Serve(w, r, p.ID, p.Username, s.router, s.join, s.leave)
+	join := func(sess *netconn.Session) { s.join(sess, ch) }
+	err = netconn.Serve(w, r, p.ID, p.Username, ch.ID, s.router, join, s.leave)
 	if err != nil {
 		slog.Info("websocket upgrade failed", "player", p.ID, "err", err)
 		s.world.ReleaseOnline(p.ID)

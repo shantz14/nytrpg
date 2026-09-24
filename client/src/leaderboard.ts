@@ -2,12 +2,17 @@ import { InputDriver } from "./input-driver.js";
 import { UserData } from "./login.js";
 import { Popup } from "./popup.js";
 import { formatTime } from "./wordle.js";
+import { charLabel } from "./classes.js";
+import { ClassInfo } from "./protocol.gen.js";
 
 const URL = "/leaderboard";
 
 type Row = {
     place: number,
     uname: string,
+    characterId: number,
+    char: string,
+    class: string,
     guesses: number,
     time: number
 }
@@ -39,6 +44,9 @@ export function formatDate(date: string): string {
 
 export class Leaderboard {
     userData: UserData;
+    // The character being played, its rows are highlighted
+    characterId: number;
+    classes: ClassInfo[];
     inputDriver: InputDriver;
     // Empty means let the server pick today
     date: string;
@@ -46,8 +54,10 @@ export class Leaderboard {
     last: LeaderboardRes | null;
     popup: Popup | null;
 
-    constructor(userData: UserData, inputDriver: InputDriver) {
+    constructor(userData: UserData, characterId: number, classes: ClassInfo[], inputDriver: InputDriver) {
         this.userData = userData;
+        this.characterId = characterId;
+        this.classes = classes;
         this.inputDriver = inputDriver;
         this.date = "";
         this.page = 0;
@@ -112,7 +122,7 @@ export class Leaderboard {
             if (row.place <= 3) {
                 tr.classList.add("place-" + row.place);
             }
-            if (row.uname == this.userData.username) {
+            if (row.characterId == this.characterId) {
                 tr.classList.add("me");
             }
             // textContent, never innerHTML: usernames come from users
@@ -122,6 +132,11 @@ export class Leaderboard {
                 td.className = columns[i];
                 td.textContent = text;
             });
+            // The character under the username
+            const char = document.createElement("span");
+            char.className = "lb-char";
+            char.textContent = charLabel(this.classes, row.char, row.class);
+            tr.cells[1].appendChild(char);
         }
 
         const pages = this.lastPage() + 1;

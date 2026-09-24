@@ -40,7 +40,7 @@ func (svc *Service) RegisterHandlers(r *netconn.Router) {
 		if err := msgpack.Unmarshal(data, &req); err != nil {
 			return
 		}
-		s.SendMsg(protocol.ServerWordleResult, svc.guess(s.PlayerID, req.Guess))
+		s.SendMsg(protocol.ServerWordleResult, svc.guess(s, req.Guess))
 	})
 }
 
@@ -59,23 +59,26 @@ func (svc *Service) start(s *netconn.Session) protocol.WordleResume {
 	return svc.sessions.start(s.PlayerID, time.Now())
 }
 
-func (svc *Service) guess(pid int, guess string) protocol.WordleRes {
+// The daily game is per account: switching characters mid-game continues it,
+// and the result goes to the character who finished it
+func (svc *Service) guess(s *netconn.Session, guess string) protocol.WordleRes {
 	played := func(date string) bool {
-		played, err := svc.store.PlayedWordleOn(pid, date)
+		played, err := svc.store.PlayedWordleOn(s.PlayerID, date)
 		if err != nil {
 			slog.Error("checking if player played", "err", err)
 		}
 		// If the db is broken don't let them play
 		return played || err != nil
 	}
-	res, finished := svc.sessions.guess(pid, guess, time.Now(), svc.words, played)
+	res, finished := svc.sessions.guess(s.PlayerID, guess, time.Now(), svc.words, played)
 	if finished != nil {
 		err := svc.store.InsertWordle(store.WordleResult{
-			Date:       finished.Date,
-			Win:        finished.Win,
-			Seconds:    finished.Seconds,
-			GuessCount: finished.Guesses,
-			PlayerID:   pid,
+			Date:        finished.Date,
+			Win:         finished.Win,
+			Seconds:     finished.Seconds,
+			GuessCount:  finished.Guesses,
+			PlayerID:    s.PlayerID,
+			CharacterID: s.CharacterID,
 		})
 		if err != nil {
 			slog.Error("insert wordle record", "err", err)
