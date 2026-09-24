@@ -19,7 +19,7 @@ func serve(t *testing.T, router *Router) (dial func() *websocket.Conn, joined ch
 	t.Helper()
 	joined = make(chan *Session, 16)
 	h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		Serve(w, r, 1, "p", router, func(s *Session) { joined <- s }, func(*Session) {})
+		Serve(w, r, 1, "p", 1, router, func(s *Session) { joined <- s }, func(*Session) {})
 	}))
 	t.Cleanup(h.Close)
 	dial = func() *websocket.Conn {
@@ -132,7 +132,7 @@ func TestSendNeverBlocksAndDropsSlowClients(t *testing.T) {
 			t.Error(err)
 			return
 		}
-		sessions <- newSession(conn, 1, "p")
+		sessions <- newSession(conn, 1, "p", 1)
 	}))
 	defer h.Close()
 	c, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(h.URL, "http"), nil)

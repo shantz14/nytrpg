@@ -40,6 +40,33 @@ export interface Welcome {
     // Fastest a player may move in px/s, faster moves are corrected
     moveSpeed: number;
     tickRate: number;
+    // The character you're playing
+    character: CharacterInfo;
+    // Every class, to look up the class of other players
+    classes: Array<ClassInfo>;
+}
+
+// One of an account's characters. Also sent as JSON by /characters.
+export interface CharacterInfo {
+    id: number;
+    slot: number;
+    name: string;
+    // Class ID, see ClassInfo
+    class: string;
+}
+
+export interface ClassInfo {
+    id: string;
+    name: string;
+    description: string;
+    // Always one per ability slot, an empty ID means the slot is empty
+    abilities: Array<AbilityInfo>;
+}
+
+export interface AbilityInfo {
+    id: string;
+    name: string;
+    description: string;
 }
 
 // The static world, loaded from a JSON map file
@@ -78,7 +105,11 @@ export interface WorldUpdate {
 export interface EntitySpawn {
     id: EntityID;
     kind: EntityKind;
+    // For players, the account's username
     name: string;
+    // For players, the character's name and class ID
+    char?: string;
+    class?: string;
     sprite: string;
     pos: Vec;
 }

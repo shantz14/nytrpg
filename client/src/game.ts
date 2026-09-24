@@ -4,9 +4,10 @@ import { Clickable, GameState, RemoteEntity } from "./game-objects.js";
 import { Vector2D } from "./vector2D.js";
 import { Wordle } from "./wordle.js";
 import { Leaderboard } from "./leaderboard.js";
-import { ChatMsg, ChatReq, ClientChat, ClientMove, ClientMsg, ServerChat, ServerCorrection, ServerWelcome, ServerWorld, ServerWordleResult, ServerWordleResume, Vec, Welcome, WorldMap, WorldUpdate, WordleRes, WordleResume } from "./protocol.gen.js";
+import { CharacterInfo, ChatMsg, ChatReq, ClientChat, ClientMove, ClientMsg, ServerChat, ServerCorrection, ServerWelcome, ServerWorld, ServerWordleResult, ServerWordleResume, Vec, Welcome, WorldMap, WorldUpdate, WordleRes, WordleResume } from "./protocol.gen.js";
 import { Connection } from "./net.js";
 import { UserData, logout } from "./login.js";
+import { charLabel } from "./classes.js";
 
 const SERVER_URL = "/ws";
 // Position updates per second, matches the server tick rate
@@ -19,6 +20,8 @@ export class Game {
     state: GameState;
     wordle: Wordle | null;
     userData: UserData;
+    // The character being played, chosen before connecting
+    character: CharacterInfo;
     // Last position sent, so we only send when we move
     lastSent: Vec | null;
     lastSentAt: number;
@@ -26,7 +29,7 @@ export class Game {
     // px/s, from the server. 0 until the welcome arrives, so we can't move before then.
     moveSpeed: number;
 
-    constructor(ctx: CanvasRenderingContext2D, userData: UserData) {
+    constructor(ctx: CanvasRenderingContext2D, userData: UserData, character: CharacterInfo) {
         const canvas = ctx.canvas;
 
         this.state = new GameState();
@@ -34,11 +37,12 @@ export class Game {
         this.displayDriver = new DisplayDriver(ctx, this.state);
         this.wordle = null;
         this.userData = userData;
+        this.character = character;
         this.lastSent = null;
         this.lastSentAt = 0;
         this.lastFrame = performance.now();
         this.moveSpeed = 0;
-        this.conn = new Connection(SERVER_URL + `?token=${encodeURIComponent(userData.jwt)}`);
+        this.conn = new Connection(SERVER_URL + `?token=${encodeURIComponent(userData.jwt)}&character=${character.id}`);
     }
 
     public run() {
@@ -83,6 +87,9 @@ export class Game {
     private welcome(welcome: Welcome) {
         this.state.selfId = welcome.entityId;
         this.state.selfName = welcome.username;
+        this.state.classes = welcome.classes;
+        this.state.selfClass = welcome.classes.find((c) => c.id === welcome.character.class) ?? null;
+        this.state.selfLabel = charLabel(welcome.classes, welcome.character.name, welcome.character.class);
         this.moveSpeed = welcome.moveSpeed;
         for (const id in this.state.otherChars) {
             this.displayDriver.removePlayer(Number(id));
@@ -100,7 +107,11 @@ export class Game {
 
     private applyWorldUpdate(upd: WorldUpdate) {
         for (const e of upd.spawn ?? []) {
-            this.state.otherChars[e.id] = new RemoteEntity(e.id, e.name, e.sprite, e.pos);
+            const other = new RemoteEntity(e.id, e.name, e.sprite, e.pos);
+            other.char = e.char ?? "";
+            other.cls = e.class ?? "";
+            other.label = charLabel(this.state.classes, other.char, other.cls);
+            this.state.otherChars[e.id] = other;
         }
         for (const [id, x, y] of upd.move ?? []) {
             this.state.otherChars[id]?.addSample(x, y);
@@ -141,7 +152,7 @@ export class Game {
                 this.wordle = wordle;
             }
         },
-        leaderboard: () => new Leaderboard(this.userData, this.inputDriver).run(),
+        leaderboard: () => new Leaderboard(this.userData, this.character.id, this.state.classes, this.inputDriver).run(),
         logout: () => {
             this.conn.close();
             logout();

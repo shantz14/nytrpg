@@ -568,6 +568,275 @@ canvas {
     color: var(--muted);
 }
 
+#lb .lb-char {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-top: 2px;
+}
+
+#lb td.col-name:has(.lb-char) {
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+/* ---- characters ---- */
+
+.btn-danger {
+    color: var(--danger);
+    border-color: rgba(224, 96, 96, 0.4);
+    background-color: rgba(224, 96, 96, 0.08);
+    font-weight: 600;
+}
+
+.btn-danger:hover:not(:disabled) {
+    background-color: rgba(224, 96, 96, 0.16);
+}
+
+.btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.btn-row .btn {
+    flex: 1;
+}
+
+.form-error {
+    color: var(--danger);
+    font-size: 0.8rem;
+    min-height: 1.2em;
+    margin-bottom: 8px;
+}
+
+.chars-panel {
+    width: min(100%, 560px);
+}
+
+.chars-user {
+    font-size: 0.75rem;
+    color: var(--muted);
+}
+
+.char-slots {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.char-slot {
+    --class-color: var(--accent);
+    display: flex;
+    flex-direction: column;
+    min-height: 132px;
+    border: 1px solid var(--line);
+    background-color: var(--panel-sunk);
+}
+
+.char-slot.filled {
+    padding: 14px;
+    border-left: 3px solid var(--class-color);
+}
+
+.class-knight { --class-color: #c9ced6; }
+.class-wizard { --class-color: #9d8cf2; }
+.class-rogue { --class-color: #6fcf8e; }
+.class-cleric { --class-color: #e8c872; }
+
+.char-name {
+    color: var(--text-strong);
+    font-size: 1rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.char-class {
+    color: var(--class-color);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-top: 4px;
+}
+
+.char-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: auto;
+}
+
+.char-actions .btn {
+    padding: 8px 10px;
+    font-size: 0.75rem;
+}
+
+.char-actions .char-play {
+    flex: 1;
+}
+
+.char-create {
+    flex: 1;
+    font-family: var(--font);
+    font-size: 0.8rem;
+    letter-spacing: 1px;
+    color: var(--muted);
+    background: transparent;
+    border: 1px dashed var(--line-strong);
+    margin: 8px;
+    cursor: pointer;
+    transition: color 120ms, border-color 120ms, background-color 120ms;
+}
+
+.char-create:hover, .char-create:focus-visible {
+    color: var(--accent);
+    border-color: var(--accent-line);
+    background-color: var(--accent-bg);
+    outline: none;
+}
+
+.char-create-panel {
+    width: min(100%, 440px);
+}
+
+.field-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #aaaaaa;
+    margin: 8px 0 6px;
+}
+
+.field-input {
+    background-color: var(--panel-sunk);
+    color: var(--text);
+    border: 1px solid var(--line);
+    padding: 10px 12px;
+    font-size: 0.9rem;
+    font-family: var(--font);
+    outline: none;
+    transition: border-color 120ms;
+}
+
+.field-input:focus {
+    border-color: var(--accent);
+}
+
+.class-choices {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+
+.class-choice {
+    --class-color: var(--accent);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    background-color: var(--panel-sunk);
+    cursor: pointer;
+    transition: border-color 120ms, background-color 120ms;
+}
+
+.class-choice input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.class-choice:hover {
+    border-color: var(--line-strong);
+}
+
+.class-choice:has(input:checked) {
+    border-color: var(--class-color);
+    background-color: rgba(255, 255, 255, 0.04);
+}
+
+.class-choice:has(input:focus-visible) {
+    outline: 1px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.class-name {
+    color: var(--class-color);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.class-desc {
+    color: var(--muted);
+    font-size: 0.7rem;
+    line-height: 1.4;
+}
+
+/* ---- ability bar ---- */
+
+.ability-label {
+    align-self: stretch;
+    margin: 18px 0 8px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+}
+
+.ability-bar {
+    display: flex;
+    gap: 6px;
+}
+
+/* Same size as the letter tiles so the bar lines up with the columns */
+.ability-slot {
+    --size: clamp(44px, 11vw, 58px);
+    position: relative;
+    width: var(--size);
+    height: var(--size);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px;
+    font-family: var(--font);
+    color: var(--text-strong);
+    background-color: var(--panel-sunk);
+    border: 2px solid var(--line);
+}
+
+.ability-slot.empty {
+    border-style: dashed;
+    cursor: default;
+}
+
+.ability-slot.filled {
+    border-color: var(--accent-line);
+    cursor: pointer;
+}
+
+.ability-slot.filled:hover {
+    background-color: var(--accent-bg);
+}
+
+.ability-key {
+    position: absolute;
+    top: 2px;
+    left: 4px;
+    font-size: 0.6rem;
+    color: var(--muted);
+}
+
+.ability-name {
+    font-size: 0.55rem;
+    text-align: center;
+    overflow: hidden;
+}
+
 /* ---- chat and banners ---- */
 
 #chat-container {
@@ -650,5 +919,13 @@ canvas {
 
     #lb .col-num {
         width: 72px;
+    }
+
+    .char-slots, .class-choices {
+        grid-template-columns: 1fr;
+    }
+
+    .char-slot {
+        min-height: 96px;
     }
 }

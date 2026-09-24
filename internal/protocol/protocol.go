@@ -103,6 +103,33 @@ type Welcome struct {
 	// Fastest a player may move in px/s, faster moves are corrected
 	MoveSpeed float64 `msgpack:"moveSpeed"`
 	TickRate  int     `msgpack:"tickRate"`
+	// The character you're playing
+	Character CharacterInfo `msgpack:"character"`
+	// Every class, to look up the class of other players
+	Classes []ClassInfo `msgpack:"classes"`
+}
+
+// One of an account's characters. Also sent as JSON by /characters.
+type CharacterInfo struct {
+	ID   int    `json:"id" msgpack:"id"`
+	Slot int    `json:"slot" msgpack:"slot"`
+	Name string `json:"name" msgpack:"name"`
+	// Class ID, see ClassInfo
+	Class string `json:"class" msgpack:"class"`
+}
+
+type ClassInfo struct {
+	ID          string `json:"id" msgpack:"id"`
+	Name        string `json:"name" msgpack:"name"`
+	Description string `json:"description" msgpack:"description"`
+	// Always one per ability slot, an empty ID means the slot is empty
+	Abilities []AbilityInfo `json:"abilities" msgpack:"abilities"`
+}
+
+type AbilityInfo struct {
+	ID          string `json:"id" msgpack:"id"`
+	Name        string `json:"name" msgpack:"name"`
+	Description string `json:"description" msgpack:"description"`
 }
 
 // The static world, loaded from a JSON map file
@@ -139,11 +166,15 @@ type WorldUpdate struct {
 }
 
 type EntitySpawn struct {
-	ID     EntityID   `msgpack:"id"`
-	Kind   EntityKind `msgpack:"kind"`
-	Name   string     `msgpack:"name"`
-	Sprite string     `msgpack:"sprite"`
-	Pos    Vec        `msgpack:"pos"`
+	ID   EntityID   `msgpack:"id"`
+	Kind EntityKind `msgpack:"kind"`
+	// For players, the account's username
+	Name string `msgpack:"name"`
+	// For players, the character's name and class ID
+	Char   string `msgpack:"char,omitempty"`
+	Class  string `msgpack:"class,omitempty"`
+	Sprite string `msgpack:"sprite"`
+	Pos    Vec    `msgpack:"pos"`
 }
 
 // Sent as [id, x, y] to keep moves small

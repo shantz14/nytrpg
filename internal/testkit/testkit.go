@@ -14,11 +14,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -116,9 +118,52 @@ type Account struct {
 	ID       int
 	Username string
 	Token    string
+	// The character Dial plays, the knight in slot 0 that Login makes
+	CharacterID int
 }
 
-// Signs up (if needed) and logs in
+// Sends a request with the account's token (if any) and JSON body (if not nil),
+// decodes a JSON reply into out (if not nil). Returns the status.
+func (s *Server) Request(t testing.TB, method, path, token string, body, out any) int {
+	t.Helper()
+	var r io.Reader
+	if body != nil {
+		b, _ := json.Marshal(body)
+		r = bytes.NewReader(b)
+	}
+	req, err := http.NewRequest(method, s.URL+path, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if out != nil && resp.StatusCode == http.StatusOK {
+		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+			t.Fatalf("decoding %s %s reply: %v", method, path, err)
+		}
+	}
+	return resp.StatusCode
+}
+
+// Makes a character, failing the test if the server refuses
+func (s *Server) CreateCharacter(t testing.TB, acct Account, slot int, name, class string) protocol.CharacterInfo {
+	t.Helper()
+	var c protocol.CharacterInfo
+	req := map[string]any{"slot": slot, "name": name, "class": class}
+	if code := s.Request(t, http.MethodPost, "/characters", acct.Token, req, &c); code != http.StatusOK {
+		t.Fatalf("create character %+v: %d", req, code)
+	}
+	return c
+}
+
+// Signs up (if needed) and logs in. Makes a knight in slot 0 if the account
+// has no character there, and plays it.
 func (s *Server) Login(t testing.TB, username string) Account {
 	t.Helper()
 	creds := map[string]string{"username": username, "password": password}
@@ -132,7 +177,20 @@ func (s *Server) Login(t testing.TB, username string) Account {
 	if code := s.PostJSON(t, "/login", creds, &res); code != http.StatusOK || !res.ValidUser {
 		t.Fatalf("login %s failed: %d %+v", username, code, res)
 	}
-	return Account{ID: res.Id, Username: res.Username, Token: res.Jwt}
+	acct := Account{ID: res.Id, Username: res.Username, Token: res.Jwt}
+
+	var list struct {
+		Slots []*protocol.CharacterInfo `json:"slots"`
+	}
+	if code := s.Request(t, http.MethodGet, "/characters", acct.Token, nil, &list); code != http.StatusOK {
+		t.Fatalf("listing characters: %d", code)
+	}
+	if c := list.Slots[0]; c != nil {
+		acct.CharacterID = c.ID
+	} else {
+		acct.CharacterID = s.CreateCharacter(t, acct, 0, username, "knight").ID
+	}
+	return acct
 }
 
 // Logs in as username and connects, see Dial
@@ -141,10 +199,10 @@ func (s *Server) Connect(t testing.TB, username string) *Client {
 	return s.Dial(t, s.Login(t, username))
 }
 
-// Opens a websocket as the account and waits for the welcome
+// Opens a websocket as the account's character and waits for the welcome
 func (s *Server) Dial(t testing.TB, acct Account) *Client {
 	t.Helper()
-	c, status, err := s.DialRaw(acct.Token)
+	c, status, err := s.DialRaw(acct.Token, acct.CharacterID)
 	if err != nil {
 		t.Fatalf("dial as %s: %d %v", acct.Username, status, err)
 	}
@@ -154,9 +212,10 @@ func (s *Server) Dial(t testing.TB, acct Account) *Client {
 	return c
 }
 
-// Opens a websocket with any token, for testing auth. Doesn't wait for anything.
-func (s *Server) DialRaw(token string) (*Client, int, error) {
-	wsURL := "ws" + strings.TrimPrefix(s.URL, "http") + "/ws?token=" + url.QueryEscape(token)
+// Opens a websocket with any token and character, for testing auth. Doesn't
+// wait for anything.
+func (s *Server) DialRaw(token string, character int) (*Client, int, error) {
+	wsURL := "ws" + strings.TrimPrefix(s.URL, "http") + "/ws?token=" + url.QueryEscape(token) + "&character=" + strconv.Itoa(character)
 	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	status := 0
 	if resp != nil {
@@ -274,8 +333,10 @@ func (c *Client) next(msgType protocol.ServerMsg, d time.Duration) (Msg, bool) {
 
 // What a client knows about the world, built from world updates
 type View struct {
-	Pos     map[protocol.EntityID]protocol.Vec
-	Names   map[protocol.EntityID]string
+	Pos   map[protocol.EntityID]protocol.Vec
+	Names map[protocol.EntityID]string
+	// The last spawn seen for each entity, with the character name and class
+	Spawns  map[protocol.EntityID]protocol.EntitySpawn
 	Despawn map[protocol.EntityID]bool
 }
 
@@ -284,6 +345,7 @@ func (c *Client) WatchWorld(d time.Duration, done func(View) bool) View {
 	v := View{
 		Pos:     map[protocol.EntityID]protocol.Vec{},
 		Names:   map[protocol.EntityID]string{},
+		Spawns:  map[protocol.EntityID]protocol.EntitySpawn{},
 		Despawn: map[protocol.EntityID]bool{},
 	}
 	deadline := time.After(d)
@@ -302,6 +364,7 @@ func (c *Client) WatchWorld(d time.Duration, done func(View) bool) View {
 		for _, s := range u.Spawn {
 			v.Pos[s.ID] = s.Pos
 			v.Names[s.ID] = s.Name
+			v.Spawns[s.ID] = s
 			delete(v.Despawn, s.ID)
 		}
 		for _, mv := range u.Move {

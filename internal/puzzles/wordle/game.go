@@ -71,7 +71,8 @@ type Finished struct {
 }
 
 type sessions struct {
-	mu       sync.Mutex
+	mu sync.Mutex
+	// By player id: one game a day per account, whichever character plays
 	sessions map[int]*session
 }
 

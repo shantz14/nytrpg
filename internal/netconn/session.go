@@ -53,6 +53,8 @@ var upgrader = websocket.Upgrader{
 type Session struct {
 	PlayerID int
 	Username string
+	// The character being played
+	CharacterID int
 
 	conn      *websocket.Conn
 	log       *slog.Logger
@@ -66,16 +68,17 @@ type Session struct {
 	limits   map[string]*rate.Limiter
 }
 
-func newSession(conn *websocket.Conn, playerID int, username string) *Session {
+func newSession(conn *websocket.Conn, playerID int, username string, characterID int) *Session {
 	return &Session{
-		PlayerID: playerID,
-		Username: username,
-		conn:     conn,
-		log:      slog.With("player", playerID, "user", username, "addr", conn.RemoteAddr().String()),
-		send:     make(chan []byte, sendQueueSize),
-		closed:   make(chan struct{}),
-		msgLimit: rate.NewLimiter(msgRate, msgBurst),
-		limits:   make(map[string]*rate.Limiter),
+		PlayerID:    playerID,
+		Username:    username,
+		CharacterID: characterID,
+		conn:        conn,
+		log:         slog.With("player", playerID, "user", username, "character", characterID, "addr", conn.RemoteAddr().String()),
+		send:        make(chan []byte, sendQueueSize),
+		closed:      make(chan struct{}),
+		msgLimit:    rate.NewLimiter(msgRate, msgBurst),
+		limits:      make(map[string]*rate.Limiter),
 	}
 }
 
@@ -148,12 +151,12 @@ func (s *Session) CloseWith(code int, reason string) {
 
 // Upgrades to a websocket and runs the session until the connection ends.
 // onJoin runs before any message is read, onLeave after the connection is gone.
-func Serve(w http.ResponseWriter, r *http.Request, playerID int, username string, router *Router, onJoin, onLeave func(*Session)) error {
+func Serve(w http.ResponseWriter, r *http.Request, playerID int, username string, characterID int, router *Router, onJoin, onLeave func(*Session)) error {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return err
 	}
-	s := newSession(conn, playerID, username)
+	s := newSession(conn, playerID, username, characterID)
 	s.log.Info("connected")
 	Stats.Open.Add(1)
 	Stats.Total.Add(1)

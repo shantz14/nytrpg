@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"math/rand"
@@ -75,6 +76,46 @@ func login(baseURL, username, password string) (loginRes, error) {
 		return res, fmt.Errorf("server rejected credentials")
 	}
 	return res, nil
+}
+
+// The bot's character: the one in slot 0, made with a random class if needed
+func character(baseURL, jwt, username string) (int, error) {
+	do := func(method string, body any, out any) error {
+		var r io.Reader
+		if body != nil {
+			b, _ := json.Marshal(body)
+			r = bytes.NewReader(b)
+		}
+		req, _ := http.NewRequest(method, baseURL+"/characters", r)
+		req.Header.Set("Authorization", "Bearer "+jwt)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("%s /characters: %s", method, resp.Status)
+		}
+		return json.NewDecoder(resp.Body).Decode(out)
+	}
+
+	var list struct {
+		Slots   []*protocol.CharacterInfo `json:"slots"`
+		Classes []protocol.ClassInfo      `json:"classes"`
+	}
+	if err := do(http.MethodGet, nil, &list); err != nil {
+		return 0, err
+	}
+	if len(list.Slots) > 0 && list.Slots[0] != nil {
+		return list.Slots[0].ID, nil
+	}
+	if len(list.Classes) == 0 {
+		return 0, fmt.Errorf("server has no classes")
+	}
+	class := list.Classes[rand.Intn(len(list.Classes))].ID
+	var c protocol.CharacterInfo
+	err := do(http.MethodPost, map[string]any{"slot": 0, "name": username, "class": class}, &c)
+	return c.ID, err
 }
 
 func send(conn *websocket.Conn, t protocol.ClientMsg, data any) error {
@@ -151,7 +192,13 @@ func runBot(ctx context.Context, baseURL, wsBase, username, password string, sum
 	}
 	logf("[%s] logged in (id=%d)", username, res.Id)
 
-	conn, _, err := websocket.DefaultDialer.Dial(fmt.Sprintf("%s/ws?token=%s", wsBase, url.QueryEscape(res.Jwt)), nil)
+	charID, err := character(baseURL, res.Jwt, username)
+	if err != nil {
+		log.Printf("[%s] no character: %v", username, err)
+		return
+	}
+
+	conn, _, err := websocket.DefaultDialer.Dial(fmt.Sprintf("%s/ws?token=%s&character=%d", wsBase, url.QueryEscape(res.Jwt), charID), nil)
 	if err != nil {
 		log.Printf("[%s] ws connect failed: %v", username, err)
 		return

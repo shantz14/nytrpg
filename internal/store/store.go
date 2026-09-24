@@ -55,6 +55,44 @@ var migrations = []string{
 		UNIQUE (player_id, date)
 	);
 	`,
+	// Characters. Players choose one of up to 4 to play. The daily wordle is
+	// still once per account, but records which character played it. Deleted
+	// characters keep their row so the leaderboard keeps their results; only
+	// live ones hold a slot.
+	`
+	CREATE TABLE Character (
+		character_id INTEGER PRIMARY KEY AUTOINCREMENT,
+		player_id    INTEGER NOT NULL REFERENCES Player(player_id),
+		slot         INTEGER NOT NULL CHECK (slot BETWEEN 0 AND 3),
+		name         TEXT NOT NULL,
+		class        TEXT NOT NULL,
+		deleted      INTEGER NOT NULL DEFAULT 0
+	);
+	CREATE UNIQUE INDEX character_slot ON Character(player_id, slot) WHERE deleted = 0;
+	CREATE INDEX character_player ON Character(player_id);
+
+	-- Players who already played get a knight named after them to keep their results
+	INSERT INTO Character (player_id, slot, name, class)
+	SELECT player_id, 0, username, 'knight' FROM Player
+	WHERE player_id IN (SELECT player_id FROM Wordle);
+
+	CREATE TABLE Wordle2 (
+		wordle_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+		date         TEXT NOT NULL,
+		win          INTEGER NOT NULL DEFAULT 0,
+		seconds      REAL NOT NULL DEFAULT 0,
+		guessCount   INTEGER NOT NULL,
+		player_id    INTEGER NOT NULL REFERENCES Player(player_id),
+		character_id INTEGER NOT NULL REFERENCES Character(character_id),
+		UNIQUE (player_id, date)
+	);
+	INSERT INTO Wordle2 (wordle_id, date, win, seconds, guessCount, player_id, character_id)
+	SELECT w.wordle_id, w.date, w.win, w.seconds, w.guessCount, w.player_id, c.character_id
+	FROM Wordle w INNER JOIN Character c ON c.player_id = w.player_id;
+	DROP TABLE Wordle;
+	ALTER TABLE Wordle2 RENAME TO Wordle;
+	CREATE INDEX wordle_date ON Wordle(date, win);
+	`,
 }
 
 func (s *Store) migrate() error {

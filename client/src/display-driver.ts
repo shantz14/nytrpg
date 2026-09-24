@@ -82,7 +82,7 @@ export class DisplayDriver {
     private drawCharacter() {
         const m = this.middle;
         if (this.drawEntity(this.state.selfSprite, m.x, m.y, this.state.selfAnim)) {
-            this.drawLabels(this.state.selfName, this.state.selfId, m.x, m.y, "black");
+            this.drawLabels(this.state.selfName, this.state.selfLabel, this.state.selfId, m.x, m.y, "black");
         }
     }
 
@@ -96,7 +96,7 @@ export class DisplayDriver {
                 continue;
             }
             if (this.drawEntity(other.sprite, x, y, other.anim)) {
-                this.drawLabels(other.name, other.id, x, y, "white");
+                this.drawLabels(other.name, other.label, other.id, x, y, "white");
             }
         }
     }
@@ -127,18 +127,24 @@ export class DisplayDriver {
         return true;
     }
 
-    // Name above an entity, and its chat bubble above that
-    private drawLabels(name: string, id: number, x: number, y: number, chatColor: string) {
-        this.ctx.font = "26px serif";
+    // Username above an entity, "Character (Class)" under it, and its chat
+    // bubble above both
+    private drawLabels(name: string, label: string, id: number, x: number, y: number, chatColor: string) {
         this.ctx.fillStyle = "black";
-        this.ctx.fillText(name, x, y - 10);
+        this.ctx.font = "26px serif";
+        this.ctx.fillText(name, x, label ? y - 32 : y - 10);
+        if (label) {
+            this.ctx.font = "20px serif";
+            this.ctx.fillText(label, x, y - 10);
+            this.ctx.font = "26px serif";
+        }
 
         const chat = this.chats.get(id);
         if (chat && Date.now() > chat.exp) {
             this.chats.delete(id);
         } else if (chat) {
             this.ctx.fillStyle = chatColor;
-            this.ctx.fillText(chat.chat.msg, x, y - 35);
+            this.ctx.fillText(chat.chat.msg, x, label ? y - 60 : y - 35);
             this.ctx.fillStyle = "black";
         }
     }

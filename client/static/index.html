@@ -54,6 +54,54 @@
             </div>
         </template>
 
+        <template id="tpl-characters">
+            <div id="charactersPopup" class="overlay overlay-solid">
+                <div class="panel chars-panel">
+                    <header class="panel-head">
+                        <h1 class="panel-title">Choose a character</h1>
+                        <span id="charsUser" class="chars-user"></span>
+                    </header>
+                    <p id="charsError" class="form-error"></p>
+                    <div id="charSlots" class="char-slots"></div>
+                    <button id="charsLogout" class="btn btn-ghost btn-wide">Log out</button>
+                </div>
+            </div>
+        </template>
+
+        <template id="tpl-char-create">
+            <div id="charCreatePopup" class="overlay overlay-top">
+                <div class="panel char-create-panel">
+                    <header class="panel-head">
+                        <h1 class="panel-title">New character</h1>
+                    </header>
+                    <p id="charError" class="form-error"></p>
+                    <label for="charName" class="field-label">Name</label>
+                    <input type="text" id="charName" class="field-input" maxlength="20" autocomplete="off" spellcheck="false" placeholder="Name your character">
+                    <p class="field-label">Class</p>
+                    <div id="classChoices" class="class-choices"></div>
+                    <div class="btn-row">
+                        <button id="cancelCreate" class="btn btn-ghost">Cancel</button>
+                        <button id="submitCreate" class="btn btn-primary">Create</button>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <template id="tpl-char-delete">
+            <div id="charDeletePopup" class="overlay overlay-top">
+                <div class="panel result-panel">
+                    <header class="panel-head">
+                        <h1 class="panel-title">Delete character</h1>
+                    </header>
+                    <p class="result-text">Delete <strong id="deleteName"></strong>? This can't be undone.</p>
+                    <div class="btn-row">
+                        <button id="cancelDelete" class="btn btn-ghost">Cancel</button>
+                        <button id="confirmDelete" class="btn btn-danger">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </template>
+
         <template id="tpl-wordle-game">
             <div id="wordlePopup" class="overlay">
                 <div class="panel wordle-panel">
@@ -69,6 +117,8 @@
                     </div>
                     <p class="hint">Enter submits &middot; Backspace clears the row</p>
                     <button id="submit" class="btn btn-primary btn-wide">Submit</button>
+                    <p class="section-label ability-label">Abilities</p>
+                    <div class="ability-bar" id="abilityBar"></div>
                 </div>
             </div>
         </template>

@@ -2,6 +2,7 @@ package game
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -91,7 +92,7 @@ func (tw *testWorld) advance(d time.Duration) { tw.clock = tw.clock.Add(d) }
 // Joins a player and puts them at pos
 func (tw *testWorld) join(id int, pos protocol.Vec) (*fakeClient, *player) {
 	c := &fakeClient{}
-	tw.Join(c, id, "p")
+	tw.Join(c, id, "p", protocol.CharacterInfo{ID: id, Name: fmt.Sprintf("char%d", id), Class: "wizard"})
 	tw.flush()
 	p := tw.players[c]
 	p.ent.Pos = pos
@@ -103,7 +104,7 @@ func (tw *testWorld) join(id int, pos protocol.Vec) (*fakeClient, *player) {
 func TestWelcome(t *testing.T) {
 	tw := newTestWorld()
 	c := &fakeClient{}
-	tw.Join(c, 7, "alice")
+	tw.Join(c, 7, "alice", protocol.CharacterInfo{ID: 3, Slot: 1, Name: "Merlin", Class: "wizard"})
 	tw.flush()
 	raw := c.take(protocol.ServerWelcome)
 	if len(raw) != 1 {
@@ -117,6 +118,12 @@ func TestWelcome(t *testing.T) {
 	if d := w.Pos.X - 500; d < -spawnSpread || d > spawnSpread {
 		t.Fatalf("spawned too far from spawn point: %+v", w.Pos)
 	}
+	if w.Character != (protocol.CharacterInfo{ID: 3, Slot: 1, Name: "Merlin", Class: "wizard"}) {
+		t.Fatalf("welcome should say which character you are: %+v", w.Character)
+	}
+	if len(w.Classes) != 4 {
+		t.Fatalf("welcome should list every class: %+v", w.Classes)
+	}
 }
 
 func TestSpawnMoveIdleDespawn(t *testing.T) {
@@ -128,6 +135,9 @@ func TestSpawnMoveIdleDespawn(t *testing.T) {
 	ua := a.updates(t)
 	if len(ua) != 1 || len(ua[0].Spawn) != 1 || ua[0].Spawn[0].ID != pb.ent.ID {
 		t.Fatalf("a should see b spawn once: %+v", ua)
+	}
+	if s := ua[0].Spawn[0]; s.Name != "p" || s.Char != "char2" || s.Class != "wizard" {
+		t.Fatalf("spawn should carry the username, character name and class: %+v", s)
 	}
 	ub := b.updates(t)
 	if len(ub) != 1 || len(ub[0].Spawn) != 1 || ub[0].Spawn[0].ID != pa.ent.ID {
@@ -353,7 +363,7 @@ func TestInRange(t *testing.T) {
 	go w.Run(ctx)
 
 	c := &fakeClient{}
-	w.Join(c, 1, "p")
+	w.Join(c, 1, "p", protocol.CharacterInfo{ID: 1, Name: "c", Class: "knight"})
 	at := func(x, y int32) {
 		w.Query(func(w *World) {
 			p := w.players[c]

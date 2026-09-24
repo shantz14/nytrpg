@@ -79,9 +79,37 @@ let browser;
 let names = 0;
 const errors = [];
 
-// A logged in player in their own browser context. Tracks the player's
-// position and every websocket frame, decoded.
-async function player() {
+// A player in the world, in their own browser context, playing a new character
+// in slot 0. Tracks the player's position and every websocket frame, decoded.
+async function player({ char, cls = "knight" } = {}) {
+    const page = await loggedIn();
+    await createCharacter(page, 0, char ?? page.name, cls);
+    await play(page, 0);
+    await waitFor(() => page.pos, "welcome");
+    return page;
+}
+
+// Makes a character from the character screen
+async function createCharacter(page, slot, name, cls) {
+    const card = `.char-slot[data-slot="${slot}"]`;
+    await page.waitForSelector(`${card} .char-create`, { timeout: 5000 });
+    await page.click(`${card} .char-create`);
+    await page.waitForSelector("#charName");
+    await page.type("#charName", name);
+    await page.click(`.class-choice.class-${cls}`);
+    await page.click("#submitCreate");
+    await page.waitForSelector(`${card}.filled`, { timeout: 5000 });
+}
+
+// Plays the character in a slot, from the character screen
+async function play(page, slot) {
+    await page.waitForSelector(`.char-slot[data-slot="${slot}"] .char-play`, { timeout: 5000 });
+    await page.click(`.char-slot[data-slot="${slot}"] .char-play`);
+    await page.waitForFunction(() => !document.getElementById("charactersPopup"), { timeout: 5000 });
+}
+
+// A new account, logged in, on the character screen
+async function loggedIn() {
     const name = `p${Date.now() % 100000}_${names++}`;
     await fetch(base() + "/signup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: name, password: "pw" }) });
 
@@ -112,7 +140,7 @@ async function player() {
     await page.type("#psw", "pw");
     await page.click("#submitLogin");
     await page.waitForFunction(() => !document.getElementById("loginPopup"), { timeout: 5000 });
-    await waitFor(() => page.pos, "welcome");
+    await page.waitForSelector("#charactersPopup", { timeout: 5000 });
     page.name = name;
     return page;
 }
@@ -163,7 +191,18 @@ function recordCharacterDraws() {
         }
         return drawImage.call(this, img, ...args);
     };
+    // And every piece of text, for names and labels
+    window.__texts = [];
+    const fillText = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...rest) {
+        window.__texts.push({ text, x, y, font: this.font, t: performance.now() });
+        if (window.__texts.length > 5000) window.__texts.splice(0, 2500);
+        return fillText.call(this, text, x, y, ...rest);
+    };
 }
+
+// Text drawn on the canvas since page time t
+const texts = (page, t) => page.evaluate((t) => window.__texts.filter((d) => d.t >= t), t);
 
 // Character draws since page time t. self: our own player (drawn mid-screen) or everyone else.
 async function draws(page, t, self) {
@@ -198,6 +237,9 @@ test("wordle: play, reload, guesses come back; popups block the world", async ()
     await p.mouse.click(...toScreen(p, BOARD.x, BOARD.y));
     await p.waitForSelector("#letter-0-0", { timeout: 3000 });
     assert((await p.$$(".wordContainer")).length === 5, "5 rows");
+    // 5 ability slots, all empty until classes get abilities
+    const slots = await p.$$eval("#abilityBar .ability-slot", (els) => els.map((e) => ({ disabled: e.disabled, empty: e.classList.contains("empty") })));
+    assert(slots.length === 5 && slots.every((s) => s.disabled && s.empty), `want 5 empty ability slots: ${JSON.stringify(slots)}`);
 
     // Typed and submitted immediately, usually before the server's reply to opening
     // arrives. That used to reset the row counter and lose the guess.
@@ -212,8 +254,10 @@ test("wordle: play, reload, guesses come back; popups block the world", async ()
     await sleep(200);
     assert((await p.$$("#wordlePopup")).length === 1, "second wordle opened through the popup");
 
+    // Reloading goes back to the character screen, the same character resumes
     p.pos = null;
     await p.reload({ waitUntil: "networkidle0" });
+    await play(p, 0);
     await waitFor(() => p.pos, "welcome after reload");
     await p.mouse.click(...toScreen(p, BOARD.x, BOARD.y));
     await p.waitForSelector("#letter-0-0", { timeout: 3000 });
@@ -286,6 +330,65 @@ test("character walks with the sprite sheet, flips left, and faces the camera wh
 
     await watcher.browserContext().close();
     await p.browserContext().close();
+});
+
+test("character screen: 4 slots, create with a class, delete asks first, play", async () => {
+    const p = await loggedIn();
+    const slotState = () => p.$$eval(".char-slot", (els) => els.map((e) => e.classList.contains("filled") ? e.querySelector(".char-name").textContent : null));
+    await waitFor(async () => (await slotState()).length === 4, "4 slots");
+    assert((await slotState()).every((s) => s === null), "a new account has 4 empty slots");
+    assert(await p.$eval("#charsUser", (e) => e.textContent) === p.name, "shows who's logged in");
+
+    // The create form offers all 4 classes, and refuses a blank name
+    await p.click('.char-slot[data-slot="2"] .char-create');
+    await p.waitForSelector("#charName");
+    const classes = await p.$$eval(".class-choice .class-name", (els) => els.map((e) => e.textContent));
+    assert(JSON.stringify(classes) === JSON.stringify(["Knight", "Wizard", "Rogue", "Cleric"]), `classes: ${classes}`);
+    await p.click("#submitCreate");
+    await waitFor(async () => (await p.$eval("#charError", (e) => e.textContent)).length > 0, "blank name error");
+    await p.click("#cancelCreate");
+    assert(!(await p.$("#charCreatePopup")), "cancel closes the form");
+
+    await createCharacter(p, 2, "Merlin", "wizard");
+    await createCharacter(p, 0, "Arthur", "knight");
+    let slots = await slotState();
+    assert(slots[0] === "Arthur" && slots[1] === null && slots[2] === "Merlin", `slots: ${slots}`);
+    assert(await p.$eval('.char-slot[data-slot="2"] .char-class', (e) => e.textContent) === "Wizard", "class shown on the card");
+
+    // Delete asks first; cancel keeps the character
+    await p.click('.char-slot[data-slot="0"] .char-delete');
+    await p.waitForSelector("#charDeletePopup");
+    assert(await p.$eval("#deleteName", (e) => e.textContent) === "Arthur", "confirm names the character");
+    await p.click("#cancelDelete");
+    assert((await slotState())[0] === "Arthur", "cancel kept the character");
+    await p.click('.char-slot[data-slot="0"] .char-delete');
+    await p.waitForSelector("#confirmDelete");
+    await p.click("#confirmDelete");
+    await waitFor(async () => (await slotState())[0] === null, "slot 0 freed");
+
+    // Play the wizard: into the world as Merlin
+    await play(p, 2);
+    const welcome = await waitFor(() => received(p, 1)[0]?.d, "welcome");
+    assert(welcome.character.name === "Merlin" && welcome.character.class === "wizard", `welcome: ${JSON.stringify(welcome.character)}`);
+    await p.browserContext().close();
+});
+
+test("labels: username over 'Name (Class)', for yourself and others", async () => {
+    const a = await player({ char: "Merlin", cls: "wizard" });
+    const b = await player({ char: "Tuck", cls: "cleric" });
+    const labelsOf = async (page, name, label) => {
+        const t = await pageNow(page);
+        await sleep(150);
+        const drawn = await texts(page, t);
+        const top = drawn.find((d) => d.text === name);
+        const under = drawn.find((d) => d.text === label && d.x === top?.x);
+        return top && under && under.y > top.y;
+    };
+    await waitFor(() => labelsOf(a, a.name, "Merlin (Wizard)"), "a's own labels");
+    await waitFor(() => labelsOf(a, b.name, "Tuck (Cleric)"), "a sees b's labels");
+    await waitFor(() => labelsOf(b, a.name, "Merlin (Wizard)"), "b sees a's labels");
+    await a.browserContext().close();
+    await b.browserContext().close();
 });
 
 test("reconnects after the server restarts", async () => {
