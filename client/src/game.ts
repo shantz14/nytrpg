@@ -8,6 +8,7 @@ import { CharacterInfo, ChatMsg, ChatReq, ClientChat, ClientMove, ClientMsg, Ser
 import { Connection } from "./net.js";
 import { UserData, logout } from "./login.js";
 import { ChatLog } from "./chat-log.js";
+import { mountHud } from "./hud.js";
 
 const SERVER_URL = "/ws";
 // Position updates per second, matches the server tick rate
@@ -51,6 +52,13 @@ export class Game {
         this.handleMsgs();
         this.handleChats();
         this.inputDriver.onTooFar = () => this.toast("Walk closer to use that");
+        mountHud({
+            leaderboard: () => new Leaderboard(this.userData, this.character.id, this.state.classes, this.inputDriver).run(),
+            logout: () => {
+                this.conn.close();
+                logout();
+            },
+        }, this.inputDriver);
         this.conn.onDisconnect = () => this.showReconnecting(true);
         this.conn.onReconnect = () => this.showReconnecting(false);
         this.conn.onReplaced = () => {
@@ -148,18 +156,13 @@ export class Game {
         return this.conn.send(type, data);
     }
 
-    // What clicking each kind of interactable does
+    // What clicking each kind of interactable in the world does
     private actions: {[action: string]: () => void} = {
         wordle: () => {
             const wordle = new Wordle(this);
             if (wordle.run()) {
                 this.wordle = wordle;
             }
-        },
-        leaderboard: () => new Leaderboard(this.userData, this.character.id, this.state.classes, this.inputDriver).run(),
-        logout: () => {
-            this.conn.close();
-            logout();
         },
     };
 

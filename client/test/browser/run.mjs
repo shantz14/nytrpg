@@ -213,7 +213,8 @@ const pageNow = (page) => page.evaluate(() => performance.now());
 
 // World positions from internal/game/maps/town.json
 const BOARD = { x: 750 + 64, y: 500 + 64 };
-const LEADERBOARD = { x: 200 + 64, y: 200 + 64 };
+// Out of the board's range, where the leaderboard used to stand
+const FAR = { x: 200 + 64, y: 200 + 64 };
 const SPEED = 450;
 
 // ---- tests ----
@@ -315,8 +316,8 @@ test("wordle: play, reload, guesses come back; popups block the world", async ()
 
 test("walking is never corrected; far things say walk closer; leaderboard opens", async () => {
     const p = await player();
-    await hold(p, "a", Math.max(0, (p.pos.x - LEADERBOARD.x) / SPEED * 1000 - 300));
-    await hold(p, "w", Math.max(0, (p.pos.y - LEADERBOARD.y) / SPEED * 1000 - 300));
+    await hold(p, "a", Math.max(0, (p.pos.x - FAR.x) / SPEED * 1000 - 300));
+    await hold(p, "w", Math.max(0, (p.pos.y - FAR.y) / SPEED * 1000 - 300));
     await sleep(300);
     assert(received(p, 6).length === 0, "the server corrected normal walking");
 
@@ -325,10 +326,31 @@ test("walking is never corrected; far things say walk closer; leaderboard opens"
     await waitFor(() => visible(p, "#toast"), "walk closer hint");
     assert(!(await p.$("#wordlePopup")), "wordle opened from too far away");
 
-    await p.mouse.click(...toScreen(p, LEADERBOARD.x, LEADERBOARD.y));
+    // The leaderboard is on the HUD, usable from anywhere
+    await p.click("#hudLeaderboard");
     await p.waitForSelector("#leaderboardPopup", { timeout: 3000 });
     await waitFor(async () => (await p.$$("#lbBody tr")).length > 0, "leaderboard rows");
     assert(await p.$eval("#nextDay", (b) => b.disabled), "next day is disabled on today");
+    await p.browserContext().close();
+});
+
+test("HUD buttons stay put on screen while walking, and log out works", async () => {
+    const p = await player();
+    const box = () => p.$eval("#hudLeaderboard", (e) => { const r = e.getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; });
+    assert(await visible(p, "#hud"), "HUD is shown in game");
+    const before = await box();
+    const start = { ...p.pos };
+    await hold(p, "d", 400);
+    await hold(p, "s", 400);
+    await waitFor(() => p.pos.x > start.x && p.pos.y > start.y, "player to move");
+    assert(JSON.stringify(await box()) === JSON.stringify(before), "HUD moved with the camera");
+    // Top right corner
+    assert(before[0] > VIEW.width / 2 && before[1] < 60, `HUD not in the top right: ${before}`);
+
+    await p.click("#hudLogout");
+    await p.waitForSelector("#loginPopup", { timeout: 5000 });
+    assert(!(await visible(p, "#hud")), "HUD hidden on the login screen");
+    assert(await p.evaluate(() => !localStorage.getItem("jwt")), "token cleared");
     await p.browserContext().close();
 });
 

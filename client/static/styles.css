@@ -875,6 +875,69 @@ canvas {
     overflow: hidden;
 }
 
+/* ---- hud ---- */
+
+/* Fixed to the screen, under every popup */
+#hud {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    gap: 6px;
+    z-index: 1;
+}
+
+#hud[hidden] {
+    display: none;
+}
+
+.hud-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font-family: var(--font);
+    font-size: 0.8rem;
+    letter-spacing: 1px;
+    color: var(--text);
+    background-color: rgba(13, 13, 13, 0.8);
+    border: 1px solid var(--line-strong);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+    transition: background-color 120ms, border-color 120ms, color 120ms;
+}
+
+.hud-btn:hover {
+    color: var(--accent);
+    background-color: rgba(22, 22, 22, 0.92);
+    border-color: var(--accent-line);
+}
+
+.hud-btn:focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.hud-btn svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+@media (max-width: 480px) {
+    .hud-label {
+        display: none;
+    }
+
+    .hud-btn {
+        padding: 8px;
+    }
+}
+
 /* ---- chat and banners ---- */
 
 #chat-container {

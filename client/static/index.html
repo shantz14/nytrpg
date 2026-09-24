@@ -19,6 +19,16 @@
                 <div id="chat-log" role="log" aria-live="polite" aria-label="Chat"></div>
                 <input type="text" id="chatbox" name="chatbox" placeholder="Press / or Enter to chat" maxlength="200" autocomplete="off" spellcheck="false" aria-label="Chat message">
             </div>
+            <div id="hud" hidden>
+                <button type="button" id="hudLeaderboard" class="hud-btn" title="Leaderboard" aria-label="Leaderboard">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3"/></svg>
+                    <span class="hud-label">Leaderboard</span>
+                </button>
+                <button type="button" id="hudLogout" class="hud-btn" title="Log out" aria-label="Log out">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+                    <span class="hud-label">Log out</span>
+                </button>
+            </div>
             <div id="reconnecting">Connection lost, reconnecting&hellip;</div>
             <div id="toast"></div>
         </div>
