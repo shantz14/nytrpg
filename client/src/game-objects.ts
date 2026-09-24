@@ -122,12 +122,15 @@ export class Clickable {
     action: Function;
     // How close the player must be, px from the edge. 0 = anywhere.
     range: number;
+    // Sign drawn above it. Empty = none.
+    label: string;
 
-    constructor(name: string, pos: Vector2D, height: number, width: number, action: Function, range = 0) {
+    constructor(name: string, pos: Vector2D, height: number, width: number, action: Function, range = 0, label = "") {
         this.name = name;
         this.rect = new Rect(pos, height, width);
         this.action = action;
         this.range = range;
+        this.label = label;
     }
 
     // Same check as the server: distance from a world point to the rect's edge

@@ -64,6 +64,9 @@ func TestTownMapLoads(t *testing.T) {
 	if d := distToInteractable(m.Spawn, it); d+spawnSpread*1.5 > float64(it.Range) {
 		t.Fatalf("spawn is %.0fpx from the board, range is %d", d, it.Range)
 	}
+	if it.Label != "Daily Wordle" {
+		t.Fatalf("wordle board should be signed Daily Wordle, got %q", it.Label)
+	}
 	if _, err := LoadMap("nope"); err == nil {
 		t.Fatal("missing map loaded")
 	}

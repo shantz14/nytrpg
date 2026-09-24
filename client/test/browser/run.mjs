@@ -461,6 +461,20 @@ test("labels: username over the character name and class, in the class's font", 
     await b.browserContext().close();
 });
 
+test("the wordle board has a Daily Wordle sign above it", async () => {
+    const a = await player();
+    const [bx, by] = toScreen(a, BOARD.x, BOARD.y);
+    const signed = async () => {
+        const t = await pageNow(a);
+        await sleep(150);
+        const drawn = await texts(a, t);
+        // Centered on the board, above its top edge (the board is 128px tall)
+        return drawn.some((d) => d.text === "DAILY WORDLE" && Math.abs(d.x - bx) < 1 && d.y < by - 64);
+    };
+    await waitFor(signed, "the Daily Wordle sign");
+    await a.browserContext().close();
+});
+
 test("reconnects after the server restarts", async () => {
     const p = await player();
     const welcomes = () => received(p, 1).length;

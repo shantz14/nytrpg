@@ -19,6 +19,10 @@ const BUBBLE_MAX_W = 220;
 const BUBBLE_LINE_H = 17;
 // Entities this far off screen are still drawn, so big sprites don't pop in
 const CULL_MARGIN = 200;
+// Signs over interactables: Wordle's dark tile with its green edge, so they
+// stand out from the grass and trees
+const SIGN_FILL = "rgba(18, 18, 19, 0.92)";
+const SIGN_EDGE = "#6aaa64";
 
 export class DisplayDriver {
     ctx: CanvasRenderingContext2D;
@@ -75,6 +79,7 @@ export class DisplayDriver {
         const labels: Label[] = [];
         this.drawOtherChars(labels);
         this.drawCharacter(labels);
+        this.drawSigns();
         for (const l of labels) {
             this.drawLabels(l);
         }
@@ -94,6 +99,55 @@ export class DisplayDriver {
             if (sprite && this.onScreen(pos.x, pos.y)) {
                 this.ctx.drawImage(sprite, pos.x, pos.y);
             }
+        }
+    }
+
+    // A plaque centered over each labeled interactable, pointing down at it
+    private drawSigns() {
+        const ctx = this.ctx;
+        for (const name in this.state.clickables) {
+            const c = this.state.clickables[name];
+            const pos = c.rect.tl;
+            if (!c.label || !this.onScreen(pos.x, pos.y)) {
+                continue;
+            }
+            const title = c.label.toUpperCase();
+            const titleFont = `700 20px ${UI_FONT}`;
+            ctx.save();
+            ctx.font = titleFont;
+            const w = ctx.measureText(title).width + 32;
+            const h = 50, tail = 8, r = 8;
+            const cx = pos.x + c.rect.width / 2;
+            const bottom = pos.y - 6;
+            const x0 = cx - w / 2, x1 = cx + w / 2;
+            const y1 = bottom - tail, y0 = y1 - h;
+
+            ctx.beginPath();
+            ctx.moveTo(x0 + r, y0);
+            ctx.arcTo(x1, y0, x1, y1, r);
+            ctx.arcTo(x1, y1, x0, y1, r);
+            ctx.lineTo(cx + tail, y1);
+            ctx.lineTo(cx, bottom);
+            ctx.lineTo(cx - tail, y1);
+            ctx.arcTo(x0, y1, x0, y0, r);
+            ctx.arcTo(x0, y0, x1, y0, r);
+            ctx.closePath();
+            ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetY = 2;
+            ctx.fillStyle = SIGN_FILL;
+            ctx.fill();
+            ctx.shadowColor = "transparent";
+            ctx.strokeStyle = SIGN_EDGE;
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            ctx.textAlign = "center";
+            ctx.textBaseline = "alphabetic";
+            ctx.lineJoin = "round";
+            this.outlined(title, cx, y0 + 26, titleFont, TEXT_STRONG);
+            this.outlined("click to play", cx, y0 + 42, `500 12px ${UI_FONT}`, "#e6f2e4");
+            ctx.restore();
         }
     }
 

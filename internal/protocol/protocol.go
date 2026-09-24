@@ -152,6 +152,8 @@ type Interactable struct {
 	Action string `json:"action" msgpack:"action"`
 	// How close a player must be to use it, px from its edge. 0 = anywhere.
 	Range int32 `json:"range" msgpack:"range"`
+	// Sign drawn above it, e.g. "Daily Wordle". Empty = none.
+	Label string `json:"label,omitempty" msgpack:"label,omitempty"`
 }
 
 // Changes to the entities near you since the last update. Only sent when

@@ -89,6 +89,8 @@ export interface Interactable {
     action: string;
     // How close a player must be to use it, px from its edge. 0 = anywhere.
     range: number;
+    // Sign drawn above it, e.g. "Daily Wordle". Empty = none.
+    label?: string;
 }
 
 // Changes to the entities near you since the last update. Only sent when

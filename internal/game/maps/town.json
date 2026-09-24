@@ -4,6 +4,6 @@
     "background": "background.jpg",
     "spawn": { "x": 1000, "y": 650 },
     "interactables": [
-        { "id": "wordle", "sprite": "GameBoard.png", "pos": { "x": 750, "y": 500 }, "w": 128, "h": 128, "action": "wordle", "range": 300 }
+        { "id": "wordle", "sprite": "GameBoard.png", "pos": { "x": 750, "y": 500 }, "w": 128, "h": 128, "action": "wordle", "range": 300, "label": "Daily Wordle" }
     ]
 }

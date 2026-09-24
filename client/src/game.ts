@@ -175,7 +175,7 @@ export class Game {
                 console.warn("Unknown interactable action", it.action);
                 continue;
             }
-            this.state.clickables[it.id] = new Clickable(it.id, new Vector2D(it.pos.x, it.pos.y), it.h, it.w, action, it.range);
+            this.state.clickables[it.id] = new Clickable(it.id, new Vector2D(it.pos.x, it.pos.y), it.h, it.w, action, it.range, it.label);
             this.displayDriver.loadImage(it.id, it.sprite);
         }
     }
