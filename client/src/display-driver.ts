@@ -10,9 +10,9 @@ import { wrapText } from "./chat-log.js";
 const CHAT_MS = 7000;
 const FADE_MS = 500;
 // Matches the CSS tokens in styles.css
-const UI_FONT = `"IBM Plex Mono", monospace`;
-const TEXT_STRONG = "#f2f2f2";
-const TEXT_MUTED = "#cfcfcf";
+const UI_FONT = `"Alegreya", Georgia, serif`;
+const TEXT_STRONG = "#f0eee9";
+const TEXT_MUTED = "#d4d1cb";
 // Dark edge around labels so they read on any background
 const OUTLINE = "rgba(0, 0, 0, 0.8)";
 const BUBBLE_MAX_W = 220;
@@ -160,7 +160,7 @@ export class DisplayDriver {
         let y = l.top - 8;
 
         if (l.char) {
-            const nameFont = `600 13px ${UI_FONT}`;
+            const nameFont = `700 14px ${UI_FONT}`;
             const clsFont = classFont(l.cls, 17);
             const clsName = className(this.state.classes, l.cls);
             ctx.font = nameFont;
@@ -174,11 +174,11 @@ export class DisplayDriver {
             this.outlined(clsName, left + nameW + gap, y, clsFont, classStyle(l.cls).color);
             y -= 17;
             ctx.textAlign = "center";
-            this.outlined(l.name, l.cx, y, `500 12px ${UI_FONT}`, TEXT_MUTED);
+            this.outlined(l.name, l.cx, y, `500 13px ${UI_FONT}`, TEXT_MUTED);
             y -= 13;
         } else {
             ctx.textAlign = "center";
-            this.outlined(l.name, l.cx, y, `600 13px ${UI_FONT}`, TEXT_STRONG);
+            this.outlined(l.name, l.cx, y, `700 14px ${UI_FONT}`, TEXT_STRONG);
             y -= 14;
         }
 
@@ -206,7 +206,7 @@ export class DisplayDriver {
     // A speech bubble whose tail points down at (cx, bottom)
     private drawBubble(text: string, cx: number, bottom: number, alpha: number) {
         const ctx = this.ctx;
-        ctx.font = `400 13px ${UI_FONT}`;
+        ctx.font = `400 14px ${UI_FONT}`;
         const lines = wrapText(text, BUBBLE_MAX_W, (s) => ctx.measureText(s).width);
         const padX = 10, padY = 7, tail = 6, r = 6;
         const w = Math.max(...lines.map((s) => ctx.measureText(s).width)) + padX * 2;
@@ -225,9 +225,9 @@ export class DisplayDriver {
         ctx.arcTo(x0, y1, x0, y0, r);
         ctx.arcTo(x0, y0, x1, y0, r);
         ctx.closePath();
-        ctx.fillStyle = "rgba(22, 22, 22, 0.92)";
+        ctx.fillStyle = "rgba(28, 27, 26, 0.93)";
         ctx.fill();
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
+        ctx.strokeStyle = "rgba(205, 198, 184, 0.35)";
         ctx.lineWidth = 1;
         ctx.stroke();
 

@@ -16,8 +16,8 @@ test("every server class has a style", () => {
 });
 
 test("unknown classes fall back to the UI font", () => {
-    assert.equal(classStyle("bard").font, "IBM Plex Mono");
-    assert.equal(classFont("bard", 12), `600 12px "IBM Plex Mono", serif`);
+    assert.equal(classStyle("bard").font, "Alegreya");
+    assert.equal(classFont("bard", 12), `700 12px "Alegreya", serif`);
     assert.equal(classFont("wizard", 16), `400 16px "Uncial Antiqua", serif`);
 });
 

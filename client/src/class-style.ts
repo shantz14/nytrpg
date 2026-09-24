@@ -20,7 +20,7 @@ export const CLASS_STYLE: Record<string, ClassStyle> = {
 };
 
 // Classes the client doesn't know yet look like the rest of the UI
-const DEFAULT_STYLE: ClassStyle = { color: "#d4d4d4", font: "IBM Plex Mono", weight: 600 };
+const DEFAULT_STYLE: ClassStyle = { color: "#d8d5cf", font: "Alegreya", weight: 700 };
 
 export function classStyle(id: string): ClassStyle {
     return CLASS_STYLE[id] ?? DEFAULT_STYLE;

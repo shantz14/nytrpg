@@ -1,22 +1,23 @@
 :root {
-    --font: 'IBM Plex Mono', 'Courier New', monospace;
+    --font: 'Alegreya', Georgia, serif;
+    --font-display: 'Cinzel', Georgia, serif;
 
-    --bg: #1a1919;
-    --overlay: rgba(8, 9, 11, 0.72);
-    --panel: #161616;
-    --panel-sunk: #0d0d0d;
-    --panel-raised: #1d1d1f;
-    --line: rgba(255, 255, 255, 0.08);
-    --line-strong: rgba(255, 255, 255, 0.2);
-    --text: #d4d4d4;
-    --text-strong: #f2f2f2;
-    --muted: #8c8c8c;
+    --bg: #151514;
+    --overlay: rgba(8, 8, 8, 0.7);
+    --panel: #1c1c1b;
+    --panel-sunk: #121211;
+    --panel-raised: #242423;
+    --line: rgba(205, 198, 184, 0.14);
+    --line-strong: rgba(205, 198, 184, 0.32);
+    --text: #d8d5cf;
+    --text-strong: #f0eee9;
+    --muted: #95918a;
 
-    --accent: #a5f3fc;
-    --accent-bg: rgba(165, 243, 252, 0.08);
-    --accent-bg-hover: rgba(165, 243, 252, 0.15);
-    --accent-line: rgba(165, 243, 252, 0.28);
-    --danger: #e06060;
+    --accent: #c8b480;
+    --accent-bg: rgba(200, 180, 128, 0.09);
+    --accent-bg-hover: rgba(200, 180, 128, 0.17);
+    --accent-line: rgba(200, 180, 128, 0.4);
+    --danger: #cc6c62;
 
     --tile-green: #538d4e;
     --tile-yellow: #b59f3b;
@@ -80,13 +81,14 @@ canvas {
 /* Layers shown on top of another popup */
 .overlay-top {
     z-index: 3;
-    background-color: rgba(8, 9, 11, 0.55);
+    background-color: rgba(8, 8, 8, 0.5);
 }
 
 /* Before the game starts there's nothing to see through */
 .overlay-solid {
     background:
-        radial-gradient(ellipse at 50% 30%, rgba(165, 243, 252, 0.06), transparent 60%),
+        radial-gradient(ellipse at 50% 30%, rgba(200, 180, 128, 0.09), transparent 60%),
+        radial-gradient(ellipse at 50% 120%, rgba(0, 0, 0, 0.6), transparent 60%),
         var(--bg);
     backdrop-filter: none;
 }
@@ -102,9 +104,17 @@ canvas {
     width: min(100%, 480px);
     max-height: 100%;
     overflow-y: auto;
-    background-color: var(--panel);
-    border: 1px solid var(--line);
-    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.4);
+    background:
+        linear-gradient(180deg, rgba(200, 180, 128, 0.04), transparent 120px),
+        var(--panel);
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    /* A faint second rule inset from the border, a plain double frame */
+    box-shadow:
+        inset 0 0 0 3px var(--panel),
+        inset 0 0 0 4px var(--line),
+        0 24px 64px rgba(0, 0, 0, 0.6),
+        0 0 0 1px rgba(0, 0, 0, 0.5);
     padding: 20px 24px 24px;
     animation: rise 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
@@ -115,14 +125,16 @@ canvas {
     gap: 12px;
     padding-bottom: 14px;
     margin-bottom: 18px;
-    border-bottom: 1px solid var(--line);
+    /* A rule that fades out at both ends */
+    border-bottom: 1px solid;
+    border-image: linear-gradient(90deg, transparent, var(--line-strong) 20%, var(--line-strong) 80%, transparent) 1;
 }
 
 .panel-title {
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 3px;
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
     color: var(--accent);
     margin-right: auto;
 }
@@ -131,6 +143,7 @@ canvas {
 
 .btn, .icon-btn {
     font-family: var(--font);
+    border-radius: 2px;
     color: var(--text);
     background-color: transparent;
     border: 1px solid var(--line);
@@ -140,7 +153,9 @@ canvas {
 
 .btn {
     padding: 10px 16px;
-    font-size: 0.85rem;
+    font-family: var(--font-display);
+    font-size: 0.8rem;
+    font-weight: 700;
     letter-spacing: 1px;
 }
 
@@ -150,18 +165,18 @@ canvas {
 }
 
 .btn-primary {
-    background-color: var(--accent-bg);
+    background: linear-gradient(180deg, rgba(200, 180, 128, 0.16), rgba(200, 180, 128, 0.06));
     color: var(--accent);
     border-color: var(--accent-line);
-    font-weight: 600;
 }
 
 .btn-primary:hover:not(:disabled) {
-    background-color: var(--accent-bg-hover);
+    background: linear-gradient(180deg, rgba(200, 180, 128, 0.26), rgba(200, 180, 128, 0.12));
+    color: #ddcb9c;
 }
 
 .btn-ghost {
-    color: #aaaaaa;
+    color: #aba79f;
 }
 
 .btn-ghost:hover:not(:disabled) {
@@ -188,7 +203,7 @@ canvas {
 .icon-btn:hover:not(:disabled) {
     color: var(--text-strong);
     border-color: var(--line-strong);
-    background-color: rgba(255, 255, 255, 0.04);
+    background-color: var(--accent-bg);
 }
 
 .btn:disabled, .icon-btn:disabled {
@@ -205,17 +220,25 @@ canvas {
 }
 
 .auth-title {
+    font-family: var(--font-display);
     color: var(--accent);
-    font-size: 1.75rem;
-    letter-spacing: 3px;
+    font-size: 2.2rem;
+    letter-spacing: 4px;
     text-align: center;
+    text-shadow: 0 2px 12px rgba(200, 180, 128, 0.25);
 }
 
 .auth-sub {
     color: var(--muted);
-    font-size: 0.75rem;
+    font-style: italic;
+    font-size: 0.95rem;
     text-align: center;
     margin-bottom: 16px;
+}
+
+/* Login has no subtitle, so the title keeps the gap itself */
+.auth-title + #errorText {
+    margin-top: 12px;
 }
 
 #error {
@@ -236,7 +259,7 @@ canvas {
     font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 2px;
-    color: #aaaaaa;
+    color: var(--muted);
     margin-top: 8px;
 }
 
@@ -245,7 +268,8 @@ canvas {
     color: var(--text);
     border: 1px solid var(--line);
     padding: 10px 12px;
-    font-size: 0.9rem;
+    border-radius: 2px;
+    font-size: 1rem;
     font-family: var(--font);
     outline: none;
     transition: border-color 120ms;
@@ -283,6 +307,7 @@ canvas {
     font-variant-numeric: tabular-nums;
     padding: 4px 10px;
     border: 1px solid var(--line);
+    border-radius: 2px;
     background-color: var(--panel-sunk);
 }
 
@@ -303,8 +328,9 @@ canvas {
     height: var(--size);
     background-color: transparent;
     border: 2px solid var(--tile-grey);
+    border-radius: 2px;
     color: var(--text-strong);
-    font-family: var(--font);
+    font-family: var(--font-display);
     font-size: calc(var(--size) * 0.5);
     font-weight: 700;
     text-align: center;
@@ -345,9 +371,9 @@ canvas {
 
 .hint {
     margin: 16px 0 12px;
-    font-size: 0.7rem;
+    font-size: 0.85rem;
+    font-style: italic;
     color: var(--muted);
-    letter-spacing: 0.5px;
 }
 
 /* ---- wordle result ---- */
@@ -359,7 +385,7 @@ canvas {
 
 .result-text {
     color: var(--text);
-    font-size: 0.9rem;
+    font-size: 1.05rem;
     line-height: 1.5;
     margin-bottom: 20px;
 }
@@ -376,6 +402,7 @@ canvas {
     flex-direction: column;
     gap: 4px;
     padding: 12px 8px;
+    border-radius: 2px;
     background-color: var(--panel-sunk);
     border: 1px solid var(--line);
 }
@@ -411,6 +438,8 @@ canvas {
     justify-content: center;
     width: 40px;
     height: 40px;
+    border-radius: 2px;
+    font-family: var(--font-display);
     font-size: 1.3rem;
     font-weight: 700;
     color: #fff;
@@ -444,8 +473,9 @@ canvas {
 }
 
 #date {
-    font-size: 0.95rem;
-    font-weight: 500;
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 700;
     color: var(--text-strong);
 }
 
@@ -478,7 +508,7 @@ canvas {
 #lb {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.85rem;
+    font-size: 0.95rem;
     font-variant-numeric: tabular-nums;
 }
 
@@ -499,11 +529,11 @@ canvas {
     height: 40px;
     padding: 0 14px;
     color: var(--text);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid rgba(205, 198, 184, 0.06);
 }
 
 #lb tbody tr:hover td {
-    background-color: rgba(255, 255, 255, 0.025);
+    background-color: rgba(200, 180, 128, 0.04);
 }
 
 #lb .col-place {
@@ -586,13 +616,13 @@ canvas {
 
 .btn-danger {
     color: var(--danger);
-    border-color: rgba(224, 96, 96, 0.4);
-    background-color: rgba(224, 96, 96, 0.08);
+    border-color: rgba(204, 108, 98, 0.4);
+    background-color: rgba(204, 108, 98, 0.08);
     font-weight: 600;
 }
 
 .btn-danger:hover:not(:disabled) {
-    background-color: rgba(224, 96, 96, 0.16);
+    background-color: rgba(204, 108, 98, 0.16);
 }
 
 .btn-row {
@@ -634,6 +664,7 @@ canvas {
     flex-direction: column;
     min-height: 132px;
     border: 1px solid var(--line);
+    border-radius: 2px;
     background-color: var(--panel-sunk);
 }
 
@@ -644,8 +675,8 @@ canvas {
 
 .char-name {
     color: var(--text-strong);
-    font-size: 1rem;
-    font-weight: 600;
+    font-size: 1.15rem;
+    font-weight: 700;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -677,7 +708,7 @@ canvas {
 
 .char-create {
     flex: 1;
-    font-family: var(--font);
+    font-family: var(--font-display);
     font-size: 0.8rem;
     letter-spacing: 1px;
     color: var(--muted);
@@ -703,7 +734,7 @@ canvas {
     font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 2px;
-    color: #aaaaaa;
+    color: var(--muted);
     margin: 8px 0 6px;
 }
 
@@ -712,7 +743,8 @@ canvas {
     color: var(--text);
     border: 1px solid var(--line);
     padding: 10px 12px;
-    font-size: 0.9rem;
+    border-radius: 2px;
+    font-size: 1rem;
     font-family: var(--font);
     outline: none;
     transition: border-color 120ms;
@@ -736,6 +768,7 @@ canvas {
     gap: 4px;
     padding: 10px 12px;
     border: 1px solid var(--line);
+    border-radius: 2px;
     background-color: var(--panel-sunk);
     cursor: pointer;
     transition: border-color 120ms, background-color 120ms;
@@ -753,7 +786,7 @@ canvas {
 
 .class-choice:has(input:checked) {
     border-color: var(--class-color);
-    background-color: rgba(255, 255, 255, 0.04);
+    background-color: rgba(200, 180, 128, 0.05);
 }
 
 .class-choice:has(input:focus-visible) {
@@ -771,7 +804,7 @@ canvas {
 
 .class-desc {
     color: var(--muted);
-    font-size: 0.7rem;
+    font-size: 0.85rem;
     line-height: 1.4;
 }
 
@@ -811,6 +844,7 @@ canvas {
     color: var(--text-strong);
     background-color: var(--panel-sunk);
     border: 2px solid var(--line);
+    border-radius: 2px;
 }
 
 .ability-slot.empty {
@@ -861,9 +895,10 @@ canvas {
     max-height: 200px;
     overflow-y: auto;
     padding: 8px 10px;
-    background-color: rgba(13, 13, 13, 0.72);
+    background-color: rgba(18, 18, 17, 0.78);
     border: 1px solid var(--line);
-    font-size: 0.8rem;
+    border-radius: 2px;
+    font-size: 0.92rem;
     line-height: 1.45;
     opacity: 0.6;
     pointer-events: none;
@@ -910,13 +945,13 @@ canvas {
 
 .chat-user {
     color: var(--muted);
-    font-size: 0.72rem;
+    font-size: 0.8rem;
 }
 
 .chat-user.solo {
     color: var(--text-strong);
-    font-size: 0.8rem;
-    font-weight: 600;
+    font-size: 0.92rem;
+    font-weight: 700;
 }
 
 .chat-user::after {
@@ -932,10 +967,11 @@ canvas {
     width: 100%;
     padding: 9px 12px;
     font-family: var(--font);
-    font-size: 0.85rem;
+    font-size: 0.95rem;
     color: var(--text-strong);
-    background-color: rgba(22, 22, 22, 0.82);
+    background-color: rgba(28, 27, 26, 0.85);
     border: 1px solid var(--line-strong);
+    border-radius: 2px;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
     outline: none;
     transition: border-color 120ms, background-color 120ms, box-shadow 120ms;
@@ -959,19 +995,20 @@ canvas {
     transform: translateX(-50%);
     padding: 10px 18px;
     align-items: center;
-    background-color: rgba(22, 22, 22, 0.95);
+    background-color: rgba(28, 27, 26, 0.96);
     border: 1px solid var(--line-strong);
+    border-radius: 3px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
     color: var(--text-strong);
     font-family: var(--font);
-    font-size: 0.85rem;
+    font-size: 0.95rem;
     white-space: nowrap;
     z-index: 10;
 }
 
 #reconnecting {
-    border-color: rgba(224, 96, 96, 0.5);
-    color: #f0b4b4;
+    border-color: rgba(204, 108, 98, 0.5);
+    color: #eeb9b2;
 }
 
 /* ---- motion ---- */
