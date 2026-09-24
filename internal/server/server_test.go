@@ -27,6 +27,22 @@ func TestWebsocketRequiresValidToken(t *testing.T) {
 	}
 }
 
+// Browsers used to reuse cached client JS from an older build next to new
+// files, and the mix froze the game on a black screen. Every static file must
+// be checked with the server before use.
+func TestStaticFilesAreRevalidated(t *testing.T) {
+	t.Parallel()
+	ts := testkit.NewServer(t)
+	res, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if cc := res.Header.Get("Cache-Control"); cc != "no-cache" {
+		t.Fatalf("Cache-Control %q, want no-cache", cc)
+	}
+}
+
 func TestWelcome(t *testing.T) {
 	t.Parallel()
 	ts := testkit.NewServer(t)

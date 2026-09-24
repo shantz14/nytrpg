@@ -12,6 +12,7 @@ export const ClientDuelRespond: ClientMsg = 6; // DuelRespondReq, accept or deny
 export const ClientDuelGuess: ClientMsg = 7; // WordleReq, a guess in your duel
 export const ClientDuelForfeit: ClientMsg = 8; // empty, give up your duel
 export const ClientDuelTyping: ClientMsg = 9; // DuelTyping, letters in your current row
+export const ClientProfile: ClientMsg = 10; // ProfileReq, a player's ranked profile
 
 // Messages sent by the server
 export type ServerMsg = number;
@@ -29,6 +30,7 @@ export const ServerDuelGuess: ServerMsg = 10; // WordleRes, the result of your d
 export const ServerDuelOpponentGuess: ServerMsg = 11; // DuelOpponentGuess, your opponent guessed
 export const ServerDuelEnd: ServerMsg = 12; // DuelEnd, your duel is over
 export const ServerDuelTyping: ServerMsg = 13; // DuelTyping, your opponent's current row
+export const ServerProfile: ServerMsg = 14; // Profile, in reply to ClientProfile
 
 // A position in world pixels
 export interface Vec {
@@ -56,6 +58,22 @@ export interface Welcome {
     character: CharacterInfo;
     // Every class, to look up the class of other players
     classes: Array<ClassInfo>;
+    // Your character's ranked rating
+    elo: number;
+    // Every rank, lowest first, to name and color anyone's elo
+    ladder: Array<RankTier>;
+}
+
+// One rank on the ranked ladder
+export interface RankTier {
+    // e.g. "silver-2"
+    id: string;
+    // e.g. "silver", for its color
+    family: string;
+    // e.g. "Silver 2"
+    name: string;
+    // Lowest elo in this rank
+    minElo: number;
 }
 
 // One of an account's characters. Also sent as JSON by /characters.
@@ -114,7 +132,12 @@ export interface WorldUpdate {
     move?: Array<EntityMove>;
     // Entities that left view or the game
     despawn?: Array<EntityID>;
+    // Known players whose ranked rating changed
+    elo?: Array<EntityElo>;
 }
+
+// Sent as [id, elo]
+export type EntityElo = [id: EntityID, elo: number];
 
 export interface EntitySpawn {
     id: EntityID;
@@ -126,6 +149,8 @@ export interface EntitySpawn {
     class?: string;
     sprite: string;
     pos: Vec;
+    // For players, their character's ranked rating
+    elo: number;
 }
 
 // Sent as [id, x, y] to keep moves small
@@ -184,6 +209,8 @@ export interface WordleResume {
 export interface DuelChallengeReq {
     // The player to challenge, must be in view
     target: EntityID;
+    // Ranked duels change both players' elo
+    ranked: boolean;
 }
 
 export interface DuelRespondReq {
@@ -202,6 +229,20 @@ export interface DuelChallenge {
     class?: string;
     // How long until it expires
     expiresMs: number;
+    ranked: boolean;
+    // The challenger's elo
+    elo: number;
+    // Ranked only: what you'd win or lose against them
+    stakes?: Stakes | null;
+}
+
+// The elo you'd gain by winning and lose by losing a ranked duel against
+// someone, smallest to largest depending on the margin. Losses are negative.
+export interface Stakes {
+    winMin: number;
+    winMax: number;
+    loseMin: number;
+    loseMax: number;
 }
 
 export type DuelChallengeStatus = number;
@@ -234,6 +275,7 @@ export interface DuelStart {
     class?: string;
     wordLength: number;
     maxGuesses: number;
+    ranked: boolean;
 }
 
 // The colors of the opponent's guess, never the letters
@@ -269,4 +311,46 @@ export interface DuelEnd {
     reason: DuelEndReason;
     solution: string;
     seconds: number;
+    // Ranked duels only: your elo before and after, how likely you were to win
+    // going in (0-1), and the margin multiplier (1 to 1.75) applied
+    ranked: boolean;
+    eloBefore: number;
+    eloAfter: number;
+    expected: number;
+    margin: number;
+}
+
+export interface ProfileReq {
+    // A player in view, or yourself
+    target: EntityID;
+}
+
+// A player's ranked record
+export interface Profile {
+    id: EntityID;
+    name: string;
+    char: string;
+    class: string;
+    elo: number;
+    // Highest elo ever reached
+    peak: number;
+    games: number;
+    wins: number;
+    losses: number;
+    draws: number;
+    // Latest first
+    recent: Array<RankedMatchInfo>;
+    // What you'd win or lose against them, unset for your own profile
+    stakes?: Stakes | null;
+}
+
+// One ranked duel, from the profile owner's side
+export interface RankedMatchInfo {
+    opponent: string;
+    opponentClass: string;
+    outcome: DuelOutcome;
+    // Elo gained, negative for a loss
+    change: number;
+    // Unix seconds
+    playedAt: number;
 }

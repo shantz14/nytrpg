@@ -1,5 +1,7 @@
-import { ClassInfo, DuelChallenge } from "./protocol.gen.js";
+import { ClassInfo, DuelChallenge, RankTier } from "./protocol.gen.js";
 import { className } from "./classes.js";
+import { tierFor } from "./ranks.js";
+import { rankBadge } from "./ranked-info.js";
 
 type Notice = { el: HTMLElement, timer: ReturnType<typeof setTimeout> };
 
@@ -14,15 +16,21 @@ export class Notifications {
         this.notices = new Map();
     }
 
-    public addChallenge(ch: DuelChallenge, classes: ClassInfo[], respond: (accept: boolean) => void) {
+    public addChallenge(ch: DuelChallenge, classes: ClassInfo[], ladder: RankTier[], respond: (accept: boolean) => void) {
         this.remove(ch.id);
         const el = document.createElement("div");
-        el.className = "notice";
+        el.className = "notice" + (ch.ranked ? " ranked" : "");
         el.dataset.challenge = String(ch.id);
 
         const title = document.createElement("div");
         title.className = "notice-title";
-        title.textContent = "Duel challenge";
+        title.textContent = ch.ranked ? "Ranked challenge" : "Duel challenge";
+        if (ch.ranked) {
+            const tag = document.createElement("span");
+            tag.className = "ranked-tag";
+            tag.textContent = "Ranked";
+            title.appendChild(tag);
+        }
 
         // textContent, never innerHTML: names come from users
         const who = document.createElement("div");
@@ -44,9 +52,12 @@ export class Notifications {
             who.appendChild(user);
         }
 
+        const rank = rankBadge(tierFor(ch.elo, ladder), ch.elo);
+        rank.classList.add("notice-rank");
+
         const text = document.createElement("p");
         text.className = "notice-text";
-        text.textContent = "challenges you to a Wordle duel";
+        text.textContent = ch.ranked ? "challenges you to a ranked Wordle duel" : "challenges you to a Wordle duel";
 
         const buttons = document.createElement("div");
         buttons.className = "btn-row";
@@ -68,7 +79,7 @@ export class Notifications {
         bar.className = "notice-bar";
         bar.style.animationDuration = ch.expiresMs + "ms";
 
-        el.append(title, who, text, buttons, bar);
+        el.append(title, who, rank, text, buttons, bar);
         this.root.appendChild(el);
         const timer = setTimeout(() => this.remove(ch.id), ch.expiresMs);
         this.notices.set(ch.id, { el, timer });

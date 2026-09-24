@@ -20,8 +20,13 @@ func (w *World) replicate() {
 			}
 			if _, known := p.known[e.ID]; !known {
 				upd.Spawn = append(upd.Spawn, e.spawnMsg())
-			} else if e.moved {
-				upd.Move = append(upd.Move, protocol.EntityMove{ID: e.ID, X: e.Pos.X, Y: e.Pos.Y})
+			} else {
+				if e.moved {
+					upd.Move = append(upd.Move, protocol.EntityMove{ID: e.ID, X: e.Pos.X, Y: e.Pos.Y})
+				}
+				if e.eloChanged {
+					upd.Elo = append(upd.Elo, protocol.EntityElo{ID: e.ID, Elo: e.Elo})
+				}
 			}
 			p.known[e.ID] = w.tick
 		})
@@ -34,7 +39,7 @@ func (w *World) replicate() {
 			}
 		}
 
-		if len(upd.Spawn) == 0 && len(upd.Move) == 0 && len(upd.Despawn) == 0 {
+		if len(upd.Spawn) == 0 && len(upd.Move) == 0 && len(upd.Despawn) == 0 && len(upd.Elo) == 0 {
 			continue
 		}
 		msg, err := protocol.Encode(protocol.ServerWorld, upd)
@@ -50,4 +55,8 @@ func (w *World) replicate() {
 		e.moved = false
 	}
 	w.moved = w.moved[:0]
+	for _, e := range w.eloChanged {
+		e.eloChanged = false
+	}
+	w.eloChanged = w.eloChanged[:0]
 }

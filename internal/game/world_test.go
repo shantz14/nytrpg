@@ -11,6 +11,7 @@ import (
 	"github.com/vmihailenco/msgpack/v5"
 
 	"nytrpg/internal/protocol"
+	"nytrpg/internal/ranked"
 )
 
 type fakeClient struct {
@@ -93,7 +94,7 @@ func (tw *testWorld) advance(d time.Duration) { tw.clock = tw.clock.Add(d) }
 // Joins a player and puts them at pos
 func (tw *testWorld) join(id int, pos protocol.Vec) (*fakeClient, *player) {
 	c := &fakeClient{}
-	tw.Join(c, id, "p", protocol.CharacterInfo{ID: id, Name: fmt.Sprintf("char%d", id), Class: "wizard"})
+	tw.Join(c, id, "p", protocol.CharacterInfo{ID: id, Name: fmt.Sprintf("char%d", id), Class: "wizard"}, ranked.NewRating())
 	tw.flush()
 	p := tw.players[c]
 	p.ent.Pos = pos
@@ -105,7 +106,7 @@ func (tw *testWorld) join(id int, pos protocol.Vec) (*fakeClient, *player) {
 func TestWelcome(t *testing.T) {
 	tw := newTestWorld()
 	c := &fakeClient{}
-	tw.Join(c, 7, "alice", protocol.CharacterInfo{ID: 3, Slot: 1, Name: "Merlin", Class: "wizard"})
+	tw.Join(c, 7, "alice", protocol.CharacterInfo{ID: 3, Slot: 1, Name: "Merlin", Class: "wizard"}, ranked.NewRating())
 	tw.flush()
 	raw := c.take(protocol.ServerWelcome)
 	if len(raw) != 1 {
@@ -376,7 +377,7 @@ func TestInRange(t *testing.T) {
 	go w.Run(ctx)
 
 	c := &fakeClient{}
-	w.Join(c, 1, "p", protocol.CharacterInfo{ID: 1, Name: "c", Class: "knight"})
+	w.Join(c, 1, "p", protocol.CharacterInfo{ID: 1, Name: "c", Class: "knight"}, ranked.NewRating())
 	at := func(x, y int32) {
 		w.Query(func(w *World) {
 			p := w.players[c]

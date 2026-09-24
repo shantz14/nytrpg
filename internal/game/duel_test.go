@@ -80,7 +80,7 @@ func (tw *testWorld) pair() (a *fakeClient, pa *player, b *fakeClient, pb *playe
 // a challenges b, b accepts. Returns with no messages left.
 func (tw *testWorld) startDuel(t *testing.T, a, b *fakeClient, pb *player) {
 	t.Helper()
-	tw.Challenge(a, pb.ent.ID)
+	tw.Challenge(a, pb.ent.ID, false)
 	tw.flush()
 	ch := one[protocol.DuelChallenge](t, b, protocol.ServerDuelChallenge)
 	tw.RespondDuel(b, ch.ID, true)
@@ -94,7 +94,7 @@ func TestChallengeAndAccept(t *testing.T) {
 	tw := newDuelWorld()
 	a, pa, b, pb := tw.pair()
 
-	tw.Challenge(a, pb.ent.ID)
+	tw.Challenge(a, pb.ent.ID, false)
 	tw.flush()
 	ch := one[protocol.DuelChallenge](t, b, protocol.ServerDuelChallenge)
 	if ch.From != pa.ent.ID || ch.Char != "char1" || ch.Class != "wizard" || ch.ExpiresMs != 30000 {
@@ -134,23 +134,23 @@ func TestChallengeRules(t *testing.T) {
 		return one[protocol.DuelChallengeUpdate](t, a, protocol.ServerDuelChallengeUpdate).Status
 	}
 
-	tw.Challenge(a, pa.ent.ID)
+	tw.Challenge(a, pa.ent.ID, false)
 	if s := status(); s != protocol.DuelUnavailable {
 		t.Fatalf("challenging yourself: %d", s)
 	}
-	tw.Challenge(a, pfar.ent.ID)
+	tw.Challenge(a, pfar.ent.ID, false)
 	if s := status(); s != protocol.DuelUnavailable {
 		t.Fatalf("challenging someone out of view: %d", s)
 	}
 	none(t, far, protocol.ServerDuelChallenge)
-	tw.Challenge(a, 9999)
+	tw.Challenge(a, 9999, false)
 	if s := status(); s != protocol.DuelUnavailable {
 		t.Fatalf("challenging nobody: %d", s)
 	}
 
 	// Asking twice while waiting does nothing
-	tw.Challenge(a, pb.ent.ID)
-	tw.Challenge(a, pb.ent.ID)
+	tw.Challenge(a, pb.ent.ID, false)
+	tw.Challenge(a, pb.ent.ID, false)
 	tw.flush()
 	ch := one[protocol.DuelChallenge](t, b, protocol.ServerDuelChallenge)
 
@@ -160,12 +160,12 @@ func TestChallengeRules(t *testing.T) {
 	tw.RespondDuel(b, ch.ID, true)
 	tw.flush()
 	a.msgs, b.msgs = nil, nil
-	tw.Challenge(c, pa.ent.ID)
+	tw.Challenge(c, pa.ent.ID, false)
 	tw.flush()
 	if s := one[protocol.DuelChallengeUpdate](t, c, protocol.ServerDuelChallengeUpdate).Status; s != protocol.DuelBusy {
 		t.Fatalf("challenging someone dueling: %d", s)
 	}
-	tw.Challenge(a, pc.ent.ID)
+	tw.Challenge(a, pc.ent.ID, false)
 	if s := status(); s != protocol.DuelBusy {
 		t.Fatalf("challenging while dueling: %d", s)
 	}
@@ -175,7 +175,7 @@ func TestChallengeRules(t *testing.T) {
 func TestChallengeExpiresAfter30s(t *testing.T) {
 	tw := newDuelWorld()
 	a, _, b, pb := tw.pair()
-	tw.Challenge(a, pb.ent.ID)
+	tw.Challenge(a, pb.ent.ID, false)
 	tw.flush()
 	ch := one[protocol.DuelChallenge](t, b, protocol.ServerDuelChallenge)
 	a.msgs = nil
@@ -202,7 +202,7 @@ func TestOnlyTheTargetCanRespond(t *testing.T) {
 	tw := newDuelWorld()
 	a, _, b, pb := tw.pair()
 	c, _ := tw.join(3, protocol.Vec{X: 550, Y: 550})
-	tw.Challenge(a, pb.ent.ID)
+	tw.Challenge(a, pb.ent.ID, false)
 	tw.flush()
 	ch := one[protocol.DuelChallenge](t, b, protocol.ServerDuelChallenge)
 
@@ -236,8 +236,8 @@ func TestAcceptingCancelsOtherChallenges(t *testing.T) {
 	a.msgs, b.msgs, c.msgs = nil, nil, nil
 
 	// c challenges b too, and b had challenged c
-	tw.Challenge(c, pb.ent.ID)
-	tw.Challenge(b, pc.ent.ID)
+	tw.Challenge(c, pb.ent.ID, false)
+	tw.Challenge(b, pc.ent.ID, false)
 	tw.flush()
 	fromC := one[protocol.DuelChallenge](t, b, protocol.ServerDuelChallenge)
 	b.msgs, c.msgs = nil, nil
@@ -259,8 +259,8 @@ func TestAcceptingTellsOthersTheirChallengeIsOff(t *testing.T) {
 	tw.tickNow()
 	c.msgs = nil
 
-	tw.Challenge(c, pb.ent.ID)
-	tw.Challenge(a, pb.ent.ID)
+	tw.Challenge(c, pb.ent.ID, false)
+	tw.Challenge(a, pb.ent.ID, false)
 	tw.flush()
 	var fromA protocol.DuelChallenge
 	for _, ch := range got[protocol.DuelChallenge](t, b, protocol.ServerDuelChallenge) {
@@ -410,7 +410,7 @@ func TestForfeitAndLeave(t *testing.T) {
 	tw.tickNow()
 	a.msgs, b.msgs, c.msgs = nil, nil, nil
 	tw.startDuel(t, a, b, pb)
-	tw.Challenge(c, pb.ent.ID) // b is busy, refused
+	tw.Challenge(c, pb.ent.ID, false) // b is busy, refused
 	tw.Leave(b)
 	tw.flush()
 	if end := one[protocol.DuelEnd](t, a, protocol.ServerDuelEnd); end.Outcome != protocol.DuelWin || end.Reason != protocol.DuelDisconnect {
@@ -420,7 +420,7 @@ func TestForfeitAndLeave(t *testing.T) {
 	d, _ := tw.join(4, protocol.Vec{X: 560, Y: 560})
 	tw.tickNow()
 	c.msgs, d.msgs = nil, nil
-	tw.Challenge(c, tw.players[d].ent.ID)
+	tw.Challenge(c, tw.players[d].ent.ID, false)
 	tw.flush()
 	d.msgs = nil
 	tw.Leave(c)

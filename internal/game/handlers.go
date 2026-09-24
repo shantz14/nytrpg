@@ -32,7 +32,16 @@ func (w *World) RegisterHandlers(r *netconn.Router) {
 		if err := msgpack.Unmarshal(data, &req); err != nil || !s.Allow("duelChallenge", 0.5, 3) {
 			return
 		}
-		w.Challenge(s, req.Target)
+		w.Challenge(s, req.Target, req.Ranked)
+	})
+	r.Handle(protocol.ClientProfile, func(s *netconn.Session, data msgpack.RawMessage) {
+		var req protocol.ProfileReq
+		if err := msgpack.Unmarshal(data, &req); err != nil || !s.Allow("profile", 2, 5) {
+			return
+		}
+		if prof, ok := w.Profile(s, req.Target); ok {
+			s.SendMsg(protocol.ServerProfile, prof)
+		}
 	})
 	r.Handle(protocol.ClientDuelRespond, func(s *netconn.Session, data msgpack.RawMessage) {
 		var req protocol.DuelRespondReq

@@ -5,6 +5,7 @@ import { Vector2D } from "./vector2D.js";
 import { classFont, classStyle, loadClassFonts } from "./class-style.js";
 import { className } from "./classes.js";
 import { wrapText } from "./chat-log.js";
+import { RANK_COLORS, tierFor } from "./ranks.js";
 
 // How long a chat bubble stays up, fading out over the last FADE_MS
 const CHAT_MS = 7000;
@@ -15,6 +16,8 @@ const TEXT_STRONG = "#f0eee9";
 const TEXT_MUTED = "#d4d1cb";
 // Dark edge around labels so they read on any background
 const OUTLINE = "rgba(0, 0, 0, 0.8)";
+// The rank line over names, in the display font like the rest of the fantasy UI
+const RANK_FONT = `700 11px "Cinzel", Georgia, serif`;
 const BUBBLE_MAX_W = 220;
 const BUBBLE_LINE_H = 17;
 // Entities this far off screen are still drawn, so big sprites don't pop in
@@ -156,7 +159,7 @@ export class DisplayDriver {
         const s = this.state;
         const [w] = this.drawEntity(s.selfSprite, m.x, m.y, s.selfAnim);
         if (w) {
-            labels.push({ id: s.selfId, name: s.selfName, char: s.selfChar, cls: s.selfClass?.id ?? "", cx: m.x + w / 2, top: m.y });
+            labels.push({ id: s.selfId, name: s.selfName, char: s.selfChar, cls: s.selfClass?.id ?? "", elo: s.selfElo, cx: m.x + w / 2, top: m.y });
         }
     }
 
@@ -173,7 +176,7 @@ export class DisplayDriver {
             const [w, h] = this.drawEntity(other.sprite, x, y, other.anim);
             if (w) {
                 other.hitbox = { x, y, w, h };
-                labels.push({ id: other.id, name: other.name, char: other.char, cls: other.cls, cx: x + w / 2, top: y });
+                labels.push({ id: other.id, name: other.name, char: other.char, cls: other.cls, elo: other.elo, cx: x + w / 2, top: y });
             }
         }
     }
@@ -207,7 +210,8 @@ export class DisplayDriver {
 
     // Centered over the sprite, bottom up: the character's name and class
     // ("Merlin Wizard", the class in its own font and color), the username
-    // above that, and the chat bubble on top
+    // above that, their rank ("SILVER 2" in its color) above that, and the
+    // chat bubble on top
     private drawLabels(l: Label) {
         const ctx = this.ctx;
         ctx.save();
@@ -236,6 +240,20 @@ export class DisplayDriver {
             ctx.textAlign = "center";
             this.outlined(l.name, l.cx, y, `700 14px ${UI_FONT}`, TEXT_STRONG);
             y -= 14;
+        }
+
+        const tier = l.char ? tierFor(l.elo, this.state.ladder) : null;
+        if (tier) {
+            const color = RANK_COLORS[tier.family] ?? TEXT_MUTED;
+            if (tier.family === "master") {
+                // Master glows
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 8;
+            }
+            this.outlined(tier.name.toUpperCase(), l.cx, y, RANK_FONT, color);
+            ctx.shadowBlur = 0;
+            ctx.shadowColor = "transparent";
+            y -= 12;
         }
 
         const chat = this.chats.get(l.id);
@@ -359,6 +377,8 @@ type Label = {
     name: string;
     char: string;
     cls: string;
+    // Ranked elo, shown as their rank
+    elo: number;
     cx: number;
     top: number;
 }

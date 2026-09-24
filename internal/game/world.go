@@ -16,6 +16,7 @@ import (
 
 	"nytrpg/internal/classes"
 	"nytrpg/internal/protocol"
+	"nytrpg/internal/ranked"
 )
 
 const (
@@ -41,20 +42,27 @@ type Entity struct {
 	Class  string
 	Sprite string
 	Pos    protocol.Vec
+	// Players only, their character's ranked rating
+	Elo int
 
 	// Moved since the last tick
 	moved bool
-	cell  cellKey
+	// Elo changed since the last tick
+	eloChanged bool
+	cell       cellKey
 }
 
 func (e *Entity) spawnMsg() protocol.EntitySpawn {
-	return protocol.EntitySpawn{ID: e.ID, Kind: e.Kind, Name: e.Name, Char: e.Char, Class: e.Class, Sprite: e.Sprite, Pos: e.Pos}
+	return protocol.EntitySpawn{ID: e.ID, Kind: e.Kind, Name: e.Name, Char: e.Char, Class: e.Class, Sprite: e.Sprite, Pos: e.Pos, Elo: e.Elo}
 }
 
 type player struct {
 	client   Client
 	playerID int
-	ent      *Entity
+	// The character being played, and its ranked rating
+	charID int
+	rating ranked.Rating
+	ent    *Entity
 	// Entities this client knows about, and the tick they were last in view
 	known map[protocol.EntityID]uint64
 	moveBudget
@@ -71,6 +79,11 @@ type World struct {
 	Map *protocol.WorldMap
 	// The puzzle duels are played on. Set before Run, nil turns duels off.
 	Duels DuelPuzzle
+	// Called on the world goroutine with every settled ranked duel, to save
+	// it. Must not block. Set before Run.
+	OnRanked func(ranked.Match)
+	// Players' ranked history, for profiles. Called off the world goroutine.
+	History RankedHistory
 
 	// Owned by the world goroutine
 	entities map[protocol.EntityID]*Entity
@@ -79,7 +92,9 @@ type World struct {
 	nextID   protocol.EntityID
 	tick     uint64
 	moved    []*Entity
-	systems  []System
+	// Entities whose elo changed this tick
+	eloChanged []*Entity
+	systems    []System
 	// Duel challenges waiting for an answer, by id
 	challenges    map[uint32]*challenge
 	nextChallenge uint32
@@ -178,6 +193,16 @@ func (w *World) removeEntity(e *Entity) {
 	delete(w.entities, e.ID)
 }
 
+// Changes a player's rating and tells everyone who can see them next tick
+func (w *World) setRating(p *player, r ranked.Rating) {
+	p.rating = r
+	p.ent.Elo = r.Elo
+	if !p.ent.eloChanged {
+		p.ent.eloChanged = true
+		w.eloChanged = append(w.eloChanged, p.ent)
+	}
+}
+
 // Call after changing e.Pos
 func (w *World) entityMoved(e *Entity) {
 	w.grid.moved(e)
@@ -197,8 +222,9 @@ func (w *World) send(c Client, t protocol.ServerMsg, data any) {
 	c.Send(msg)
 }
 
-// Adds a connected player to the world, playing the given character
-func (w *World) Join(c Client, playerID int, username string, ch protocol.CharacterInfo) {
+// Adds a connected player to the world, playing the given character with its
+// ranked rating
+func (w *World) Join(c Client, playerID int, username string, ch protocol.CharacterInfo, rating ranked.Rating) {
 	w.Do(func(w *World) {
 		spawn := w.Map.Spawn
 		spawn.X = clamp(spawn.X+w.rng.Int31n(2*spawnSpread+1)-spawnSpread, 0, w.Map.Width)
@@ -212,6 +238,9 @@ func (w *World) Join(c Client, playerID int, username string, ch protocol.Charac
 		}
 		p.ent.Char = ch.Name
 		p.ent.Class = ch.Class
+		p.charID = ch.ID
+		p.rating = rating
+		p.ent.Elo = rating.Elo
 		p.moveBudget.reset(w.now())
 		w.players[c] = p
 
@@ -225,6 +254,8 @@ func (w *World) Join(c Client, playerID int, username string, ch protocol.Charac
 			TickRate:  TickRate,
 			Character: ch,
 			Classes:   classes.Infos(),
+			Elo:       rating.Elo,
+			Ladder:    ranked.Ladder,
 		})
 	})
 }

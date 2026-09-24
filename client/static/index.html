@@ -35,10 +35,20 @@
                     <span class="pc-class"></span>
                 </div>
                 <div class="pc-user"></div>
-                <button type="button" id="pcDuel" class="btn btn-primary pc-duel">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 17.5 3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M9.5 17.5 21 6V3h-3L6.5 14.5M11 19l-6-6M8 16l-4 4M5 21l-2-2"/></svg>
-                    Duel
-                </button>
+                <div class="pc-rank"></div>
+                <div class="pc-actions">
+                    <button type="button" id="pcDuel" class="btn btn-ghost pc-duel" title="A friendly duel, nothing at stake">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 17.5 3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M9.5 17.5 21 6V3h-3L6.5 14.5M11 19l-6-6M8 16l-4 4M5 21l-2-2"/></svg>
+                        Duel
+                    </button>
+                    <button type="button" id="pcRanked" class="btn btn-primary pc-duel" title="A ranked duel, for elo">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3"/></svg>
+                        Ranked
+                    </button>
+                    <button type="button" id="pcInfo" class="icon-btn pc-info" title="Profile" aria-label="Profile">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>
+                    </button>
+                </div>
             </div>
             <div id="notifications" aria-live="polite"></div>
             <div id="reconnecting">Connection lost, reconnecting&hellip;</div>
@@ -188,6 +198,7 @@
                 <div class="panel duel-panel">
                     <header class="panel-head">
                         <h1 class="panel-title">Duel <span class="duel-vs">vs</span> <span id="duelVsName" class="duel-vs-name"></span> <span id="duelVsClass" class="duel-vs-class"></span></h1>
+                        <span id="duelRankedTag" class="ranked-tag" hidden>Ranked</span>
                         <div id="duelTimer" class="timer">0:00</div>
                         <button id="duelForfeit" class="icon-btn" aria-label="Forfeit" title="Forfeit">&times;</button>
                     </header>
@@ -231,9 +242,92 @@
                         <button class="exit icon-btn" aria-label="Close">&times;</button>
                     </header>
                     <p id="duelResultText" class="result-text"></p>
+                    <div id="duelElo" class="duel-elo" hidden>
+                        <div id="duelEloChange" class="duel-elo-change"></div>
+                        <div class="duel-elo-ranks">
+                            <span id="duelRankBefore"></span>
+                            <span class="duel-elo-arrow">&rarr;</span>
+                            <span id="duelRankAfter"></span>
+                        </div>
+                        <div id="duelPromo" class="duel-promo"></div>
+                        <p id="duelBreakdown" class="duel-breakdown"></p>
+                    </div>
                     <p class="section-label">The word was</p>
                     <div id="duelSolution" class="solution"></div>
                     <button class="exit btn btn-ghost btn-wide">Close</button>
+                </div>
+            </div>
+        </template>
+
+        <template id="tpl-ranked-info">
+            <div id="rankedInfoPopup" class="overlay">
+                <div class="panel ranked-panel">
+                    <header class="panel-head">
+                        <h1 class="panel-title">Ranked duel</h1>
+                        <button class="exit icon-btn" aria-label="Close">&times;</button>
+                    </header>
+                    <div class="ri-matchup">
+                        <div id="riYou" class="ri-side"></div>
+                        <span class="ri-vs">vs</span>
+                        <div id="riThem" class="ri-side"></div>
+                    </div>
+                    <div class="stats ri-stakes">
+                        <div class="stat">
+                            <span class="stat-value ri-win" id="riWin"></span>
+                            <span class="stat-label">If you win</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-value ri-lose" id="riLose"></span>
+                            <span class="stat-label">If you lose</span>
+                        </div>
+                    </div>
+                    <div class="ri-body">
+                        <section class="ri-how">
+                            <p class="section-label">How it works</p>
+                            <ul class="ri-rules">
+                                <li>First to solve the word wins elo, the other loses it. Who you're up against matters.</li>
+                                <li>How convincingly you win counts too.</li>
+                                <li>Your first few ranked games move you faster, so you find your rank quickly.</li>
+                                <li>Giving up or disconnecting counts as a heavy loss.</li>
+                                <li>If you both run out of guesses it's a draw.</li>
+                            </ul>
+                        </section>
+                        <section class="ri-ladder-wrap">
+                            <p class="section-label">Ranks</p>
+                            <ol id="riLadder" class="ri-ladder"></ol>
+                        </section>
+                    </div>
+                    <div class="btn-row">
+                        <button class="exit btn btn-ghost">Cancel</button>
+                        <button id="riConfirm" class="btn btn-primary"></button>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <template id="tpl-profile">
+            <div id="profilePopup" class="overlay loading">
+                <div class="panel profile-panel">
+                    <header class="panel-head">
+                        <h1 class="panel-title"><span id="pfChar"></span> <span id="pfClass" class="pf-class"></span></h1>
+                        <button class="exit icon-btn" aria-label="Close">&times;</button>
+                    </header>
+                    <p id="pfUser" class="pf-user"></p>
+                    <div class="pf-rank-box">
+                        <div id="pfRank" class="pf-rank">&hellip;</div>
+                        <div id="pfElo" class="pf-elo"></div>
+                        <div id="pfBar" class="pf-bar"><span></span></div>
+                        <div id="pfNext" class="pf-next"></div>
+                    </div>
+                    <div class="stats pf-stats">
+                        <div class="stat"><span class="stat-value" id="pfGames"></span><span class="stat-label">Ranked games</span></div>
+                        <div class="stat"><span class="stat-value" id="pfRecord"></span><span class="stat-label">W&ndash;L&ndash;D</span></div>
+                        <div class="stat"><span class="stat-value" id="pfRate"></span><span class="stat-label">Win rate</span></div>
+                        <div class="stat"><span class="stat-value pf-peak" id="pfPeak"></span><span class="stat-label">Peak</span></div>
+                    </div>
+                    <p class="section-label">Recent ranked duels</p>
+                    <ol id="pfRecent" class="pf-recent"></ol>
+                    <p id="pfNoGames" class="pf-empty">No ranked games yet.</p>
                 </div>
             </div>
         </template>

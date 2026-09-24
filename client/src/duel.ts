@@ -4,6 +4,8 @@ import { OpponentGrid, WordleBoard } from "./wordle-board.js";
 import { Stopwatch, renderSolution } from "./wordle.js";
 import { LatestThrottle } from "./throttle.js";
 import { className } from "./classes.js";
+import { signed, tierFor } from "./ranks.js";
+import { rankBadge } from "./ranked-info.js";
 import {
     ClientDuelForfeit, ClientDuelGuess, ClientDuelTyping, DuelDisconnect, DuelDraw, DuelEnd, DuelForfeit, DuelOpponentGuess,
     DuelOutOfGuesses, DuelSolved, DuelStart, DuelTyping, DuelWin, WordleLose, WordleRes, WordleWin,
@@ -59,6 +61,7 @@ export class Duel {
 
         const s = this.start;
         popup.q("#duelVsName").textContent = this.opponentName;
+        popup.q("#duelRankedTag").hidden = !s.ranked;
         const cls = popup.q("#duelVsClass");
         cls.textContent = s.class ? className(this.game.state.classes, s.class) : "";
         cls.className = "duel-vs-class" + (s.class ? " class-" + s.class : "");
@@ -174,6 +177,34 @@ export class Duel {
         set("duelResultText", text);
         // Green if someone found it
         renderSolution(layer.querySelector<HTMLDivElement>("#duelSolution")!, end.solution, end.reason == DuelSolved);
+        if (end.ranked) {
+            this.showEloChange(layer, end);
+        }
+    }
+
+    // The ranked part of the result: points won or lost, rank before and
+    // after, and why it moved that much
+    private showEloChange(layer: HTMLElement, end: DuelEnd) {
+        const q = (id: string) => layer.querySelector<HTMLElement>("#" + id)!;
+        const ladder = this.game.state.ladder;
+        const delta = end.eloAfter - end.eloBefore;
+        q("duelElo").hidden = false;
+        const change = q("duelEloChange");
+        change.textContent = `${signed(delta)} elo`;
+        change.classList.add(delta > 0 ? "up" : delta < 0 ? "down" : "even");
+
+        const before = tierFor(end.eloBefore, ladder);
+        const after = tierFor(end.eloAfter, ladder);
+        q("duelRankBefore").replaceWith(Object.assign(rankBadge(before, end.eloBefore), { id: "duelRankBefore" }));
+        q("duelRankAfter").replaceWith(Object.assign(rankBadge(after, end.eloAfter), { id: "duelRankAfter" }));
+        const promo = q("duelPromo");
+        if (before && after && before.id !== after.id) {
+            const up = after.minElo > before.minElo;
+            promo.textContent = up ? `Promoted to ${after.name}` : `Demoted to ${after.name}`;
+            promo.classList.add(up ? "up" : "down", "rank-" + after.family);
+        }
+        const margin = end.outcome == DuelDraw ? "" : ` · margin ×${end.margin.toFixed(2)}`;
+        q("duelBreakdown").textContent = `You were expected to win ${Math.round(end.expected * 100)}%${margin}`;
     }
 
     // The connection dropped: the server has already counted it as a loss

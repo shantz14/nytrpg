@@ -92,8 +92,10 @@ func TestMigrationGivesOldPlayersACharacter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Roll back to the schema before characters and fill it the old way
+	// Roll back to the schema before characters and fill it the old way.
+	// Tables from later migrations go too, or migrating again finds them there.
 	for _, q := range []string{
+		"DROP TABLE RankedDuel", "DROP TABLE Rating",
 		"DROP TABLE Wordle", "DROP TABLE Character", "DROP TABLE Player",
 		migrations[0],
 		"UPDATE schema_version SET version = 1",

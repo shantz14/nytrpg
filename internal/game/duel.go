@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"nytrpg/internal/protocol"
+	"nytrpg/internal/ranked"
 )
 
 // How long a challenge waits for an answer
@@ -25,6 +26,7 @@ type challenge struct {
 	id       uint32
 	from, to *player
 	expires  time.Time
+	ranked   bool
 }
 
 // One player's half of a duel
@@ -34,6 +36,8 @@ type duelSide struct {
 	solved  bool
 	// Used every guess without solving. They wait for the other side to finish.
 	out bool
+	// How close their best guess was, 0 to 1, for ranked margins
+	best float64
 }
 
 func (s *duelSide) done() bool { return s.solved || s.out }
@@ -43,6 +47,8 @@ type duel struct {
 	word  string
 	start time.Time
 	sides [2]*duelSide
+	// Changes both players' elo when it ends
+	ranked bool
 }
 
 // The player's side and their opponent's
@@ -74,10 +80,10 @@ func (w *World) challengeUpdate(p *player, id uint32, other *player, status prot
 	w.send(p.client, protocol.ServerDuelChallengeUpdate, protocol.DuelChallengeUpdate{ID: id, Name: other.displayName(), Status: status})
 }
 
-// Challenges the player with entity id target to a duel. They must be in view
-// and neither of you can already be dueling. A new challenge replaces your
-// pending one.
-func (w *World) Challenge(c Client, target protocol.EntityID) {
+// Challenges the player with entity id target to a duel, ranked or not. They
+// must be in view and neither of you can already be dueling. A new challenge
+// replaces your pending one.
+func (w *World) Challenge(c Client, target protocol.EntityID, isRanked bool) {
 	w.Do(func(w *World) {
 		p, ok := w.players[c]
 		if !ok {
@@ -101,7 +107,7 @@ func (w *World) Challenge(c Client, target protocol.EntityID) {
 			if ch.from != p {
 				continue
 			}
-			if ch.to == t {
+			if ch.to == t && ch.ranked == isRanked {
 				// Already waiting on them
 				return
 			}
@@ -110,16 +116,23 @@ func (w *World) Challenge(c Client, target protocol.EntityID) {
 		}
 
 		w.nextChallenge++
-		ch := &challenge{id: w.nextChallenge, from: p, to: t, expires: w.now().Add(ChallengeTimeout)}
+		ch := &challenge{id: w.nextChallenge, from: p, to: t, expires: w.now().Add(ChallengeTimeout), ranked: isRanked}
 		w.challenges[ch.id] = ch
-		w.send(t.client, protocol.ServerDuelChallenge, protocol.DuelChallenge{
+		msg := protocol.DuelChallenge{
 			ID:        ch.id,
 			From:      p.ent.ID,
 			Name:      p.ent.Name,
 			Char:      p.ent.Char,
 			Class:     p.ent.Class,
 			ExpiresMs: int(ChallengeTimeout / time.Millisecond),
-		})
+			Ranked:    isRanked,
+			Elo:       p.rating.Elo,
+		}
+		if isRanked {
+			stakes := ranked.Stakes(t.rating, p.rating)
+			msg.Stakes = &stakes
+		}
+		w.send(t.client, protocol.ServerDuelChallenge, msg)
 		w.challengeUpdate(p, ch.id, t, protocol.DuelSent)
 	})
 }
@@ -141,19 +154,20 @@ func (w *World) RespondDuel(c Client, id uint32, accept bool) {
 			w.challengeUpdate(ch.from, id, p, protocol.DuelBusy)
 			return
 		}
-		w.startDuel(ch.from, p)
+		w.startDuel(ch.from, p, ch.ranked)
 	})
 }
 
-func (w *World) startDuel(a, b *player) {
+func (w *World) startDuel(a, b *player, isRanked bool) {
 	// Nobody can accept a challenge from someone who's now busy
 	w.cancelChallenges(a)
 	w.cancelChallenges(b)
 
 	d := &duel{
-		word:  w.Duels.NewWord(w.rng),
-		start: w.now(),
-		sides: [2]*duelSide{{p: a}, {p: b}},
+		word:   w.Duels.NewWord(w.rng),
+		start:  w.now(),
+		sides:  [2]*duelSide{{p: a}, {p: b}},
+		ranked: isRanked,
 	}
 	a.duel = d
 	b.duel = d
@@ -165,6 +179,7 @@ func (w *World) startDuel(a, b *player) {
 			Class:      them.p.ent.Class,
 			WordLength: len(d.word),
 			MaxGuesses: w.Duels.MaxGuesses(),
+			Ranked:     isRanked,
 		})
 	}
 }
@@ -217,6 +232,7 @@ func (w *World) DuelGuess(c Client, guess string) {
 			return
 		}
 		me.guesses++
+		me.best = max(me.best, ranked.Closeness(colors))
 		res.Valid = true
 		res.Colors = colors
 		res.Seconds = w.now().Sub(d.start).Seconds()
@@ -277,15 +293,75 @@ func (w *World) ForfeitDuel(c Client) {
 // Ends the duel for both players. winner nil is a draw.
 func (w *World) endDuel(d *duel, winner *duelSide, reason protocol.DuelEndReason) {
 	secs := w.now().Sub(d.start).Seconds()
-	for _, s := range d.sides {
+	var ends [2]protocol.DuelEnd
+	for i, s := range d.sides {
 		outcome := protocol.DuelLose
 		if winner == nil {
 			outcome = protocol.DuelDraw
 		} else if winner == s {
 			outcome = protocol.DuelWin
 		}
-		w.send(s.p.client, protocol.ServerDuelEnd, protocol.DuelEnd{Outcome: outcome, Reason: reason, Solution: d.word, Seconds: secs})
+		ends[i] = protocol.DuelEnd{Outcome: outcome, Reason: reason, Solution: d.word, Seconds: secs}
+	}
+	if d.ranked {
+		w.settleRanked(d, winner, reason, secs, &ends)
+	}
+	for i, s := range d.sides {
+		w.send(s.p.client, protocol.ServerDuelEnd, ends[i])
 		s.p.duel = nil
+	}
+}
+
+// Changes both players' elo for a finished ranked duel, fills in what each
+// is told about it, and hands it off to be saved
+func (w *World) settleRanked(d *duel, winner *duelSide, reason protocol.DuelEndReason, secs float64, ends *[2]protocol.DuelEnd) {
+	a, b := d.sides[0], d.sides[1]
+	outcome := ranked.Draw
+	var margin ranked.Margin
+	if winner != nil {
+		loser := a
+		outcome = ranked.BWins
+		if winner == a {
+			loser = b
+			outcome = ranked.AWins
+		}
+		margin = ranked.Margin{
+			WinnerGuesses: winner.guesses,
+			WinnerSeconds: secs,
+			LoserGuesses:  loser.guesses,
+			LoserOut:      loser.out,
+			LoserBest:     loser.best,
+			Forfeit:       reason == protocol.DuelForfeit || reason == protocol.DuelDisconnect,
+		}
+	}
+	res := ranked.Settle(a.p.rating, b.p.rating, outcome, margin)
+
+	for i, side := range d.sides {
+		after, delta, expected := res.A, res.DeltaA, res.ExpectedA
+		if i == 1 {
+			after, delta, expected = res.B, res.DeltaB, 1-res.ExpectedA
+		}
+		e := &ends[i]
+		e.Ranked = true
+		e.EloBefore = after.Elo - delta
+		e.EloAfter = after.Elo
+		e.Expected = expected
+		e.Margin = res.Multiplier
+		w.setRating(side.p, after)
+	}
+
+	if w.OnRanked != nil {
+		w.OnRanked(ranked.Match{
+			PlayedAt: w.now(),
+			A:        a.p.charID,
+			B:        b.p.charID,
+			Outcome:  outcome,
+			Reason:   int(reason),
+			Result:   res,
+			AGuesses: a.guesses,
+			BGuesses: b.guesses,
+			Seconds:  secs,
+		})
 	}
 }
 

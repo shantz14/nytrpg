@@ -9,8 +9,11 @@ import {
     DuelChallenge, DuelChallengeReq, DuelChallengeUpdate, DuelDeclined, DuelEnd, DuelExpired, DuelOpponentGuess, DuelRespondReq, DuelSent,
     DuelStart, DuelTyping, DuelUnavailable, ServerChat, ServerCorrection, ServerDuelChallenge, ServerDuelChallengeUpdate, ServerDuelEnd,
     ServerDuelGuess, ServerDuelOpponentGuess, ServerDuelStart, ServerDuelTyping, ServerWelcome, ServerWorld, ServerWordleResult,
-    ServerWordleResume, Vec, Welcome, WorldMap, WorldUpdate, WordleRes, WordleResume,
+    ServerWordleResume, Vec, Welcome, WorldMap, WorldUpdate, WordleRes, WordleResume, ClientProfile, EntityID, Profile, ProfileReq, ServerProfile,
 } from "./protocol.gen.js";
+import { Popup } from "./popup.js";
+import { ProfileView } from "./profile.js";
+import { showRankedInfo } from "./ranked-info.js";
 import { Connection } from "./net.js";
 import { UserData, logout } from "./login.js";
 import { ChatLog } from "./chat-log.js";
@@ -69,9 +72,9 @@ export class Game {
         this.handleChats();
         this.inputDriver.onTooFar = () => this.toast("Walk closer to use that");
         this.inputDriver.onWorldClick = () => this.playerCard.hide();
-        this.inputDriver.onPlayerClick = (e) => this.playerCard.show(e, this.state.classes, this.duel === null, (target) => {
-            const req: DuelChallengeReq = { target };
-            this.send(ClientDuelChallenge, req);
+        this.inputDriver.onPlayerClick = (e) => this.playerCard.show(e, this.state.classes, this.state.ladder, this.duel === null, {
+            duel: (target, ranked) => ranked ? this.explainRankedChallenge(target) : this.challenge(target, false),
+            info: (target) => this.openProfile(target),
         });
         mountHud({
             leaderboard: () => new Leaderboard(this.userData, this.character.id, this.state.classes, this.inputDriver).run(),
@@ -91,20 +94,30 @@ export class Game {
     }
 
     private frame(now: number) {
+        // Next frame first: an error in this one mustn't stop the game for good
+        // (it used to freeze on a black screen)
+        requestAnimationFrame((t) => this.frame(t));
         const dt = Math.min((now - this.lastFrame) / 1000, 0.1);
         this.lastFrame = now;
 
-        this.move(dt);
-        this.sendPlayerState(now);
-        for (const id in this.state.otherChars) {
-            this.state.otherChars[id].interpolate(now);
+        try {
+            this.move(dt);
+            this.sendPlayerState(now);
+            for (const id in this.state.otherChars) {
+                this.state.otherChars[id].interpolate(now);
+            }
+            this.displayDriver.updateCamera();
+            this.displayDriver.draw();
+            this.playerCard.position(this.state.charVec);
+        } catch (err) {
+            // Once, not 60 times a second
+            if (!this.frameFailed) {
+                this.frameFailed = true;
+                console.error("Error drawing a frame:", err);
+            }
         }
-        this.displayDriver.updateCamera();
-        this.displayDriver.draw();
-        this.playerCard.position(this.state.charVec);
-
-        requestAnimationFrame((t) => this.frame(t));
     }
+    private frameFailed = false;
 
     private handleMsgs() {
         this.conn.on<Welcome>(ServerWelcome, (welcome) => this.welcome(welcome));
@@ -118,9 +131,12 @@ export class Game {
         this.conn.on<WordleResume>(ServerWordleResume, (resume) => this.wordle?.handleResume(resume));
 
         this.conn.on<DuelChallenge>(ServerDuelChallenge, (ch) => {
-            this.notifications.addChallenge(ch, this.state.classes, (accept) => {
-                const req: DuelRespondReq = { id: ch.id, accept };
-                this.send(ClientDuelRespond, req);
+            this.notifications.addChallenge(ch, this.state.classes, this.state.ladder, (accept) => {
+                if (accept && ch.ranked && ch.stakes) {
+                    this.explainRankedAccept(ch);
+                } else {
+                    this.respond(ch.id, accept);
+                }
             });
         });
         this.conn.on<DuelChallengeUpdate>(ServerDuelChallengeUpdate, (u) => this.challengeUpdate(u));
@@ -133,18 +149,98 @@ export class Game {
         this.conn.on<WordleRes>(ServerDuelGuess, (res) => this.duel?.handleGuess(res));
         this.conn.on<DuelOpponentGuess>(ServerDuelOpponentGuess, (g) => this.duel?.handleOpponentGuess(g));
         this.conn.on<DuelTyping>(ServerDuelTyping, (t) => this.duel?.handleTyping(t));
-        this.conn.on<DuelEnd>(ServerDuelEnd, (end) => this.duel?.handleEnd(end));
+        this.conn.on<DuelEnd>(ServerDuelEnd, (end) => {
+            if (end.ranked) {
+                this.state.selfElo = end.eloAfter;
+            }
+            this.duel?.handleEnd(end);
+        });
+        this.conn.on<Profile>(ServerProfile, (p) => {
+            const waiter = this.profileWaiters.get(p.id);
+            this.profileWaiters.delete(p.id);
+            waiter?.(p);
+        });
+    }
+
+    // Whether the last challenge we sent was ranked, for what the server says about it
+    private challengedRanked = false;
+
+    private challenge(target: EntityID, ranked: boolean) {
+        this.challengedRanked = ranked;
+        const req: DuelChallengeReq = { target, ranked };
+        this.send(ClientDuelChallenge, req);
+    }
+
+    private respond(id: number, accept: boolean) {
+        const req: DuelRespondReq = { id, accept };
+        this.send(ClientDuelRespond, req);
+    }
+
+    // Callbacks waiting for a player's profile, by their entity
+    private profileWaiters = new Map<EntityID, (p: Profile) => void>();
+
+    private requestProfile(target: EntityID, then: (p: Profile) => void) {
+        this.profileWaiters.set(target, then);
+        const req: ProfileReq = { target };
+        this.send(ClientProfile, req);
+    }
+
+    private openProfile(target: EntityID) {
+        const view = ProfileView.open(this.state, this.inputDriver);
+        if (view) {
+            this.requestProfile(target, (p) => view.show(p));
+        }
+    }
+
+    // Before a ranked challenge goes out: how it works and what's at stake
+    private explainRankedChallenge(target: EntityID) {
+        this.requestProfile(target, (p) => {
+            if (!p.stakes || this.duel) {
+                return;
+            }
+            showRankedInfo(this.state, this.inputDriver, {
+                them: { char: p.char || p.name, cls: p.class, elo: p.elo },
+                stakes: p.stakes,
+                confirm: "Send ranked challenge",
+                onConfirm: () => this.challenge(target, true),
+            });
+        });
+    }
+
+    // The ranked explainer shown before accepting, and the challenge it's for
+    private acceptingRanked: { id: number, popup: Popup } | null = null;
+
+    // Before accepting a ranked challenge: the same explainer, then accept
+    private explainRankedAccept(ch: DuelChallenge) {
+        const popup = showRankedInfo(this.state, this.inputDriver, {
+            them: { char: ch.char || ch.name, cls: ch.class ?? "", elo: ch.elo },
+            stakes: ch.stakes!,
+            confirm: "Accept ranked duel",
+            onConfirm: () => this.respond(ch.id, true),
+        });
+        this.acceptingRanked = { id: ch.id, popup };
+        popup.onClose = () => {
+            if (this.acceptingRanked?.popup === popup) {
+                this.acceptingRanked = null;
+            }
+        };
     }
 
     // What happened to a challenge we sent, or one sent to us that's now off
     private challengeUpdate(u: DuelChallengeUpdate) {
+        if (this.acceptingRanked?.id === u.id) {
+            // Still reading about it when it went away
+            this.acceptingRanked.popup.close();
+            this.toast(u.status === DuelExpired ? "The ranked challenge expired" : "The ranked challenge was withdrawn");
+            return;
+        }
         if (this.notifications.remove(u.id)) {
             // It was to us, taking it down is all there is to do
             return;
         }
         const name = u.name || "They";
         const msg: {[status: number]: string} = {
-            [DuelSent]: `Duel challenge sent to ${name}`,
+            [DuelSent]: `${this.challengedRanked ? "Ranked" : "Duel"} challenge sent to ${name}`,
             [DuelDeclined]: `${name} declined your duel`,
             [DuelExpired]: `${name} didn't answer your duel`,
             [DuelCancelled]: `${name} can't duel right now`,
@@ -163,6 +259,8 @@ export class Game {
         this.state.classes = welcome.classes;
         this.state.selfClass = welcome.classes.find((c) => c.id === welcome.character.class) ?? null;
         this.state.selfChar = welcome.character.name;
+        this.state.selfElo = welcome.elo;
+        this.state.ladder = welcome.ladder;
         this.moveSpeed = welcome.moveSpeed;
         // Duels and challenges don't survive a disconnect
         this.duel?.abandon();
@@ -188,10 +286,17 @@ export class Game {
             const other = new RemoteEntity(e.id, e.name, e.sprite, e.pos);
             other.char = e.char ?? "";
             other.cls = e.class ?? "";
+            other.elo = e.elo ?? 0;
             this.state.otherChars[e.id] = other;
         }
         for (const [id, x, y] of upd.move ?? []) {
             this.state.otherChars[id]?.addSample(x, y);
+        }
+        for (const [id, elo] of upd.elo ?? []) {
+            const other = this.state.otherChars[id];
+            if (other) {
+                other.elo = elo;
+            }
         }
         for (const id of upd.despawn ?? []) {
             delete this.state.otherChars[id];

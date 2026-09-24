@@ -86,6 +86,10 @@ async function player({ char, cls = "knight" } = {}) {
     await createCharacter(page, 0, char ?? page.name, cls);
     await play(page, 0);
     await waitFor(() => page.pos, "welcome");
+    // The frame arrives before the page handles it: wait until the game has
+    // (its own name is drawn once it knows who it is). Clicking the map before
+    // that used to hit nothing.
+    await waitFor(() => page.evaluate((n) => window.__texts.some((d) => d.text === n), page.name), "welcome handled");
     return page;
 }
 
@@ -553,6 +557,110 @@ test("duels: click a player, challenge, deny, accept, watch them type and guess,
     assert(!(await b.$("#duelPopup")), "result close closes the duel");
     await a.browserContext().close();
     await b.browserContext().close();
+});
+
+test("ranked: ranks over names, explainer before challenging and accepting, elo moves, profile", async () => {
+    const a = await player({ char: "Gawain", cls: "knight" });
+    const b = await player({ char: "Morgana", cls: "wizard" });
+    const bId = received(b, 1)[0].d.entityId;
+    await waitFor(() => received(a, 5).some((f) => f.d.spawn?.some((s) => s.id === bId)), "a to see b");
+    await sleep(300);
+
+    // Everyone starts at Silver 3, shown over their name
+    const t = await pageNow(a);
+    await sleep(200);
+    assert((await texts(a, t)).filter((d) => d.text === "SILVER 3").length >= 2, "rank over both nameplates");
+
+    const openCard = async () => {
+        await a.mouse.click(...toScreen(a, b.pos.x + 20, b.pos.y + 20));
+        await waitFor(() => a.$eval("#player-card", (e) => !e.hidden), "player card");
+    };
+    await openCard();
+    assert(await a.$eval(".pc-rank", (e) => e.textContent) === "Silver 3 · 1000", "card shows the rank");
+
+    // Ranked: the explainer comes first, with the stakes and the ladder
+    await a.click("#pcRanked");
+    await a.waitForSelector("#rankedInfoPopup", { timeout: 3000 });
+    const info = await a.$eval("#rankedInfoPopup", (e) => ({
+        win: e.querySelector("#riWin").textContent,
+        lose: e.querySelector("#riLose").textContent,
+        tiers: e.querySelectorAll(".ri-tier").length,
+        mine: e.querySelector(".ri-tier.mine .ri-tier-name")?.textContent,
+    }));
+    assert(/^\+\d+ to \+\d+$/.test(info.win) && /^−\d+ to −\d+$/.test(info.lose), `stakes ${JSON.stringify(info)}`);
+    assert(info.tiers === 16 && info.mine === "Silver 3", `ladder ${JSON.stringify(info)}`);
+    assert(!received(b, 7).length, "no challenge before confirming");
+    await a.click("#riConfirm");
+
+    // b's notice is marked ranked, and accepting shows b the explainer too
+    await b.waitForSelector(".notice.ranked .ranked-tag", { timeout: 3000 });
+    await b.click(".notice-accept");
+    await b.waitForSelector("#rankedInfoPopup", { timeout: 3000 });
+    assert(!received(a, 9).length, "duel started before b confirmed");
+    assert(await b.$eval("#riConfirm", (e) => e.textContent) === "Accept ranked duel", "accept button");
+    await b.click("#riConfirm");
+    for (const page of [a, b]) {
+        await page.waitForSelector("#duelPopup", { timeout: 3000 });
+        assert(await page.$eval("#duelRankedTag", (e) => !e.hidden), "duel marked ranked");
+    }
+
+    // a gives up: b gains the most there is, a loses it
+    await a.click("#duelForfeit");
+    await a.waitForSelector("#confirmForfeit", { timeout: 3000 });
+    await a.click("#confirmForfeit");
+    await b.waitForSelector("#duelElo:not([hidden])", { timeout: 3000 });
+    await a.waitForSelector("#duelElo:not([hidden])", { timeout: 3000 });
+    const gain = await b.$eval("#duelEloChange", (e) => e.textContent);
+    const loss = await a.$eval("#duelEloChange", (e) => e.textContent);
+    const bEnd = received(b, 12).at(-1).d;
+    assert(gain === `+${bEnd.eloAfter - bEnd.eloBefore} elo` && bEnd.eloAfter > 1000, `b's change ${gain}`);
+    assert(loss.startsWith("−"), `a's change ${loss}`);
+    assert((await b.$eval("#duelBreakdown", (e) => e.textContent)).includes("×1.75"), "forfeit margin shown");
+    await a.click("#duelResultPopup .exit");
+    await b.click("#duelResultPopup .exit");
+
+    // a sees b's new elo on the card, and b's profile has the game
+    await openCard();
+    await waitFor(async () => (await a.$eval(".pc-rank", (e) => e.textContent)).endsWith(String(bEnd.eloAfter)), "card with b's new elo");
+    await a.click("#pcInfo");
+    await a.waitForSelector("#profilePopup:not(.loading)", { timeout: 3000 });
+    const prof = await a.$eval("#profilePopup", (e) => ({
+        char: e.querySelector("#pfChar").textContent,
+        games: e.querySelector("#pfGames").textContent,
+        record: e.querySelector("#pfRecord").textContent,
+        rows: [...e.querySelectorAll(".pf-match")].map((r) => r.className + " " + r.textContent),
+        empty: e.querySelector("#pfNoGames").hidden,
+    }));
+    assert(prof.char === "Morgana" && prof.games === "1" && prof.record === "1–0–0" && prof.empty, `profile ${JSON.stringify(prof)}`);
+    assert(prof.rows.length === 1 && prof.rows[0].includes("win") && prof.rows[0].includes("Gawain"), `recent ${JSON.stringify(prof.rows)}`);
+    await a.browserContext().close();
+    await b.browserContext().close();
+});
+
+test("an error while drawing one frame doesn't freeze the game", async () => {
+    const p = await player();
+    // The next piece of text drawn throws, once. This used to stop the frame
+    // loop for good: a black screen with only your sprite on it.
+    await p.evaluate(() => {
+        const fillText = CanvasRenderingContext2D.prototype.fillText;
+        let armed = true;
+        CanvasRenderingContext2D.prototype.fillText = function (...args) {
+            if (armed) {
+                armed = false;
+                throw new Error("boom");
+            }
+            return fillText.apply(this, args);
+        };
+    });
+    await sleep(100);
+    const t = await pageNow(p);
+    await sleep(200);
+    assert((await texts(p, t)).some((d) => d.text === p.name), "frames stopped after the error");
+    // The error is reported, once
+    const reported = errors.filter((e) => e.includes("Error drawing a frame"));
+    assert(reported.length === 1, `reported ${reported.length} times`);
+    errors.splice(0, errors.length, ...errors.filter((e) => !e.includes("Error drawing a frame")));
+    await p.browserContext().close();
 });
 
 test("reconnects after the server restarts", async () => {

@@ -18,6 +18,7 @@ import (
 	"nytrpg/internal/game"
 	"nytrpg/internal/netconn"
 	"nytrpg/internal/puzzles/wordle"
+	"nytrpg/internal/ranked"
 	"nytrpg/internal/store"
 )
 
@@ -28,6 +29,7 @@ type Server struct {
 	auth   *auth.Service
 	chars  *characters.Service
 	wordle *wordle.Service
+	ranked *ranked.Service
 	router *netconn.Router
 
 	stopWorld context.CancelFunc
@@ -63,6 +65,9 @@ func New(cfg config.Config) (*Server, error) {
 	// Each feature registers the websocket messages it handles
 	s.chars = characters.New(st, s.auth)
 	world.Duels = wordle.NewDuelPuzzle(s.wordle.Words())
+	s.ranked = ranked.NewService(st)
+	world.OnRanked = s.ranked.Record
+	world.History = s.ranked
 
 	s.world.RegisterHandlers(s.router)
 	s.wordle.RegisterHandlers(s.router)
@@ -82,7 +87,7 @@ func (s *Server) World() *game.World {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServer(http.Dir(s.cfg.StaticDir)))
+	mux.Handle("/", revalidate(http.FileServer(http.Dir(s.cfg.StaticDir))))
 	mux.HandleFunc("/ws", s.handleWS)
 	mux.HandleFunc("/login", s.auth.HandleLogin)
 	mux.HandleFunc("/signup", s.auth.HandleSignup)
@@ -100,6 +105,16 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 	}
 	return mux
+}
+
+// Makes browsers check with the server before using a cached file. Without it
+// they may reuse some client modules from an older build next to new ones,
+// which breaks the game. Unchanged files still come back as a small 304.
+func revalidate(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		h.ServeHTTP(w, r)
+	})
 }
 
 var (
@@ -162,6 +177,8 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		slog.Warn("timed out waiting for connections to close")
 	}
 	s.stopWorld()
+	// Ranked results still queued get saved before the database closes
+	s.ranked.Close()
 	return s.store.Close()
 }
 
@@ -169,7 +186,9 @@ func (s *Server) join(sess *netconn.Session, ch store.Character) {
 	s.sessionsMu.Lock()
 	s.sessions[sess] = true
 	s.sessionsMu.Unlock()
-	s.world.Join(sess, sess.PlayerID, sess.Username, characters.Info(ch))
+	// Waits for any ranked duel this character just finished to be saved
+	rating := s.ranked.Load(ch.ID)
+	s.world.Join(sess, sess.PlayerID, sess.Username, characters.Info(ch), rating)
 }
 
 func (s *Server) leave(sess *netconn.Session) {

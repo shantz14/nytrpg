@@ -1,5 +1,5 @@
 import { Vector2D } from "./vector2D.js"
-import { ClassInfo, EntityID, Vec } from "./protocol.gen.js";
+import { ClassInfo, EntityID, RankTier, Vec } from "./protocol.gen.js";
 import { Animator } from "./animation.js";
 
 // Draw other entities this far in the past, so there are always two known
@@ -17,6 +17,8 @@ export class RemoteEntity {
     // Players only: the character name and class id, drawn under the username
     char: string;
     cls: string;
+    // Players only: their character's ranked elo
+    elo: number;
     sprite: string;
     // Where to draw it, updated every frame by interpolate()
     pos: Vec;
@@ -34,6 +36,7 @@ export class RemoteEntity {
         this.sprite = sprite;
         this.char = "";
         this.cls = "";
+        this.elo = 0;
         this.pos = { x: pos.x, y: pos.y };
         this.samples = [{ t: performance.now(), x: pos.x, y: pos.y }];
         this.anim = new Animator();
@@ -113,6 +116,9 @@ export class GameState {
     selfClass: ClassInfo | null;
     // Every class, from the welcome
     classes: ClassInfo[];
+    // Our character's ranked elo, and every rank, from the welcome
+    selfElo: number;
+    ladder: RankTier[];
     // Our sprite and how it's animating
     selfSprite: string;
     selfAnim: Animator;
@@ -127,6 +133,8 @@ export class GameState {
         this.selfChar = "";
         this.selfClass = null;
         this.classes = [];
+        this.selfElo = 0;
+        this.ladder = [];
         this.selfSprite = "Skoobyuboo.png";
         this.selfAnim = new Animator();
         this.otherChars = {};

@@ -93,6 +93,37 @@ var migrations = []string{
 	ALTER TABLE Wordle2 RENAME TO Wordle;
 	CREATE INDEX wordle_date ON Wordle(date, win);
 	`,
+	// Ranked duels. Each character has its own rating, created on its first
+	// ranked duel; until then it's at the starting elo.
+	`
+	CREATE TABLE Rating (
+		character_id INTEGER PRIMARY KEY REFERENCES Character(character_id),
+		elo          INTEGER NOT NULL,
+		peak         INTEGER NOT NULL,
+		games        INTEGER NOT NULL DEFAULT 0,
+		wins         INTEGER NOT NULL DEFAULT 0,
+		losses       INTEGER NOT NULL DEFAULT 0,
+		draws        INTEGER NOT NULL DEFAULT 0
+	);
+	CREATE TABLE RankedDuel (
+		ranked_duel_id INTEGER PRIMARY KEY AUTOINCREMENT,
+		played_at      INTEGER NOT NULL,
+		a_id           INTEGER NOT NULL REFERENCES Character(character_id),
+		b_id           INTEGER NOT NULL REFERENCES Character(character_id),
+		-- NULL for a draw
+		winner_id      INTEGER REFERENCES Character(character_id),
+		reason         INTEGER NOT NULL,
+		a_before       INTEGER NOT NULL,
+		a_after        INTEGER NOT NULL,
+		b_before       INTEGER NOT NULL,
+		b_after        INTEGER NOT NULL,
+		a_guesses      INTEGER NOT NULL,
+		b_guesses      INTEGER NOT NULL,
+		seconds        REAL NOT NULL
+	);
+	CREATE INDEX ranked_duel_a ON RankedDuel(a_id, played_at);
+	CREATE INDEX ranked_duel_b ON RankedDuel(b_id, played_at);
+	`,
 }
 
 func (s *Store) migrate() error {

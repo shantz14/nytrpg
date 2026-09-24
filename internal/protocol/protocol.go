@@ -18,15 +18,16 @@ import (
 type ClientMsg uint8
 
 const (
-	ClientMove          ClientMsg = 1 // Vec, the player's new position
-	ClientWordleGuess   ClientMsg = 2 // WordleReq
-	ClientChat          ClientMsg = 3 // ChatReq
-	ClientWordleStart   ClientMsg = 4 // empty, opens today's wordle
-	ClientDuelChallenge ClientMsg = 5 // DuelChallengeReq
-	ClientDuelRespond   ClientMsg = 6 // DuelRespondReq, accept or deny a challenge
-	ClientDuelGuess     ClientMsg = 7 // WordleReq, a guess in your duel
-	ClientDuelForfeit   ClientMsg = 8 // empty, give up your duel
-	ClientDuelTyping    ClientMsg = 9 // DuelTyping, letters in your current row
+	ClientMove          ClientMsg = 1  // Vec, the player's new position
+	ClientWordleGuess   ClientMsg = 2  // WordleReq
+	ClientChat          ClientMsg = 3  // ChatReq
+	ClientWordleStart   ClientMsg = 4  // empty, opens today's wordle
+	ClientDuelChallenge ClientMsg = 5  // DuelChallengeReq
+	ClientDuelRespond   ClientMsg = 6  // DuelRespondReq, accept or deny a challenge
+	ClientDuelGuess     ClientMsg = 7  // WordleReq, a guess in your duel
+	ClientDuelForfeit   ClientMsg = 8  // empty, give up your duel
+	ClientDuelTyping    ClientMsg = 9  // DuelTyping, letters in your current row
+	ClientProfile       ClientMsg = 10 // ProfileReq, a player's ranked profile
 )
 
 // Messages sent by the server
@@ -46,6 +47,7 @@ const (
 	ServerDuelOpponentGuess   ServerMsg = 11 // DuelOpponentGuess, your opponent guessed
 	ServerDuelEnd             ServerMsg = 12 // DuelEnd, your duel is over
 	ServerDuelTyping          ServerMsg = 13 // DuelTyping, your opponent's current row
+	ServerProfile             ServerMsg = 14 // Profile, in reply to ClientProfile
 )
 
 type envelope struct {
@@ -119,6 +121,22 @@ type Welcome struct {
 	Character CharacterInfo `msgpack:"character"`
 	// Every class, to look up the class of other players
 	Classes []ClassInfo `msgpack:"classes"`
+	// Your character's ranked rating
+	Elo int `msgpack:"elo"`
+	// Every rank, lowest first, to name and color anyone's elo
+	Ladder []RankTier `msgpack:"ladder"`
+}
+
+// One rank on the ranked ladder
+type RankTier struct {
+	// e.g. "silver-2"
+	ID string `msgpack:"id"`
+	// e.g. "silver", for its color
+	Family string `msgpack:"family"`
+	// e.g. "Silver 2"
+	Name string `msgpack:"name"`
+	// Lowest elo in this rank
+	MinElo int `msgpack:"minElo"`
 }
 
 // One of an account's characters. Also sent as JSON by /characters.
@@ -177,6 +195,15 @@ type WorldUpdate struct {
 	Move []EntityMove `msgpack:"move,omitempty"`
 	// Entities that left view or the game
 	Despawn []EntityID `msgpack:"despawn,omitempty"`
+	// Known players whose ranked rating changed
+	Elo []EntityElo `msgpack:"elo,omitempty"`
+}
+
+// Sent as [id, elo]
+type EntityElo struct {
+	_msgpack struct{} `msgpack:",as_array"`
+	ID       EntityID
+	Elo      int
 }
 
 type EntitySpawn struct {
@@ -189,6 +216,8 @@ type EntitySpawn struct {
 	Class  string `msgpack:"class,omitempty"`
 	Sprite string `msgpack:"sprite"`
 	Pos    Vec    `msgpack:"pos"`
+	// For players, their character's ranked rating
+	Elo int `msgpack:"elo"`
 }
 
 // Sent as [id, x, y] to keep moves small
@@ -256,6 +285,8 @@ type WordleResume struct {
 type DuelChallengeReq struct {
 	// The player to challenge, must be in view
 	Target EntityID `msgpack:"target"`
+	// Ranked duels change both players' elo
+	Ranked bool `msgpack:"ranked"`
 }
 
 type DuelRespondReq struct {
@@ -273,7 +304,21 @@ type DuelChallenge struct {
 	Char  string   `msgpack:"char,omitempty"`
 	Class string   `msgpack:"class,omitempty"`
 	// How long until it expires
-	ExpiresMs int `msgpack:"expiresMs"`
+	ExpiresMs int  `msgpack:"expiresMs"`
+	Ranked    bool `msgpack:"ranked"`
+	// The challenger's elo
+	Elo int `msgpack:"elo"`
+	// Ranked only: what you'd win or lose against them
+	Stakes *Stakes `msgpack:"stakes,omitempty"`
+}
+
+// The elo you'd gain by winning and lose by losing a ranked duel against
+// someone, smallest to largest depending on the margin. Losses are negative.
+type Stakes struct {
+	WinMin  int `msgpack:"winMin"`
+	WinMax  int `msgpack:"winMax"`
+	LoseMin int `msgpack:"loseMin"`
+	LoseMax int `msgpack:"loseMax"`
 }
 
 type DuelChallengeStatus int
@@ -308,6 +353,7 @@ type DuelStart struct {
 	Class      string `msgpack:"class,omitempty"`
 	WordLength int    `msgpack:"wordLength"`
 	MaxGuesses int    `msgpack:"maxGuesses"`
+	Ranked     bool   `msgpack:"ranked"`
 }
 
 // The colors of the opponent's guess, never the letters
@@ -347,4 +393,46 @@ type DuelEnd struct {
 	Reason   DuelEndReason `msgpack:"reason"`
 	Solution string        `msgpack:"solution"`
 	Seconds  float64       `msgpack:"seconds"`
+	// Ranked duels only: your elo before and after, how likely you were to win
+	// going in (0-1), and the margin multiplier (1 to 1.75) applied
+	Ranked    bool    `msgpack:"ranked"`
+	EloBefore int     `msgpack:"eloBefore"`
+	EloAfter  int     `msgpack:"eloAfter"`
+	Expected  float64 `msgpack:"expected"`
+	Margin    float64 `msgpack:"margin"`
+}
+
+type ProfileReq struct {
+	// A player in view, or yourself
+	Target EntityID `msgpack:"target"`
+}
+
+// A player's ranked record
+type Profile struct {
+	ID    EntityID `msgpack:"id"`
+	Name  string   `msgpack:"name"`
+	Char  string   `msgpack:"char"`
+	Class string   `msgpack:"class"`
+	Elo   int      `msgpack:"elo"`
+	// Highest elo ever reached
+	Peak   int `msgpack:"peak"`
+	Games  int `msgpack:"games"`
+	Wins   int `msgpack:"wins"`
+	Losses int `msgpack:"losses"`
+	Draws  int `msgpack:"draws"`
+	// Latest first
+	Recent []RankedMatchInfo `msgpack:"recent"`
+	// What you'd win or lose against them, unset for your own profile
+	Stakes *Stakes `msgpack:"stakes,omitempty"`
+}
+
+// One ranked duel, from the profile owner's side
+type RankedMatchInfo struct {
+	Opponent      string      `msgpack:"opponent"`
+	OpponentClass string      `msgpack:"opponentClass"`
+	Outcome       DuelOutcome `msgpack:"outcome"`
+	// Elo gained, negative for a loss
+	Change int `msgpack:"change"`
+	// Unix seconds
+	PlayedAt int64 `msgpack:"playedAt"`
 }
