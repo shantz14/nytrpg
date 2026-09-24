@@ -642,11 +642,6 @@ canvas {
     border-left: 3px solid var(--class-color);
 }
 
-.class-knight { --class-color: #c9ced6; }
-.class-wizard { --class-color: #9d8cf2; }
-.class-rogue { --class-color: #6fcf8e; }
-.class-cleric { --class-color: #e8c872; }
-
 .char-name {
     color: var(--text-strong);
     font-size: 1rem;
@@ -658,9 +653,10 @@ canvas {
 
 .char-class {
     color: var(--class-color);
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 2px;
+    font-family: var(--class-font);
+    font-weight: var(--class-weight);
+    font-size: 0.95rem;
+    letter-spacing: 0.5px;
     margin-top: 4px;
 }
 
@@ -767,10 +763,10 @@ canvas {
 
 .class-name {
     color: var(--class-color);
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 2px;
+    font-family: var(--class-font);
+    font-weight: var(--class-weight);
+    font-size: 1.05rem;
+    letter-spacing: 0.5px;
 }
 
 .class-desc {
@@ -778,6 +774,14 @@ canvas {
     font-size: 0.7rem;
     line-height: 1.4;
 }
+
+/* Each class's color and font, wherever its name shows. Must match
+   CLASS_STYLE in client/src/class-style.ts (a test checks). After
+   .char-slot and .class-choice so their accent default doesn't win. */
+.class-knight { --class-color: #c9ced6; --class-font: 'Cinzel', serif; --class-weight: 700; }
+.class-wizard { --class-color: #9d8cf2; --class-font: 'Uncial Antiqua', serif; --class-weight: 400; }
+.class-rogue { --class-color: #6fcf8e; --class-font: 'IM Fell English SC', serif; --class-weight: 400; }
+.class-cleric { --class-color: #e8c872; --class-font: 'Cormorant Garamond', serif; --class-weight: 700; }
 
 /* ---- ability bar ---- */
 
@@ -841,13 +845,110 @@ canvas {
 
 #chat-container {
     position: absolute;
-    bottom: 10px;
-    left: 10px;
+    bottom: 12px;
+    left: 12px;
+    width: min(380px, calc(100vw - 24px));
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
     z-index: 2;
+    font-family: var(--font);
+}
+
+/* Faint while you're playing, bright for a while after a message and while
+   typing. Clicks go through to the world unless you're chatting. */
+#chat-log {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 8px 10px;
+    background-color: rgba(13, 13, 13, 0.72);
+    border: 1px solid var(--line);
+    font-size: 0.8rem;
+    line-height: 1.45;
+    opacity: 0.6;
+    pointer-events: none;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+    overscroll-behavior: contain;
+    transition: opacity 300ms, border-color 300ms;
+}
+
+#chat-log:empty {
+    display: none;
+}
+
+#chat-log.active {
+    opacity: 1;
+}
+
+#chat-container:focus-within #chat-log {
+    opacity: 1;
+    border-color: var(--line-strong);
+    pointer-events: auto;
+}
+
+.chat-line {
+    padding: 1px 0 1px 8px;
+    border-left: 2px solid transparent;
+    color: var(--text);
+    overflow-wrap: anywhere;
+    animation: fade-in 200ms ease-out;
+}
+
+.chat-line.self {
+    border-left-color: var(--accent-line);
+}
+
+.chat-char {
+    color: var(--class-color, var(--text-strong));
+    font-family: var(--class-font, var(--font));
+    font-weight: var(--class-weight, 600);
+    font-size: 0.95rem;
+    margin-right: 6px;
+    cursor: default;
+}
+
+.chat-user {
+    color: var(--muted);
+    font-size: 0.72rem;
+}
+
+.chat-user.solo {
+    color: var(--text-strong);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.chat-user::after {
+    content: ":";
+    margin-right: 6px;
+}
+
+.chat-text {
+    color: var(--text);
 }
 
 #chatbox {
-    z-index: 2;
+    width: 100%;
+    padding: 9px 12px;
+    font-family: var(--font);
+    font-size: 0.85rem;
+    color: var(--text-strong);
+    background-color: rgba(22, 22, 22, 0.82);
+    border: 1px solid var(--line-strong);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+    outline: none;
+    transition: border-color 120ms, background-color 120ms, box-shadow 120ms;
+}
+
+#chatbox::placeholder {
+    color: var(--muted);
+}
+
+#chatbox:focus {
+    background-color: var(--panel);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-bg), 0 6px 18px rgba(0, 0, 0, 0.35);
 }
 
 #reconnecting, #toast {

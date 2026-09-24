@@ -8,7 +8,8 @@ import (
 )
 
 func TestEnvelopeRoundTrip(t *testing.T) {
-	msg, err := Encode(ServerChat, ChatMsg{ID: 7, Msg: "hi"})
+	sent := ChatMsg{ID: 7, Msg: "hi", Name: "alice", Char: "Merlin", Class: "wizard"}
+	msg, err := Encode(ServerChat, sent)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +24,7 @@ func TestEnvelopeRoundTrip(t *testing.T) {
 		t.Fatalf("decode: %d %v", typ, err)
 	}
 	var chat ChatMsg
-	if err := msgpack.Unmarshal(data, &chat); err != nil || chat != (ChatMsg{ID: 7, Msg: "hi"}) {
+	if err := msgpack.Unmarshal(data, &chat); err != nil || chat != sent {
 		t.Fatalf("payload: %+v %v", chat, err)
 	}
 }

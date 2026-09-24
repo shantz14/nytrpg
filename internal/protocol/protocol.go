@@ -193,6 +193,11 @@ type ChatMsg struct {
 	// Entity who said it
 	ID  EntityID `msgpack:"id"`
 	Msg string   `msgpack:"msg"`
+	// Who said it, so the chat log can name speakers the client can't see:
+	// the account's username, and the character's name and class ID
+	Name  string `msgpack:"name"`
+	Char  string `msgpack:"char,omitempty"`
+	Class string `msgpack:"class,omitempty"`
 }
 
 type WordleStatus int

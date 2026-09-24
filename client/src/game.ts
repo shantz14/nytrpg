@@ -7,7 +7,7 @@ import { Leaderboard } from "./leaderboard.js";
 import { CharacterInfo, ChatMsg, ChatReq, ClientChat, ClientMove, ClientMsg, ServerChat, ServerCorrection, ServerWelcome, ServerWorld, ServerWordleResult, ServerWordleResume, Vec, Welcome, WorldMap, WorldUpdate, WordleRes, WordleResume } from "./protocol.gen.js";
 import { Connection } from "./net.js";
 import { UserData, logout } from "./login.js";
-import { charLabel } from "./classes.js";
+import { ChatLog } from "./chat-log.js";
 
 const SERVER_URL = "/ws";
 // Position updates per second, matches the server tick rate
@@ -18,6 +18,7 @@ export class Game {
     displayDriver: DisplayDriver;
     inputDriver: InputDriver;
     state: GameState;
+    chatLog: ChatLog;
     wordle: Wordle | null;
     userData: UserData;
     // The character being played, chosen before connecting
@@ -35,6 +36,7 @@ export class Game {
         this.state = new GameState();
         this.inputDriver = new InputDriver(canvas, this.state);
         this.displayDriver = new DisplayDriver(ctx, this.state);
+        this.chatLog = new ChatLog(document.getElementById("chat-log")!);
         this.wordle = null;
         this.userData = userData;
         this.character = character;
@@ -78,7 +80,10 @@ export class Game {
         this.conn.on<Welcome>(ServerWelcome, (welcome) => this.welcome(welcome));
         this.conn.on<WorldUpdate>(ServerWorld, (upd) => this.applyWorldUpdate(upd));
         this.conn.on<Vec>(ServerCorrection, (pos) => this.setPosition(pos));
-        this.conn.on<ChatMsg>(ServerChat, (chat) => this.displayDriver.updateChat(chat));
+        this.conn.on<ChatMsg>(ServerChat, (chat) => {
+            this.displayDriver.updateChat(chat);
+            this.chatLog.add(chat, this.state.selfId, this.state.classes);
+        });
         this.conn.on<WordleRes>(ServerWordleResult, (res) => this.wordle?.handleResponse(res));
         this.conn.on<WordleResume>(ServerWordleResume, (resume) => this.wordle?.handleResume(resume));
     }
@@ -89,7 +94,7 @@ export class Game {
         this.state.selfName = welcome.username;
         this.state.classes = welcome.classes;
         this.state.selfClass = welcome.classes.find((c) => c.id === welcome.character.class) ?? null;
-        this.state.selfLabel = charLabel(welcome.classes, welcome.character.name, welcome.character.class);
+        this.state.selfChar = welcome.character.name;
         this.moveSpeed = welcome.moveSpeed;
         for (const id in this.state.otherChars) {
             this.displayDriver.removePlayer(Number(id));
@@ -110,7 +115,6 @@ export class Game {
             const other = new RemoteEntity(e.id, e.name, e.sprite, e.pos);
             other.char = e.char ?? "";
             other.cls = e.class ?? "";
-            other.label = charLabel(this.state.classes, other.char, other.cls);
             this.state.otherChars[e.id] = other;
         }
         for (const [id, x, y] of upd.move ?? []) {

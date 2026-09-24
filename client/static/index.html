@@ -7,7 +7,7 @@
         <title>rpgdle</title>
         <script src="https://cdn.jsdelivr.net/npm/@msgpack/msgpack@3.1.3/dist.umd/msgpack.min.js"></script>
         <link rel="stylesheet" href="styles.css">
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Cinzel:wght@700&family=Uncial+Antiqua&family=IM+Fell+English+SC&family=Cormorant+Garamond:wght@700&display=swap">
         <link rel="icon" href="/assets/favicon.ico" type="image/x-icon">
     </head>
     <body>
@@ -16,7 +16,8 @@
                 <canvas id="game"></canvas>
             </div>
             <div id="chat-container">
-                <input type="text" id="chatbox" name="chatbox">
+                <div id="chat-log" role="log" aria-live="polite" aria-label="Chat"></div>
+                <input type="text" id="chatbox" name="chatbox" placeholder="Press / or Enter to chat" maxlength="200" autocomplete="off" spellcheck="false" aria-label="Chat message">
             </div>
             <div id="reconnecting">Connection lost, reconnecting&hellip;</div>
             <div id="toast"></div>

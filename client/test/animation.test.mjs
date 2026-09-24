@@ -47,22 +47,35 @@ test("the sheet faces right, so walking left is drawn mirrored", () => {
     assert.equal(pose(PLAYER, anim).mirrored, true);
 });
 
-test("keeps walking briefly after stopping, then faces the camera", () => {
+test("keeps walking briefly after stopping, then stands facing the way it walked", () => {
     const anim = new Animator();
-    assert.deepEqual(pose(PLAYER, anim), { image: "Skoobyuboo.png" }, "idle before ever moving");
+    assert.deepEqual(pose(PLAYER, anim), { image: "Skoobyuboo.png" }, "faces the camera before ever moving");
 
     walk(anim, 5, 0, 3);
     anim.update(0, 0, STOP_GRACE_S / 2);
     assert.ok(anim.walking, "a short gap between moves isn't a stop");
-    assert.equal(pose(PLAYER, anim).image, "player-walk.png");
+    assert.equal(pose(PLAYER, anim).frame, 2, "still stepping through the sheet");
 
+    // Stopped: the first walk frame, still facing right (used to snap back to the camera)
     anim.update(0, 0, STOP_GRACE_S);
     assert.ok(!anim.walking);
-    assert.deepEqual(pose(PLAYER, anim), { image: "Skoobyuboo.png" });
+    assert.deepEqual(pose(PLAYER, anim), { image: "player-walk.png", frame: 0, sheet, mirrored: false });
+
+    // And left, mirrored
+    walk(anim, -5, 0, 2);
+    anim.update(0, 0, STOP_GRACE_S * 2);
+    assert.deepEqual(pose(PLAYER, anim), { image: "player-walk.png", frame: 0, sheet, mirrored: true });
 
     // Walking again starts from the first frame
     anim.update(5, 0, frame);
     assert.equal(anim.frame(sheet), 0);
+});
+
+test("walking only up or down doesn't turn it away from the camera", () => {
+    const anim = new Animator();
+    walk(anim, 0, 5, 3);
+    anim.update(0, 0, STOP_GRACE_S * 2);
+    assert.deepEqual(pose(PLAYER, anim), { image: "Skoobyuboo.png" });
 });
 
 test("sprites without animations are drawn as plain images", () => {

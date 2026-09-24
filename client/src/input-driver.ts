@@ -27,17 +27,19 @@ export class InputDriver {
         const chatbox = document.getElementById("chatbox") as HTMLInputElement;
 
         document.addEventListener('keydown', (event) => {
-            if (event.key == "/" && this.isGameFocused()) {
+            // "/" or Enter opens chat
+            if ((event.key == "/" || event.key == "Enter") && this.isGameFocused()) {
                 event.preventDefault();
                 chatbox.focus();
                 this.setChatFocused();
                 return;
             }
-            if (event.key == "Enter" && this.inputMode == InputMode.ChatFocused) {
-                if (chatbox.value) {
+            if (this.inputMode == InputMode.ChatFocused && (event.key == "Enter" || event.key == "Escape")) {
+                // Enter sends, Escape throws the message away
+                if (event.key == "Enter" && chatbox.value.trim()) {
                     chatbox.dispatchEvent(new Event("sendChat"));
-                    chatbox.value = "";
                 }
+                chatbox.value = "";
                 chatbox.blur();
                 this.setGameFocused();
                 return;

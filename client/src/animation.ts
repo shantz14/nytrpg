@@ -12,8 +12,10 @@ export type SpriteSheet = {
 }
 
 export type SpriteAnimations = {
-    // Standing still
+    // Standing still, before it has ever walked sideways
     idle: string;
+    // Also used standing still after walking: the first frame, facing the
+    // way it last walked, so stopping and starting again don't jump
     walk: SpriteSheet;
 }
 
@@ -34,6 +36,9 @@ export const STOP_GRACE_S = 0.15;
 export class Animator {
     // +1 right, -1 left
     facing: number;
+    // It has walked sideways, so facing means something. Until then it
+    // stands facing the camera.
+    turned: boolean;
     // Seconds spent walking since it last stood still
     walkTime: number;
     // Seconds since it last moved
@@ -41,6 +46,7 @@ export class Animator {
 
     constructor() {
         this.facing = 1;
+        this.turned = false;
         this.walkTime = 0;
         this.stillFor = Infinity;
     }
@@ -50,6 +56,7 @@ export class Animator {
         const wasWalking = this.walking;
         if (dx !== 0) {
             this.facing = dx > 0 ? 1 : -1;
+            this.turned = true;
         }
         if (dx !== 0 || dy !== 0) {
             this.stillFor = 0;
@@ -91,9 +98,13 @@ export function pose(sprite: string, anim: Animator): Pose {
     if (!anims) {
         return { image: sprite };
     }
-    if (!anim.walking) {
-        return { image: anims.idle };
-    }
     const sheet = anims.walk;
+    if (!anim.walking) {
+        if (!anim.turned) {
+            return { image: anims.idle };
+        }
+        // Stays facing the way it was walking
+        return { image: sheet.image, frame: 0, sheet, mirrored: anim.mirrored(sheet) };
+    }
     return { image: sheet.image, frame: anim.frame(sheet), sheet, mirrored: anim.mirrored(sheet) };
 }

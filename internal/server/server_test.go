@@ -105,6 +105,10 @@ func TestChat(t *testing.T) {
 	if msg.ID != b.Welcome.EntityID || msg.Msg != "hello" {
 		t.Fatalf("want trimmed chat from b's entity, got %+v", msg)
 	}
+	// Named by the server from b's session, for the chat log
+	if ch := b.Welcome.Character; msg.Name != "b" || msg.Char != ch.Name || msg.Class != ch.Class {
+		t.Fatalf("want chat named b / %s / %s, got %+v", ch.Name, ch.Class, msg)
+	}
 	// The speaker hears themselves
 	testkit.Expect[protocol.ChatMsg](t, b, protocol.ServerChat)
 

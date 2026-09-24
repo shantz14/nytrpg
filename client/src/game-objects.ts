@@ -14,11 +14,9 @@ type Sample = { t: number, x: number, y: number };
 export class RemoteEntity {
     id: EntityID;
     name: string;
-    // Players only: the character name and class id, and "Name (Class)" to
-    // draw under the username
+    // Players only: the character name and class id, drawn under the username
     char: string;
     cls: string;
-    label: string;
     sprite: string;
     // Where to draw it, updated every frame by interpolate()
     pos: Vec;
@@ -34,7 +32,6 @@ export class RemoteEntity {
         this.sprite = sprite;
         this.char = "";
         this.cls = "";
-        this.label = "";
         this.pos = { x: pos.x, y: pos.y };
         this.samples = [{ t: performance.now(), x: pos.x, y: pos.y }];
         this.anim = new Animator();
@@ -93,8 +90,8 @@ export class GameState {
     // Our own entity and name, set by the welcome message
     selfId: EntityID;
     selfName: string;
-    // "Name (Class)" for the character we're playing, and its class
-    selfLabel: string;
+    // The character we're playing: its name and class
+    selfChar: string;
     selfClass: ClassInfo | null;
     // Every class, from the welcome
     classes: ClassInfo[];
@@ -109,7 +106,7 @@ export class GameState {
         this.charVec = new Vector2D(0, 0);
         this.selfId = 0;
         this.selfName = "";
-        this.selfLabel = "";
+        this.selfChar = "";
         this.selfClass = null;
         this.classes = [];
         this.selfSprite = "Skoobyuboo.png";

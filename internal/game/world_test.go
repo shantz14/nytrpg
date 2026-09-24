@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -272,10 +273,11 @@ func TestMoveValidation(t *testing.T) {
 	}
 }
 
-func TestChatHeardNearby(t *testing.T) {
+func TestChatHeardByEveryone(t *testing.T) {
 	tw := newTestWorld()
 	a, pa := tw.join(1, protocol.Vec{X: 100, Y: 100})
 	near, _ := tw.join(2, protocol.Vec{X: 300, Y: 100})
+	// Chat is global: players out of view hear it too (it used to be nearby only)
 	far, _ := tw.join(3, protocol.Vec{X: 4000, Y: 4000})
 	tw.tickNow()
 	a.msgs, near.msgs, far.msgs = nil, nil, nil
@@ -283,15 +285,26 @@ func TestChatHeardNearby(t *testing.T) {
 	tw.Chat(a, "  hello  ")
 	tw.Chat(a, "   ")
 	tw.flush()
-	for _, c := range []*fakeClient{a, near} {
+	// Named, so the far player's chat log can say who it was
+	want := protocol.ChatMsg{ID: pa.ent.ID, Msg: "hello", Name: "p", Char: "char1", Class: "wizard"}
+	for _, c := range []*fakeClient{a, near, far} {
 		chats := c.take(protocol.ServerChat)
 		var m protocol.ChatMsg
-		if len(chats) != 1 || msgpack.Unmarshal(chats[0], &m) != nil || m.ID != pa.ent.ID || m.Msg != "hello" {
-			t.Fatalf("chat not delivered right: %v %+v", chats, m)
+		if len(chats) != 1 || msgpack.Unmarshal(chats[0], &m) != nil || m != want {
+			t.Fatalf("chat not delivered right: %d chats, %+v", len(chats), m)
 		}
 	}
-	if len(far.take(protocol.ServerChat)) != 0 {
-		t.Fatal("far player heard chat")
+}
+
+func TestChatIsCapped(t *testing.T) {
+	tw := newTestWorld()
+	a, _ := tw.join(1, protocol.Vec{X: 100, Y: 100})
+	tw.Chat(a, strings.Repeat("é", maxChatLen+50))
+	tw.flush()
+	chats := a.take(protocol.ServerChat)
+	var m protocol.ChatMsg
+	if len(chats) != 1 || msgpack.Unmarshal(chats[0], &m) != nil || len([]rune(m.Msg)) != maxChatLen {
+		t.Fatalf("want one %d rune chat, got %d chats of %d runes", maxChatLen, len(chats), len([]rune(m.Msg)))
 	}
 }
 

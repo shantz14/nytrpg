@@ -227,7 +227,51 @@ test("two players see each other move, and chat", async () => {
     await a.keyboard.press("/");
     await a.keyboard.type("hello");
     await a.keyboard.press("Enter");
-    await waitFor(() => received(b, 4).some((f) => f.d.msg === "hello"), "b to hear the chat");
+    await waitFor(() => received(b, 4).some((f) => f.d.msg === "hello" && f.d.name === a.name), "b to hear the chat");
+
+    // Both chat logs name the speaker: character (in its class's style), then username
+    const logLine = (page) => page.$$eval("#chat-log .chat-line", (rows) => rows.map((r) => ({
+        self: r.classList.contains("self"),
+        char: r.querySelector(".chat-char")?.textContent,
+        cls: r.querySelector(".chat-char")?.className,
+        user: r.querySelector(".chat-user")?.textContent,
+        text: r.querySelector(".chat-text")?.textContent,
+    })));
+    for (const [page, self] of [[a, true], [b, false]]) {
+        const rows = await waitFor(async () => { const r = await logLine(page); return r.length && r; }, "a chat log line");
+        const want = { self, char: a.name, cls: "chat-char class-knight", user: a.name, text: "hello" };
+        assert(JSON.stringify(rows[0]) === JSON.stringify(want), `log: ${JSON.stringify(rows[0])}`);
+    }
+    // A bubble over a, on both screens
+    const t = await pageNow(b);
+    await sleep(150);
+    assert((await texts(b, t)).some((d) => d.text === "hello"), "no chat bubble drawn");
+
+    // Enter opens chat too, and Escape throws the message away
+    await b.keyboard.press("Enter");
+    await b.keyboard.type("never mind");
+    await b.keyboard.press("Escape");
+    assert(await b.$eval("#chatbox", (el) => el.value === "" && document.activeElement !== el), "Escape didn't close chat");
+    await sleep(300);
+    assert(!received(a, 4).some((f) => f.d.msg === "never mind"), "an escaped message was sent");
+    await a.browserContext().close();
+    await b.browserContext().close();
+});
+
+test("chat is global: heard out of view, in the log but without a bubble", async () => {
+    const a = await player();
+    const b = await player();
+    // Walk b out of a's view (3x3 cells of 1024px)
+    await hold(b, "d", 5000);
+    await waitFor(() => received(a, 5).some((f) => f.d.despawn?.length), "b to leave a's view");
+
+    const t = await pageNow(a);
+    await b.keyboard.press("/");
+    await b.keyboard.type("far away");
+    await b.keyboard.press("Enter");
+    await waitFor(() => a.$$eval("#chat-log .chat-text", (els) => els.some((e) => e.textContent === "far away")), "a's log to show b's chat");
+    await sleep(150);
+    assert(!(await texts(a, t)).some((d) => d.text === "far away"), "a drew a bubble for a player out of view");
     await a.browserContext().close();
     await b.browserContext().close();
 });
@@ -288,7 +332,7 @@ test("walking is never corrected; far things say walk closer; leaderboard opens"
     await p.browserContext().close();
 });
 
-test("character walks with the sprite sheet, flips left, and faces the camera when idle", async () => {
+test("character walks with the sprite sheet, flips left, and keeps facing that way when it stops", async () => {
     const watcher = await player();
     const p = await player();
     await sleep(300);
@@ -318,15 +362,17 @@ test("character walks with the sprite sheet, flips left, and faces the camera wh
     const seen = await draws(watcher, tWatch, false);
     assert(seen.some((d) => d.file === "player-walk.png" && d.mirrored), `watcher should see p walk left: ${JSON.stringify(seen.slice(-3))}`);
 
-    // Stopped: back to facing the camera, for both of them
+    // Stopped: standing on the first frame, still facing left, for both of them
+    // (it used to snap back to facing the camera)
     await sleep(500);
     t = await pageNow(p);
     const tw = await pageNow(watcher);
     await sleep(200);
+    const standingLeft = (d) => d.file === "player-walk.png" && d.sx === 0 && d.mirrored;
     own = await draws(p, t, true);
-    assert(own.length && own.every((d) => d.file === "Skoobyuboo.png"), "idle again after stopping");
+    assert(own.length && own.every(standingLeft), `should stand facing left: ${JSON.stringify(own.slice(-3))}`);
     const seenIdle = await draws(watcher, tw, false);
-    assert(seenIdle.length && seenIdle.every((d) => d.file === "Skoobyuboo.png"), "watcher should see p idle");
+    assert(seenIdle.length && seenIdle.every(standingLeft), `watcher should see p standing facing left: ${JSON.stringify(seenIdle.slice(-3))}`);
 
     await watcher.browserContext().close();
     await p.browserContext().close();
@@ -373,20 +419,22 @@ test("character screen: 4 slots, create with a class, delete asks first, play", 
     await p.browserContext().close();
 });
 
-test("labels: username over 'Name (Class)', for yourself and others", async () => {
+test("labels: username over the character name and class, in the class's font", async () => {
     const a = await player({ char: "Merlin", cls: "wizard" });
     const b = await player({ char: "Tuck", cls: "cleric" });
-    const labelsOf = async (page, name, label) => {
+    const labelsOf = async (page, name, char, cls, font) => {
         const t = await pageNow(page);
         await sleep(150);
         const drawn = await texts(page, t);
         const top = drawn.find((d) => d.text === name);
-        const under = drawn.find((d) => d.text === label && d.x === top?.x);
-        return top && under && under.y > top.y;
+        const under = drawn.find((d) => d.text === char && d.y > top?.y);
+        // The class sits right of the character name, on the same line
+        const clsText = drawn.find((d) => d.text === cls && d.y === under?.y && d.x > under.x);
+        return top && under && clsText && clsText.font.includes(font);
     };
-    await waitFor(() => labelsOf(a, a.name, "Merlin (Wizard)"), "a's own labels");
-    await waitFor(() => labelsOf(a, b.name, "Tuck (Cleric)"), "a sees b's labels");
-    await waitFor(() => labelsOf(b, a.name, "Merlin (Wizard)"), "b sees a's labels");
+    await waitFor(() => labelsOf(a, a.name, "Merlin", "Wizard", "Uncial Antiqua"), "a's own labels");
+    await waitFor(() => labelsOf(a, b.name, "Tuck", "Cleric", "Cormorant Garamond"), "a sees b's labels");
+    await waitFor(() => labelsOf(b, a.name, "Merlin", "Wizard", "Uncial Antiqua"), "b sees a's labels");
     await a.browserContext().close();
     await b.browserContext().close();
 });

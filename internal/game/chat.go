@@ -9,7 +9,8 @@ import (
 
 const maxChatLen = 200
 
-// Says msg as the client's player. Heard by everyone who can see them.
+// Says msg as the client's player. Chat is global: everyone online hears it,
+// clients only show a bubble over speakers they can see.
 func (w *World) Chat(c Client, msg string) {
 	msg = strings.TrimSpace(msg)
 	if msg == "" {
@@ -24,16 +25,15 @@ func (w *World) Chat(c Client, msg string) {
 		if !ok {
 			return
 		}
-		out, err := protocol.Encode(protocol.ServerChat, protocol.ChatMsg{ID: speaker.ent.ID, Msg: msg})
+		e := speaker.ent
+		out, err := protocol.Encode(protocol.ServerChat, protocol.ChatMsg{ID: e.ID, Msg: msg, Name: e.Name, Char: e.Char, Class: e.Class})
 		if err != nil {
 			slog.Error("encoding chat", "err", err)
 			return
 		}
 		for _, p := range w.players {
-			if _, sees := p.known[speaker.ent.ID]; sees || p == speaker {
-				w.Stats.BytesOut.Add(int64(len(out)))
-				p.client.Send(out)
-			}
+			w.Stats.BytesOut.Add(int64(len(out)))
+			p.client.Send(out)
 		}
 	})
 }

@@ -125,6 +125,11 @@ export interface ChatMsg {
     // Entity who said it
     id: EntityID;
     msg: string;
+    // Who said it, so the chat log can name speakers the client can't see:
+    // the account's username, and the character's name and class ID
+    name: string;
+    char?: string;
+    class?: string;
 }
 
 export type WordleStatus = number;
