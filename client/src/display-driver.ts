@@ -154,7 +154,7 @@ export class DisplayDriver {
     private drawCharacter(labels: Label[]) {
         const m = this.middle;
         const s = this.state;
-        const w = this.drawEntity(s.selfSprite, m.x, m.y, s.selfAnim);
+        const [w] = this.drawEntity(s.selfSprite, m.x, m.y, s.selfAnim);
         if (w) {
             labels.push({ id: s.selfId, name: s.selfName, char: s.selfChar, cls: s.selfClass?.id ?? "", cx: m.x + w / 2, top: m.y });
         }
@@ -166,27 +166,29 @@ export class DisplayDriver {
             const other = this.state.otherChars[id];
             const x = other.pos.x - cam.x;
             const y = other.pos.y - cam.y;
+            other.hitbox = null;
             if (!this.onScreen(x, y)) {
                 continue;
             }
-            const w = this.drawEntity(other.sprite, x, y, other.anim);
+            const [w, h] = this.drawEntity(other.sprite, x, y, other.anim);
             if (w) {
+                other.hitbox = { x, y, w, h };
                 labels.push({ id: other.id, name: other.name, char: other.char, cls: other.cls, cx: x + w / 2, top: y });
             }
         }
     }
 
-    // Draws an entity's current pose at x, y and returns its width. 0 if its
-    // image hasn't loaded yet.
-    private drawEntity(sprite: string, x: number, y: number, anim: Animator): number {
+    // Draws an entity's current pose at x, y and returns its width and height.
+    // 0 if its image hasn't loaded yet.
+    private drawEntity(sprite: string, x: number, y: number, anim: Animator): [number, number] {
         const p = pose(sprite, anim);
         const img = this.sprite(p.image);
         if (!img) {
-            return 0;
+            return [0, 0];
         }
         if (!("sheet" in p)) {
             this.ctx.drawImage(img, x, y);
-            return img.width;
+            return [img.width, img.height];
         }
         const { frameWidth: w, frameHeight: h } = p.sheet;
         const sx = p.frame * w;
@@ -200,7 +202,7 @@ export class DisplayDriver {
         } else {
             this.ctx.drawImage(img, sx, 0, w, h, x, y, w, h);
         }
-        return w;
+        return [w, h];
     }
 
     // Centered over the sprite, bottom up: the character's name and class

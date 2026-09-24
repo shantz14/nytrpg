@@ -4,11 +4,20 @@ import { Clickable, GameState, RemoteEntity } from "./game-objects.js";
 import { Vector2D } from "./vector2D.js";
 import { Wordle } from "./wordle.js";
 import { Leaderboard } from "./leaderboard.js";
-import { CharacterInfo, ChatMsg, ChatReq, ClientChat, ClientMove, ClientMsg, ServerChat, ServerCorrection, ServerWelcome, ServerWorld, ServerWordleResult, ServerWordleResume, Vec, Welcome, WorldMap, WorldUpdate, WordleRes, WordleResume } from "./protocol.gen.js";
+import {
+    CharacterInfo, ChatMsg, ChatReq, ClientChat, ClientDuelChallenge, ClientDuelRespond, ClientMove, ClientMsg, DuelBusy, DuelCancelled,
+    DuelChallenge, DuelChallengeReq, DuelChallengeUpdate, DuelDeclined, DuelEnd, DuelExpired, DuelOpponentGuess, DuelRespondReq, DuelSent,
+    DuelStart, DuelTyping, DuelUnavailable, ServerChat, ServerCorrection, ServerDuelChallenge, ServerDuelChallengeUpdate, ServerDuelEnd,
+    ServerDuelGuess, ServerDuelOpponentGuess, ServerDuelStart, ServerDuelTyping, ServerWelcome, ServerWorld, ServerWordleResult,
+    ServerWordleResume, Vec, Welcome, WorldMap, WorldUpdate, WordleRes, WordleResume,
+} from "./protocol.gen.js";
 import { Connection } from "./net.js";
 import { UserData, logout } from "./login.js";
 import { ChatLog } from "./chat-log.js";
 import { mountHud } from "./hud.js";
+import { Duel } from "./duel.js";
+import { Notifications } from "./notifications.js";
+import { PlayerCard } from "./player-card.js";
 
 const SERVER_URL = "/ws";
 // Position updates per second, matches the server tick rate
@@ -21,6 +30,10 @@ export class Game {
     state: GameState;
     chatLog: ChatLog;
     wordle: Wordle | null;
+    // The duel we're in, if any
+    duel: Duel | null;
+    notifications: Notifications;
+    playerCard: PlayerCard;
     userData: UserData;
     // The character being played, chosen before connecting
     character: CharacterInfo;
@@ -39,6 +52,9 @@ export class Game {
         this.displayDriver = new DisplayDriver(ctx, this.state);
         this.chatLog = new ChatLog(document.getElementById("chat-log")!);
         this.wordle = null;
+        this.duel = null;
+        this.notifications = new Notifications(document.getElementById("notifications")!);
+        this.playerCard = new PlayerCard(document.getElementById("player-card")!);
         this.userData = userData;
         this.character = character;
         this.lastSent = null;
@@ -52,6 +68,11 @@ export class Game {
         this.handleMsgs();
         this.handleChats();
         this.inputDriver.onTooFar = () => this.toast("Walk closer to use that");
+        this.inputDriver.onWorldClick = () => this.playerCard.hide();
+        this.inputDriver.onPlayerClick = (e) => this.playerCard.show(e, this.state.classes, this.duel === null, (target) => {
+            const req: DuelChallengeReq = { target };
+            this.send(ClientDuelChallenge, req);
+        });
         mountHud({
             leaderboard: () => new Leaderboard(this.userData, this.character.id, this.state.classes, this.inputDriver).run(),
             logout: () => {
@@ -80,6 +101,7 @@ export class Game {
         }
         this.displayDriver.updateCamera();
         this.displayDriver.draw();
+        this.playerCard.position(this.state.charVec);
 
         requestAnimationFrame((t) => this.frame(t));
     }
@@ -94,6 +116,44 @@ export class Game {
         });
         this.conn.on<WordleRes>(ServerWordleResult, (res) => this.wordle?.handleResponse(res));
         this.conn.on<WordleResume>(ServerWordleResume, (resume) => this.wordle?.handleResume(resume));
+
+        this.conn.on<DuelChallenge>(ServerDuelChallenge, (ch) => {
+            this.notifications.addChallenge(ch, this.state.classes, (accept) => {
+                const req: DuelRespondReq = { id: ch.id, accept };
+                this.send(ClientDuelRespond, req);
+            });
+        });
+        this.conn.on<DuelChallengeUpdate>(ServerDuelChallengeUpdate, (u) => this.challengeUpdate(u));
+        this.conn.on<DuelStart>(ServerDuelStart, (start) => {
+            this.playerCard.hide();
+            this.wordle = null;
+            this.duel = new Duel(this, start);
+            this.duel.open();
+        });
+        this.conn.on<WordleRes>(ServerDuelGuess, (res) => this.duel?.handleGuess(res));
+        this.conn.on<DuelOpponentGuess>(ServerDuelOpponentGuess, (g) => this.duel?.handleOpponentGuess(g));
+        this.conn.on<DuelTyping>(ServerDuelTyping, (t) => this.duel?.handleTyping(t));
+        this.conn.on<DuelEnd>(ServerDuelEnd, (end) => this.duel?.handleEnd(end));
+    }
+
+    // What happened to a challenge we sent, or one sent to us that's now off
+    private challengeUpdate(u: DuelChallengeUpdate) {
+        if (this.notifications.remove(u.id)) {
+            // It was to us, taking it down is all there is to do
+            return;
+        }
+        const name = u.name || "They";
+        const msg: {[status: number]: string} = {
+            [DuelSent]: `Duel challenge sent to ${name}`,
+            [DuelDeclined]: `${name} declined your duel`,
+            [DuelExpired]: `${name} didn't answer your duel`,
+            [DuelCancelled]: `${name} can't duel right now`,
+            [DuelBusy]: this.duel ? "Finish your duel first" : `${name} is already in a duel`,
+            [DuelUnavailable]: "Get closer to challenge them",
+        };
+        if (msg[u.status]) {
+            this.toast(msg[u.status]);
+        }
     }
 
     // Sent on every connect, including reconnects: start from a clean slate
@@ -104,6 +164,11 @@ export class Game {
         this.state.selfClass = welcome.classes.find((c) => c.id === welcome.character.class) ?? null;
         this.state.selfChar = welcome.character.name;
         this.moveSpeed = welcome.moveSpeed;
+        // Duels and challenges don't survive a disconnect
+        this.duel?.abandon();
+        this.duel = null;
+        this.notifications.clear();
+        this.playerCard.hide();
         for (const id in this.state.otherChars) {
             this.displayDriver.removePlayer(Number(id));
         }

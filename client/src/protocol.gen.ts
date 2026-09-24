@@ -7,6 +7,11 @@ export const ClientMove: ClientMsg = 1; // Vec, the player's new position
 export const ClientWordleGuess: ClientMsg = 2; // WordleReq
 export const ClientChat: ClientMsg = 3; // ChatReq
 export const ClientWordleStart: ClientMsg = 4; // empty, opens today's wordle
+export const ClientDuelChallenge: ClientMsg = 5; // DuelChallengeReq
+export const ClientDuelRespond: ClientMsg = 6; // DuelRespondReq, accept or deny a challenge
+export const ClientDuelGuess: ClientMsg = 7; // WordleReq, a guess in your duel
+export const ClientDuelForfeit: ClientMsg = 8; // empty, give up your duel
+export const ClientDuelTyping: ClientMsg = 9; // DuelTyping, letters in your current row
 
 // Messages sent by the server
 export type ServerMsg = number;
@@ -17,6 +22,13 @@ export const ServerWordleResume: ServerMsg = 3; // WordleResume
 export const ServerChat: ServerMsg = 4; // ChatMsg
 export const ServerWorld: ServerMsg = 5; // WorldUpdate
 export const ServerCorrection: ServerMsg = 6; // Vec, the server rejected a move, snap back here
+export const ServerDuelChallenge: ServerMsg = 7; // DuelChallenge, someone challenged you
+export const ServerDuelChallengeUpdate: ServerMsg = 8; // DuelChallengeUpdate, what happened to a challenge
+export const ServerDuelStart: ServerMsg = 9; // DuelStart, a duel you're in began
+export const ServerDuelGuess: ServerMsg = 10; // WordleRes, the result of your duel guess
+export const ServerDuelOpponentGuess: ServerMsg = 11; // DuelOpponentGuess, your opponent guessed
+export const ServerDuelEnd: ServerMsg = 12; // DuelEnd, your duel is over
+export const ServerDuelTyping: ServerMsg = 13; // DuelTyping, your opponent's current row
 
 // A position in world pixels
 export interface Vec {
@@ -166,5 +178,95 @@ export interface WordleResume {
     tooFar: boolean;
     guesses: Array<string>;
     colors: Array<Array<WordleColor>>;
+    seconds: number;
+}
+
+export interface DuelChallengeReq {
+    // The player to challenge, must be in view
+    target: EntityID;
+}
+
+export interface DuelRespondReq {
+    // From DuelChallenge
+    id: number;
+    accept: boolean;
+}
+
+// Sent to the player being challenged
+export interface DuelChallenge {
+    id: number;
+    // Who is challenging: their entity, username, character name and class ID
+    from: EntityID;
+    name: string;
+    char?: string;
+    class?: string;
+    // How long until it expires
+    expiresMs: number;
+}
+
+export type DuelChallengeStatus = number;
+
+// To the challenger: the challenge is waiting for an answer
+export const DuelSent: DuelChallengeStatus = 0;
+// To the challenger: they said no
+export const DuelDeclined: DuelChallengeStatus = 1;
+// To both: nobody answered in time
+export const DuelExpired: DuelChallengeStatus = 2;
+// To both: someone left, or one of you started another duel
+export const DuelCancelled: DuelChallengeStatus = 3;
+// To the challenger: one of you is already in a duel
+export const DuelBusy: DuelChallengeStatus = 4;
+// To the challenger: they're gone or not in view
+export const DuelUnavailable: DuelChallengeStatus = 5;
+
+export interface DuelChallengeUpdate {
+    // 0 when the challenge was refused before it got an id (Busy, Unavailable)
+    id: number;
+    // The other player's character name, or username if they have none
+    name: string;
+    status: DuelChallengeStatus;
+}
+
+export interface DuelStart {
+    // Who you're up against
+    name: string;
+    char?: string;
+    class?: string;
+    wordLength: number;
+    maxGuesses: number;
+}
+
+// The colors of the opponent's guess, never the letters
+export interface DuelOpponentGuess {
+    colors: Array<WordleColor>;
+}
+
+// How many letters are in the current row, never which ones. Sent by the
+// client as it types and forwarded to the opponent.
+export interface DuelTyping {
+    count: number;
+}
+
+export type DuelOutcome = number;
+
+export const DuelWin: DuelOutcome = 0;
+export const DuelLose: DuelOutcome = 1;
+export const DuelDraw: DuelOutcome = 2;
+
+export type DuelEndReason = number;
+
+// Someone found the word
+export const DuelSolved: DuelEndReason = 0;
+// Both ran out of guesses
+export const DuelOutOfGuesses: DuelEndReason = 1;
+// Someone gave up
+export const DuelForfeit: DuelEndReason = 2;
+// Someone disconnected
+export const DuelDisconnect: DuelEndReason = 3;
+
+export interface DuelEnd {
+    outcome: DuelOutcome;
+    reason: DuelEndReason;
+    solution: string;
     seconds: number;
 }

@@ -52,6 +52,11 @@ func (w *Words) For(date string) string {
 	return w.solutions[r.Intn(len(w.solutions))]
 }
 
+// Any solution word, for games that aren't the daily one
+func (w *Words) Random(r *rand.Rand) string {
+	return w.solutions[r.Intn(len(w.solutions))]
+}
+
 // guess must be upper case
 func (w *Words) Guessable(guess string) bool {
 	return w.guessables[guess]

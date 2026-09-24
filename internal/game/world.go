@@ -58,6 +58,8 @@ type player struct {
 	// Entities this client knows about, and the tick they were last in view
 	known map[protocol.EntityID]uint64
 	moveBudget
+	// The duel they're in, nil when not dueling
+	duel *duel
 }
 
 // A system runs every tick, in the order added, before replication
@@ -67,6 +69,8 @@ type World struct {
 	presence
 
 	Map *protocol.WorldMap
+	// The puzzle duels are played on. Set before Run, nil turns duels off.
+	Duels DuelPuzzle
 
 	// Owned by the world goroutine
 	entities map[protocol.EntityID]*Entity
@@ -76,6 +80,9 @@ type World struct {
 	tick     uint64
 	moved    []*Entity
 	systems  []System
+	// Duel challenges waiting for an answer, by id
+	challenges    map[uint32]*challenge
+	nextChallenge uint32
 
 	cmds chan func()
 	// For tests
@@ -92,9 +99,12 @@ func NewWorld(m *protocol.WorldMap) *World {
 		entities: make(map[protocol.EntityID]*Entity),
 		players:  make(map[Client]*player),
 		grid:     newGrid(),
-		cmds:     make(chan func(), 1024),
-		now:      time.Now,
-		rng:      rand.New(rand.NewSource(time.Now().UnixNano())),
+		// Built in systems run before any added ones
+		systems:    []System{(*World).expireChallenges},
+		challenges: make(map[uint32]*challenge),
+		cmds:       make(chan func(), 1024),
+		now:        time.Now,
+		rng:        rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
@@ -226,6 +236,7 @@ func (w *World) Leave(c Client) {
 		if !ok {
 			return
 		}
+		w.leaveDuels(p)
 		w.removeEntity(p.ent)
 		delete(w.players, c)
 		w.ReleaseOnline(p.playerID)

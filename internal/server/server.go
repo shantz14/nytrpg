@@ -62,6 +62,7 @@ func New(cfg config.Config) (*Server, error) {
 
 	// Each feature registers the websocket messages it handles
 	s.chars = characters.New(st, s.auth)
+	world.Duels = wordle.NewDuelPuzzle(s.wordle.Words())
 
 	s.world.RegisterHandlers(s.router)
 	s.wordle.RegisterHandlers(s.router)
@@ -72,6 +73,11 @@ func New(cfg config.Config) (*Server, error) {
 	s.stopWorld = cancel
 	go world.Run(ctx)
 	return s, nil
+}
+
+// The shared world, for tests
+func (s *Server) World() *game.World {
+	return s.world
 }
 
 func (s *Server) Handler() http.Handler {

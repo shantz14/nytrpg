@@ -18,22 +18,34 @@ import (
 type ClientMsg uint8
 
 const (
-	ClientMove        ClientMsg = 1 // Vec, the player's new position
-	ClientWordleGuess ClientMsg = 2 // WordleReq
-	ClientChat        ClientMsg = 3 // ChatReq
-	ClientWordleStart ClientMsg = 4 // empty, opens today's wordle
+	ClientMove          ClientMsg = 1 // Vec, the player's new position
+	ClientWordleGuess   ClientMsg = 2 // WordleReq
+	ClientChat          ClientMsg = 3 // ChatReq
+	ClientWordleStart   ClientMsg = 4 // empty, opens today's wordle
+	ClientDuelChallenge ClientMsg = 5 // DuelChallengeReq
+	ClientDuelRespond   ClientMsg = 6 // DuelRespondReq, accept or deny a challenge
+	ClientDuelGuess     ClientMsg = 7 // WordleReq, a guess in your duel
+	ClientDuelForfeit   ClientMsg = 8 // empty, give up your duel
+	ClientDuelTyping    ClientMsg = 9 // DuelTyping, letters in your current row
 )
 
 // Messages sent by the server
 type ServerMsg uint8
 
 const (
-	ServerWelcome      ServerMsg = 1 // Welcome, first message after connecting
-	ServerWordleResult ServerMsg = 2 // WordleRes
-	ServerWordleResume ServerMsg = 3 // WordleResume
-	ServerChat         ServerMsg = 4 // ChatMsg
-	ServerWorld        ServerMsg = 5 // WorldUpdate
-	ServerCorrection   ServerMsg = 6 // Vec, the server rejected a move, snap back here
+	ServerWelcome             ServerMsg = 1  // Welcome, first message after connecting
+	ServerWordleResult        ServerMsg = 2  // WordleRes
+	ServerWordleResume        ServerMsg = 3  // WordleResume
+	ServerChat                ServerMsg = 4  // ChatMsg
+	ServerWorld               ServerMsg = 5  // WorldUpdate
+	ServerCorrection          ServerMsg = 6  // Vec, the server rejected a move, snap back here
+	ServerDuelChallenge       ServerMsg = 7  // DuelChallenge, someone challenged you
+	ServerDuelChallengeUpdate ServerMsg = 8  // DuelChallengeUpdate, what happened to a challenge
+	ServerDuelStart           ServerMsg = 9  // DuelStart, a duel you're in began
+	ServerDuelGuess           ServerMsg = 10 // WordleRes, the result of your duel guess
+	ServerDuelOpponentGuess   ServerMsg = 11 // DuelOpponentGuess, your opponent guessed
+	ServerDuelEnd             ServerMsg = 12 // DuelEnd, your duel is over
+	ServerDuelTyping          ServerMsg = 13 // DuelTyping, your opponent's current row
 )
 
 type envelope struct {
@@ -239,4 +251,100 @@ type WordleResume struct {
 	Guesses []string        `msgpack:"guesses"`
 	Colors  [][]WordleColor `msgpack:"colors"`
 	Seconds float64         `msgpack:"seconds"`
+}
+
+type DuelChallengeReq struct {
+	// The player to challenge, must be in view
+	Target EntityID `msgpack:"target"`
+}
+
+type DuelRespondReq struct {
+	// From DuelChallenge
+	ID     uint32 `msgpack:"id"`
+	Accept bool   `msgpack:"accept"`
+}
+
+// Sent to the player being challenged
+type DuelChallenge struct {
+	ID uint32 `msgpack:"id"`
+	// Who is challenging: their entity, username, character name and class ID
+	From  EntityID `msgpack:"from"`
+	Name  string   `msgpack:"name"`
+	Char  string   `msgpack:"char,omitempty"`
+	Class string   `msgpack:"class,omitempty"`
+	// How long until it expires
+	ExpiresMs int `msgpack:"expiresMs"`
+}
+
+type DuelChallengeStatus int
+
+const (
+	// To the challenger: the challenge is waiting for an answer
+	DuelSent DuelChallengeStatus = 0
+	// To the challenger: they said no
+	DuelDeclined DuelChallengeStatus = 1
+	// To both: nobody answered in time
+	DuelExpired DuelChallengeStatus = 2
+	// To both: someone left, or one of you started another duel
+	DuelCancelled DuelChallengeStatus = 3
+	// To the challenger: one of you is already in a duel
+	DuelBusy DuelChallengeStatus = 4
+	// To the challenger: they're gone or not in view
+	DuelUnavailable DuelChallengeStatus = 5
+)
+
+type DuelChallengeUpdate struct {
+	// 0 when the challenge was refused before it got an id (Busy, Unavailable)
+	ID uint32 `msgpack:"id"`
+	// The other player's character name, or username if they have none
+	Name   string              `msgpack:"name"`
+	Status DuelChallengeStatus `msgpack:"status"`
+}
+
+type DuelStart struct {
+	// Who you're up against
+	Name       string `msgpack:"name"`
+	Char       string `msgpack:"char,omitempty"`
+	Class      string `msgpack:"class,omitempty"`
+	WordLength int    `msgpack:"wordLength"`
+	MaxGuesses int    `msgpack:"maxGuesses"`
+}
+
+// The colors of the opponent's guess, never the letters
+type DuelOpponentGuess struct {
+	Colors []WordleColor `msgpack:"colors"`
+}
+
+// How many letters are in the current row, never which ones. Sent by the
+// client as it types and forwarded to the opponent.
+type DuelTyping struct {
+	Count int `msgpack:"count"`
+}
+
+type DuelOutcome int
+
+const (
+	DuelWin  DuelOutcome = 0
+	DuelLose DuelOutcome = 1
+	DuelDraw DuelOutcome = 2
+)
+
+type DuelEndReason int
+
+const (
+	// Someone found the word
+	DuelSolved DuelEndReason = 0
+	// Both ran out of guesses
+	DuelOutOfGuesses DuelEndReason = 1
+	// Someone gave up
+	DuelForfeit DuelEndReason = 2
+	// Someone disconnected
+	DuelDisconnect DuelEndReason = 3
+)
+
+type DuelEnd struct {
+	Outcome  DuelOutcome   `msgpack:"outcome"`
+	Reason   DuelEndReason `msgpack:"reason"`
+	Solution string        `msgpack:"solution"`
+	Seconds  float64       `msgpack:"seconds"`
 }

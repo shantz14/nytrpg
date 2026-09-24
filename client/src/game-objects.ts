@@ -22,6 +22,8 @@ export class RemoteEntity {
     pos: Vec;
     // Walking and facing, worked out from how pos changes
     anim: Animator;
+    // Where it was last drawn on screen, for clicking it. null when off screen.
+    hitbox: ScreenBox | null;
     // Positions from the server, oldest first
     private samples: Sample[];
     private lastInterpolated: number | null;
@@ -35,6 +37,7 @@ export class RemoteEntity {
         this.pos = { x: pos.x, y: pos.y };
         this.samples = [{ t: performance.now(), x: pos.x, y: pos.y }];
         this.anim = new Animator();
+        this.hitbox = null;
         this.lastInterpolated = null;
     }
 
@@ -79,6 +82,21 @@ export class RemoteEntity {
         const f = Math.max(0, (renderTime - a.t) / (b.t - a.t));
         return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
     }
+}
+
+export type ScreenBox = { x: number, y: number, w: number, h: number };
+
+// The entity drawn under screen point (x, y). Where sprites overlap, the one
+// drawn last is on top.
+export function pickEntity(entities: Iterable<RemoteEntity>, x: number, y: number): RemoteEntity | null {
+    let hit: RemoteEntity | null = null;
+    for (const e of entities) {
+        const b = e.hitbox;
+        if (b && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+            hit = e;
+        }
+    }
+    return hit;
 }
 
 export class GameState {

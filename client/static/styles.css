@@ -952,6 +952,321 @@ canvas {
     }
 }
 
+/* ---- player card ---- */
+
+/* Opens over a clicked player, pinned to that spot in the world. Above the
+   canvas, under popups. The tail points down at where they stood. */
+.player-card {
+    position: absolute;
+    z-index: 1;
+    transform: translate(-50%, calc(-100% - 44px));
+    min-width: 150px;
+    padding: 10px 12px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    font-family: var(--font);
+    color: var(--text);
+    text-align: center;
+    background:
+        linear-gradient(180deg, rgba(200, 180, 128, 0.06), transparent),
+        rgba(28, 27, 26, 0.95);
+    border: 1px solid var(--line-strong);
+    border-radius: 3px;
+    box-shadow:
+        inset 0 0 0 2px rgba(28, 27, 26, 0.95),
+        inset 0 0 0 3px var(--line),
+        0 10px 28px rgba(0, 0, 0, 0.5);
+}
+
+.player-card[hidden] {
+    display: none;
+}
+
+.player-card.pc-enter {
+    animation: fade-in 120ms ease-out;
+}
+
+.player-card::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -7px;
+    width: 12px;
+    height: 12px;
+    transform: translateX(-50%) rotate(45deg);
+    background: rgba(28, 27, 26, 0.95);
+    border-right: 1px solid var(--line-strong);
+    border-bottom: 1px solid var(--line-strong);
+}
+
+.pc-who {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.pc-char {
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--text-strong);
+}
+
+.pc-class, .notice-class, .duel-vs-class {
+    color: var(--class-color, var(--muted));
+    font-family: var(--class-font, var(--font));
+    font-weight: var(--class-weight, 400);
+}
+
+.pc-class {
+    font-size: 1.05rem;
+}
+
+.pc-user {
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.pc-user:empty {
+    display: none;
+}
+
+.pc-duel {
+    margin-top: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+}
+
+.pc-duel svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* ---- notifications ---- */
+
+/* Under the HUD, above popups so a challenge can be answered from anywhere */
+#notifications {
+    position: absolute;
+    top: 60px;
+    right: 12px;
+    z-index: 5;
+    width: min(300px, calc(100vw - 24px));
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-family: var(--font);
+}
+
+.notice {
+    position: relative;
+    overflow: hidden;
+    padding: 12px 14px 14px;
+    color: var(--text);
+    background:
+        linear-gradient(180deg, rgba(200, 180, 128, 0.07), transparent 60px),
+        rgba(28, 27, 26, 0.96);
+    border: 1px solid var(--accent-line);
+    border-radius: 3px;
+    box-shadow:
+        inset 0 0 0 2px rgba(28, 27, 26, 0.96),
+        inset 0 0 0 3px var(--line),
+        0 12px 32px rgba(0, 0, 0, 0.5);
+    animation: slide-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.notice-title {
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 6px;
+}
+
+.notice-who {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0 6px;
+}
+
+.notice-char {
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--text-strong);
+}
+
+.notice-class {
+    font-size: 1.05rem;
+}
+
+.notice-user {
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.notice-text {
+    font-size: 0.9rem;
+    font-style: italic;
+    color: var(--text);
+    margin: 2px 0 12px;
+}
+
+.notice .btn {
+    padding: 8px 12px;
+}
+
+/* Drains over the challenge's lifetime */
+.notice-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    background: var(--accent);
+    transform-origin: left;
+    animation: drain linear forwards;
+}
+
+/* ---- duel ---- */
+
+.duel-panel {
+    width: min(100%, 760px);
+}
+
+.duel-vs {
+    color: var(--muted);
+    font-size: 0.8rem;
+    letter-spacing: 1px;
+    margin: 0 2px;
+}
+
+.duel-vs-name {
+    color: var(--text-strong);
+}
+
+.duel-vs-class {
+    font-size: 1.05rem;
+    letter-spacing: 0;
+}
+
+.duel-boards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+}
+
+.duel-side {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.duel-them {
+    padding-left: 28px;
+    margin-left: -1px;
+    border-left: 1px solid;
+    border-image: linear-gradient(180deg, transparent, var(--line-strong) 20%, var(--line-strong) 80%, transparent) 1;
+}
+
+.duel-side .section-label {
+    align-self: stretch;
+    text-align: center;
+}
+
+.duel-side .btn-wide {
+    margin-top: auto;
+}
+
+.board {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.duel-panel .letter, .opp-tile {
+    --size: clamp(36px, 6.5vw, 50px);
+}
+
+.opp-row {
+    display: flex;
+    gap: 6px;
+}
+
+.opp-tile {
+    width: var(--size);
+    height: var(--size);
+    border: 2px solid var(--tile-grey);
+    border-radius: 2px;
+    transition: background-color 80ms, border-color 80ms;
+}
+
+.opp-row:not(.active) .opp-tile:not(.revealed) {
+    opacity: 0.55;
+}
+
+/* A letter typed, which one stays secret */
+.opp-tile.typed {
+    border-color: #6b6b6f;
+    background-color: #4a4a4d;
+    animation: pop 90ms ease-out;
+}
+
+.opp-tile.revealed {
+    border-color: transparent;
+    animation: flip 420ms ease both;
+    animation-delay: var(--delay, 0ms);
+}
+
+.duel-opp-status {
+    margin: 16px 0 12px;
+    font-size: 0.9rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.duel-opp-status.solved {
+    color: #8cc485;
+    font-weight: 700;
+}
+
+.duel-opp-status.out {
+    color: var(--danger);
+}
+
+.duel-victory .panel-title {
+    color: var(--gold);
+    text-shadow: 0 2px 12px rgba(232, 200, 114, 0.3);
+}
+
+.duel-defeat .panel-title {
+    color: var(--danger);
+}
+
+@media (max-width: 640px) {
+    .duel-boards {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    .duel-them {
+        padding: 20px 0 0;
+        margin: 0;
+        border-left: none;
+        border-top: 1px solid var(--line);
+    }
+}
+
 /* ---- chat and banners ---- */
 
 #chat-container {
@@ -1105,6 +1420,14 @@ canvas {
 @keyframes flip {
     0% { transform: rotateX(90deg); }
     100% { transform: rotateX(0deg); }
+}
+
+@keyframes slide-in {
+    from { opacity: 0; transform: translateX(16px); }
+}
+
+@keyframes drain {
+    to { transform: scaleX(0); }
 }
 
 @keyframes shake {

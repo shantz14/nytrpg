@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -32,6 +33,7 @@ import (
 
 	"nytrpg/internal/auth"
 	"nytrpg/internal/config"
+	"nytrpg/internal/game"
 	"nytrpg/internal/protocol"
 	"nytrpg/internal/server"
 )
@@ -73,6 +75,20 @@ func NewServer(t testing.TB) *Server {
 	})
 	return &Server{Server: srv, HTTP: h, URL: h.URL}
 }
+
+// Duels on this server all use word, so tests can win them
+func (s *Server) SetDuelWord(word string) {
+	s.World().Query(func(w *game.World) {
+		w.Duels = fixedDuelWord{w.Duels, word}
+	})
+}
+
+type fixedDuelWord struct {
+	game.DuelPuzzle
+	word string
+}
+
+func (f fixedDuelWord) NewWord(*rand.Rand) string { return f.word }
 
 var nameCounter atomic.Int64
 

@@ -31,6 +31,11 @@ func NewService(s *store.Store, inRange func(s *netconn.Session) bool) *Service 
 	return &Service{words: w, sessions: newSessions(), store: s, inRange: inRange}
 }
 
+// The word lists, shared with duels
+func (svc *Service) Words() *Words {
+	return svc.words
+}
+
 func (svc *Service) RegisterHandlers(r *netconn.Router) {
 	r.Handle(protocol.ClientWordleStart, func(s *netconn.Session, _ msgpack.RawMessage) {
 		s.SendMsg(protocol.ServerWordleResume, svc.start(s))

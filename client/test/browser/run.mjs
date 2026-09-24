@@ -475,6 +475,86 @@ test("the wordle board has a Daily Wordle sign above it", async () => {
     await a.browserContext().close();
 });
 
+test("duels: click a player, challenge, deny, accept, watch them type and guess, forfeit", async () => {
+    const a = await player({ char: "Arthur", cls: "knight" });
+    const b = await player({ char: "Merlin", cls: "wizard" });
+    const bId = received(b, 1)[0].d.entityId;
+    await waitFor(() => received(a, 5).some((f) => f.d.spawn?.some((s) => s.id === bId)), "a to see b");
+    await sleep(300);
+
+    // Click b's sprite on a's screen: the card opens there, naming b
+    const cardOpen = () => a.$eval("#player-card", (e) => !e.hidden);
+    await a.mouse.click(...toScreen(a, b.pos.x + 20, b.pos.y + 20));
+    await waitFor(cardOpen, "player card");
+    assert(await a.$eval(".pc-char", (e) => e.textContent) === "Merlin", "card names the character");
+    assert(await a.$eval(".pc-class", (e) => e.textContent === "Wizard" && e.classList.contains("class-wizard")), "card shows the class");
+    // It stays where b stood when b walks off
+    const cardAt = () => a.$eval("#player-card", (e) => e.style.left && [e.style.left, e.style.top].join());
+    const before = await waitFor(cardAt, "card placed");
+    await hold(b, "d", 400);
+    await sleep(300);
+    assert(await cardAt() === before, "the card followed b");
+
+    // Challenge; b gets a notification with a 30s bar, and denies
+    await a.click("#pcDuel");
+    assert(!(await cardOpen()), "card closes after challenging");
+    await b.waitForSelector(".notice", { timeout: 3000 });
+    const notice = await b.$eval(".notice", (e) => ({
+        who: e.querySelector(".notice-char").textContent,
+        bar: e.querySelector(".notice-bar").style.animationDuration,
+    }));
+    assert(notice.who === "Arthur" && notice.bar === "30000ms", `notice: ${JSON.stringify(notice)}`);
+    const noticeBox = await b.$eval(".notice", (e) => { const r = e.getBoundingClientRect(); return [r.right, r.top]; });
+    assert(noticeBox[0] > VIEW.width - 40 && noticeBox[1] < VIEW.height / 3, `notice not in the top right: ${noticeBox}`);
+    await b.click(".notice-deny");
+    await waitFor(async () => (await a.$eval("#toast", (e) => e.textContent)).includes("declined"), "a told about the decline");
+    assert(!(await b.$(".notice")), "notice gone after denying");
+
+    // Again, and this time b accepts: both get two boards
+    await a.mouse.click(...toScreen(a, b.pos.x + 20, b.pos.y + 20));
+    await waitFor(cardOpen, "player card again");
+    await a.click("#pcDuel");
+    await b.waitForSelector(".notice-accept", { timeout: 3000 });
+    await b.click(".notice-accept");
+    for (const [page, vs] of [[a, "Merlin"], [b, "Arthur"]]) {
+        await page.waitForSelector("#duelPopup", { timeout: 3000 });
+        assert(await page.$eval("#duelVsName", (e) => e.textContent) === vs, "duel names the opponent");
+        assert((await page.$$("#duelBoard .wordContainer")).length === 5, "own board has 5 rows");
+        assert((await page.$$("#duelOpponent .opp-row")).length === 5, "opponent board has 5 rows");
+    }
+
+    // a types: b sees filled boxes, never letters
+    const typed = () => b.$$eval("#duelOpponent .opp-row:first-child .opp-tile", (els) => els.filter((e) => e.classList.contains("typed")).length);
+    await a.keyboard.type("sla");
+    await waitFor(async () => (await typed()) === 3, "3 typed boxes on b's screen");
+    await a.keyboard.press("Backspace");
+    await waitFor(async () => (await typed()) === 0, "backspace to clear them");
+    assert(!received(b, 13).some((f) => JSON.stringify(f.d).match(/[a-z]{2}/i) && !("count" in f.d)), "typing carried more than a count");
+
+    // a guesses: b sees the colors of it, no letters anywhere on b's board
+    await a.keyboard.type("slate");
+    await a.keyboard.press("Enter");
+    await waitFor(() => b.$$eval("#duelOpponent .opp-row:first-child .opp-tile", (els) => els.every((e) => /\btile-(green|yellow|grey)\b/.test(e.className))), "b to see a's colors");
+    assert(await b.$eval("#duelOpponent", (e) => e.textContent.trim() === ""), "letters leaked onto the opponent board");
+    assert(await b.$eval("#duelOppStatus", (e) => e.textContent) === "1/5", "guess count shown");
+
+    // a gives up (with a confirm): a is defeated, b wins
+    await a.click("#duelForfeit");
+    await a.waitForSelector("#confirmForfeit", { timeout: 3000 });
+    await a.click("#confirmForfeit");
+    await a.waitForSelector("#duelResultTitle", { timeout: 3000 });
+    await b.waitForSelector("#duelResultTitle", { timeout: 3000 });
+    await waitFor(async () => (await a.$eval("#duelResultTitle", (e) => e.textContent)) === "Defeat", "a's defeat");
+    assert(await b.$eval("#duelResultTitle", (e) => e.textContent) === "Victory", "b's victory");
+    assert((await b.$eval("#duelSolution", (e) => e.textContent)).length === 5, "the word is revealed");
+
+    // Closing the result gets back to the world
+    await b.click("#duelResultPopup .exit");
+    assert(!(await b.$("#duelPopup")), "result close closes the duel");
+    await a.browserContext().close();
+    await b.browserContext().close();
+});
+
 test("reconnects after the server restarts", async () => {
     const p = await player();
     const welcomes = () => received(p, 1).length;

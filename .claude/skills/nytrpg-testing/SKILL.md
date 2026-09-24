@@ -43,6 +43,7 @@ Copy-ready templates for each layer are in `references/templates.md`. Read it wh
 - **Moves must be legal.** The server corrects anything faster than `game.MoveSpeed` (with a small budget) or off the map. Move players in tests with `c.WalkTo(t, target, game.MoveSpeed)` or small steps, never by jumping, unless the test is about teleport rejection.
 - **Players only see nearby entities** (3x3 cells of 1024px). Put players who need to see each other close together; `testkit` spawns everyone near the map's spawn point.
 - **Chat is rate limited** (burst 3, then 1/s), including in tests. Count chats you already sent when asserting on a flood.
+- **Duels use a random word.** Integration tests call `ts.SetDuelWord("CRANE")` to be able to win; world tests set `tw.Duels = fakePuzzle{}` (`newDuelWorld()`, with `got`/`one`/`none` helpers in `internal/game/duel_test.go`). Challenges need the target in view, so wait for a world tick first (`duelists()` in `internal/server/duel_test.go` does).
 - **The first world tick after joining** is when players learn about each other. Wait for it (`WatchWorld`, or one `2*time.Second/game.TickRate` pause) before expecting chats between them.
 - **Process-wide counters** (`netconn.Stats`, `/debug/vars`) are shared across tests. Assert on deltas (`before := ...; after-before == 1`), and keep tests that read `/debug/vars` sequential (no `t.Parallel`).
 - **Integration tests use `t.Parallel()`**, since each test has its own server and database. Keep it that way.

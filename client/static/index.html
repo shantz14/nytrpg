@@ -29,6 +29,18 @@
                     <span class="hud-label">Log out</span>
                 </button>
             </div>
+            <div id="player-card" class="player-card" hidden>
+                <div class="pc-who">
+                    <span class="pc-char"></span>
+                    <span class="pc-class"></span>
+                </div>
+                <div class="pc-user"></div>
+                <button type="button" id="pcDuel" class="btn btn-primary pc-duel">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 17.5 3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2M9.5 17.5 21 6V3h-3L6.5 14.5M11 19l-6-6M8 16l-4 4M5 21l-2-2"/></svg>
+                    Duel
+                </button>
+            </div>
+            <div id="notifications" aria-live="polite"></div>
             <div id="reconnecting">Connection lost, reconnecting&hellip;</div>
             <div id="toast"></div>
         </div>
@@ -166,6 +178,61 @@
                     </div>
                     <p class="section-label">The word was</p>
                     <div id="solutionText" class="solution"></div>
+                    <button class="exit btn btn-ghost btn-wide">Close</button>
+                </div>
+            </div>
+        </template>
+
+        <template id="tpl-duel">
+            <div id="duelPopup" class="overlay">
+                <div class="panel duel-panel">
+                    <header class="panel-head">
+                        <h1 class="panel-title">Duel <span class="duel-vs">vs</span> <span id="duelVsName" class="duel-vs-name"></span> <span id="duelVsClass" class="duel-vs-class"></span></h1>
+                        <div id="duelTimer" class="timer">0:00</div>
+                        <button id="duelForfeit" class="icon-btn" aria-label="Forfeit" title="Forfeit">&times;</button>
+                    </header>
+                    <div class="duel-boards">
+                        <section class="duel-side duel-you">
+                            <p class="section-label">You</p>
+                            <div id="duelBoard" class="board"></div>
+                            <p id="duelYouStatus" class="hint">Enter submits &middot; Backspace clears the row</p>
+                            <button id="duelSubmit" class="btn btn-primary btn-wide">Submit</button>
+                        </section>
+                        <section class="duel-side duel-them">
+                            <p class="section-label"><span id="duelOppLabel"></span></p>
+                            <div id="duelOpponent" class="board opp-board" aria-label="Opponent's guesses, colors only"></div>
+                            <p id="duelOppStatus" class="duel-opp-status"></p>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <template id="tpl-duel-forfeit">
+            <div id="duelForfeitPopup" class="overlay overlay-top">
+                <div class="panel result-panel">
+                    <header class="panel-head">
+                        <h1 class="panel-title">Forfeit the duel?</h1>
+                    </header>
+                    <p class="result-text"><strong id="forfeitName"></strong> wins if you give up now.</p>
+                    <div class="btn-row">
+                        <button id="cancelForfeit" class="btn btn-ghost">Keep playing</button>
+                        <button id="confirmForfeit" class="btn btn-danger">Forfeit</button>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <template id="tpl-duel-result">
+            <div id="duelResultPopup" class="overlay overlay-top">
+                <div class="panel result-panel duel-result">
+                    <header class="panel-head">
+                        <h1 class="panel-title" id="duelResultTitle"></h1>
+                        <button class="exit icon-btn" aria-label="Close">&times;</button>
+                    </header>
+                    <p id="duelResultText" class="result-text"></p>
+                    <p class="section-label">The word was</p>
+                    <div id="duelSolution" class="solution"></div>
                     <button class="exit btn btn-ghost btn-wide">Close</button>
                 </div>
             </div>

@@ -1,13 +1,12 @@
 import { Game } from "./game.js";
 import { Popup } from "./popup.js";
 import { renderAbilityBar } from "./abilities.js";
-import { ClientWordleGuess, ClientWordleStart, Green, Grey, WordleColor, WordleLose, WordleReq, WordleRes, WordleResume, WordleWin, Yellow } from "./protocol.gen.js";
+import { WordleBoard } from "./wordle-board.js";
+import { ClientWordleGuess, ClientWordleStart, WordleLose, WordleReq, WordleRes, WordleResume, WordleWin } from "./protocol.gen.js";
 
 const GUESSES = 5;
-
-function letterId(row: number, col: number): string {
-    return `letter-${row}-${col}`;
-}
+// TODO: get word length from backend!!!
+const WORD_LENGTH = 5;
 
 // Seconds to m:ss
 export function formatTime(secs: number): string {
@@ -17,27 +16,54 @@ export function formatTime(secs: number): string {
     return min + ":" + (sec < 10 ? "0" : "") + sec;
 }
 
+// A m:ss clock in el, display only: the server keeps the real time
+export class Stopwatch {
+    private timer: number | null = null;
+
+    constructor(private el: HTMLElement) {}
+
+    // Counts up from alreadyPlayed seconds
+    public start(alreadyPlayed = 0) {
+        this.stop();
+        const start = Date.now() - alreadyPlayed * 1000;
+        const tick = () => {
+            this.el.textContent = formatTime((Date.now() - start) / 1000);
+        };
+        tick();
+        this.timer = setInterval(tick, 1000);
+    }
+
+    public stop() {
+        if (this.timer !== null) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+    }
+}
+
+// The word as a row of flipping tiles, green if it was found and grey if not
+export function renderSolution(el: HTMLElement, word: string, found: boolean) {
+    el.classList.toggle("lost", !found);
+    el.replaceChildren();
+    [...word.toUpperCase()].forEach((ch, i) => {
+        const tile = document.createElement("span");
+        tile.textContent = ch;
+        tile.style.setProperty("--delay", i * 90 + "ms");
+        el.appendChild(tile);
+    });
+}
+
 export class Wordle {
     game: Game;
     popup: Popup | null;
-    wordLength: number;
-    nextLetter: HTMLInputElement | null;
-    currentGuess: number;
-    stopwatch: number | null;
-    // The server's reply to starting has arrived. Guesses wait for it, or the
-    // reply (sent before the guess was counted) would reset currentGuess.
-    ready: boolean;
-    submitWhenReady: boolean;
+    board: WordleBoard | null;
+    stopwatch: Stopwatch | null;
 
     constructor(game: Game) {
         this.game = game;
         this.popup = null;
-        this.wordLength = this.getWordLength();
-        this.nextLetter = null;
-        this.currentGuess = 0;
+        this.board = null;
         this.stopwatch = null;
-        this.ready = false;
-        this.submitWhenReady = false;
     }
 
     // Opens the wordle. Returns false if another popup is already open.
@@ -47,91 +73,29 @@ export class Wordle {
             return false;
         }
         this.popup = popup;
-        popup.onCleanup(() => this.stopStopwatch());
+        this.stopwatch = new Stopwatch(popup.q("#timer"));
+        popup.onCleanup(() => this.stopwatch?.stop());
         popup.onClose = () => {
             if (this.game.wordle === this) {
                 this.game.wordle = null;
             }
         };
 
-        this.displayGame(popup);
-        this.populateGame(popup);
+        const board = new WordleBoard(popup, popup.q("#gameContainer"), popup.q("#submit"), { wordLength: WORD_LENGTH, rows: GUESSES });
+        // The server's reply to starting has arrived. Guesses wait for it, or the
+        // reply (sent before the guess was counted) would reset the row.
+        board.waitUntilReady();
+        board.onSubmit = (guess) => {
+            const data: WordleReq = { guess };
+            this.game.send(ClientWordleGuess, data);
+        };
+        this.board = board;
         // Empty for now, abilities will be usable during the puzzle
         renderAbilityBar(popup.q("#abilityBar"), this.game.state.selfClass);
 
         // Server starts the clock and replies with any guesses already made
         this.game.send(ClientWordleStart, {});
         return true;
-    }
-
-    // Timer display only, the server keeps the real time
-    private runStopwatch(alreadyPlayed: number) {
-        this.stopStopwatch();
-        const start = Date.now() - alreadyPlayed * 1000;
-        const timer = this.popup!.q<HTMLDivElement>("#timer");
-        const tick = () => {
-            timer.textContent = formatTime((Date.now() - start) / 1000);
-        };
-        tick();
-        this.stopwatch = setInterval(tick, 1000);
-    }
-
-    private stopStopwatch() {
-        if (this.stopwatch !== null) {
-            clearInterval(this.stopwatch);
-            this.stopwatch = null;
-        }
-    }
-
-    // TODO: get word length from backend!!!
-    private getWordLength(): number {
-        return 5;
-    }
-
-    private getLetter(row: number, col: number): HTMLInputElement | null {
-        return this.popup?.root.querySelector("#" + letterId(row, col)) ?? null;
-    }
-
-    private displayGame(popup: Popup) {
-        const submit = popup.q<HTMLButtonElement>("#submit");
-        popup.on(submit, "click", () => {
-            if (!this.ready) {
-                this.submitWhenReady = true;
-                return;
-            }
-            let guess = "";
-            for (let i = 0; i < this.wordLength; i++) {
-                guess += this.getLetter(this.currentGuess, i)?.value ?? "";
-            }
-
-            if (guess.length == this.wordLength) {
-                this.currentGuess++;
-                this.markActiveRow();
-                this.sendGuess(guess);
-                this.nextLetter?.focus();
-            }
-        });
-
-        popup.on(document, "keypress", (e) => {
-            if ((e as KeyboardEvent).key === "Enter") {
-                e.preventDefault();
-                submit.click();
-            }
-        });
-        popup.on(document, "keydown", (e) => {
-            if ((e as KeyboardEvent).key === "Backspace") {
-                e.preventDefault();
-                this.cancelMove();
-            }
-        });
-    }
-
-    private sendGuess(guess: string) {
-        const data: WordleReq = {
-            guess: guess,
-        };
-
-        this.game.send(ClientWordleGuess, data);
     }
 
     // Fill in guesses made before a reload and pick the timer back up
@@ -145,40 +109,22 @@ export class Wordle {
             this.game.toast("Walk closer to use that");
             return;
         }
-        const guesses = resume.guesses ?? [];
-        const colors = resume.colors ?? [];
-        for (let row = 0; row < guesses.length; row++) {
-            for (let col = 0; col < this.wordLength; col++) {
-                const box = this.getLetter(row, col);
-                if (box) {
-                    box.value = guesses[row][col] ?? "";
-                }
-            }
-            this.colorRow(row, colors[row] ?? []);
-        }
-        this.currentGuess = guesses.length;
-        this.markActiveRow();
-        this.runStopwatch(resume.seconds);
-        this.ready = true;
-        if (guesses.length > 0) {
-            this.getLetter(this.currentGuess, 0)?.focus();
-        }
-        if (this.submitWhenReady) {
-            this.submitWhenReady = false;
-            this.popup?.q<HTMLButtonElement>("#submit").click();
-        }
+        this.board?.restore(resume.guesses ?? [], resume.colors ?? []);
+        this.stopwatch?.start(resume.seconds);
+        this.board?.setReady();
     }
 
     public handleResponse(res: WordleRes) {
+        const board = this.board;
+        if (!board) {
+            return;
+        }
         if (!res.valid) {
-            this.currentGuess--;
-            this.markActiveRow();
-            this.cancelMove();
-            this.shakeRow(this.currentGuess);
+            board.reject();
             this.game.toast("Not in word list");
             return;
         }
-        this.colorRow(this.currentGuess - 1, res.colors);
+        board.colorRow(board.currentGuess - 1, res.colors);
 
         if (res.status == WordleWin) {
             this.displayResult(true, res.solution, res.seconds);
@@ -187,129 +133,23 @@ export class Wordle {
         }
     }
 
-    private row(row: number): HTMLDivElement | null {
-        return this.popup?.root.querySelector("#wordContainer" + row) ?? null;
-    }
-
-    // Highlights the row the player is typing into
-    private markActiveRow() {
-        for (let r = 0; r < GUESSES; r++) {
-            this.row(r)?.classList.toggle("active", r == this.currentGuess);
-        }
-    }
-
-    private shakeRow(row: number) {
-        const el = this.row(row);
-        if (!el) {
-            return;
-        }
-        el.classList.remove("shake");
-        void el.offsetWidth; // restart the animation
-        el.classList.add("shake");
-    }
-
-    private cancelMove() {
-        this.getLetter(this.currentGuess, 0)?.focus();
-        for (let i = 0; i < this.wordLength; i++) {
-            const letter = this.getLetter(this.currentGuess, i);
-            if (letter) {
-                letter.value = "";
-            }
-        }
-    }
-
     private displayResult(win: boolean, word: string, seconds: number) {
-        this.stopStopwatch();
+        this.stopwatch?.stop();
+        const guesses = this.board?.currentGuess ?? 0;
         const layer = this.popup!.addLayer("tpl-wordle-result");
 
         const set = (id: string, text: string) => layer.querySelector("#" + id)!.textContent = text;
         if (win) {
             set("resultTitle", "Solved");
-            const plural = this.currentGuess == 1 ? "guess" : "guesses";
-            set("resultText", "You got it in " + this.currentGuess + " " + plural + ".");
-            set("resultGuesses", this.currentGuess + "/" + GUESSES);
+            const plural = guesses == 1 ? "guess" : "guesses";
+            set("resultText", "You got it in " + guesses + " " + plural + ".");
+            set("resultGuesses", guesses + "/" + GUESSES);
         } else {
             set("resultTitle", "Out of guesses");
             set("resultText", "Better luck tomorrow.");
             set("resultGuesses", "X/" + GUESSES);
         }
         set("resultTime", formatTime(seconds));
-
-        const solution = layer.querySelector<HTMLDivElement>("#solutionText")!;
-        solution.classList.toggle("lost", !win);
-        solution.replaceChildren();
-        [...word.toUpperCase()].forEach((ch, i) => {
-            const tile = document.createElement("span");
-            tile.textContent = ch;
-            tile.style.setProperty("--delay", i * 90 + "ms");
-            solution.appendChild(tile);
-        });
-    }
-
-    private colorRow(row: number, colors: Array<WordleColor>) {
-        for (let i = 0; i < this.wordLength; i++) {
-            const box = this.getLetter(row, i);
-            if (!box) {
-                continue;
-            }
-            const tile = colors[i] == Green ? "tile-green" : colors[i] == Yellow ? "tile-yellow" : colors[i] == Grey ? "tile-grey" : null;
-            if (!tile) {
-                continue;
-            }
-            box.classList.add("revealed", tile);
-            box.style.setProperty("--delay", i * 120 + "ms");
-        }
-    }
-
-    private populateGame(popup: Popup) {
-        const gameContainer = popup.q<HTMLDivElement>("#gameContainer");
-        const wordContainer = popup.q<HTMLDivElement>("#wordContainer0");
-        const template = popup.q<HTMLInputElement>("#" + letterId(0, 0));
-        template.remove();
-
-        for (let r = 1; r < GUESSES; r++) {
-            const newWord = wordContainer.cloneNode() as HTMLDivElement;
-            newWord.id = "wordContainer" + r;
-            this.populateWord(newWord, r, template);
-            gameContainer.appendChild(newWord);
-        }
-        this.populateWord(wordContainer, 0, template);
-        this.markActiveRow();
-
-        this.getLetter(0, 0)?.focus();
-    }
-
-    private populateWord(wordContainer: HTMLDivElement, row: number, template: HTMLInputElement) {
-        for (let c = 0; c < this.wordLength; c++) {
-            const newLetter = template.cloneNode(true) as HTMLInputElement;
-            newLetter.id = letterId(row, c);
-            newLetter.dataset.row = String(row);
-            newLetter.dataset.col = String(c);
-
-            newLetter.addEventListener("input", () => {
-                this.validateInput(newLetter);
-            });
-
-            wordContainer.appendChild(newLetter);
-        }
-    }
-
-    private validateInput(letter: HTMLInputElement) {
-        if (/^[a-zA-Z]$/.test(letter.value)) {
-            letter.value = letter.value.toUpperCase();
-        } else {
-            letter.value = "";
-            return;
-        }
-
-        const row = Number(letter.dataset.row);
-        const col = Number(letter.dataset.col);
-
-        // End of a row points at the start of the next one, focused after submitting
-        const next = col == this.wordLength - 1 ? this.getLetter(row + 1, 0) : this.getLetter(row, col + 1);
-        this.nextLetter = next;
-        if (next && Number(next.dataset.row) == this.currentGuess) {
-            next.focus();
-        }
+        renderSolution(layer.querySelector<HTMLDivElement>("#solutionText")!, word, win);
     }
 }

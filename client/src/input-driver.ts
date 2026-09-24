@@ -1,5 +1,5 @@
 import { Vector2D } from "./vector2D.js";
-import { GameState } from "./game-objects.js";
+import { GameState, RemoteEntity, pickEntity } from "./game-objects.js";
 
 export enum InputMode {
     GameFocused = 1,
@@ -15,6 +15,10 @@ export class InputDriver {
     inputMode: InputMode;
     // Called when the player clicks something they're too far away to use
     onTooFar: (() => void) | null;
+    // Called on every click on the world, before working out what was clicked
+    onWorldClick: (() => void) | null;
+    // Called when another player is clicked
+    onPlayerClick: ((e: RemoteEntity) => void) | null;
 
     constructor(canvas: HTMLCanvasElement, state: GameState) {
         this.canvas = canvas;
@@ -23,6 +27,8 @@ export class InputDriver {
         this.state = state;
         this.inputMode = InputMode.GameFocused;
         this.onTooFar = null;
+        this.onWorldClick = null;
+        this.onPlayerClick = null;
 
         const chatbox = document.getElementById("chatbox") as HTMLInputElement;
 
@@ -79,6 +85,7 @@ export class InputDriver {
         if (!this.isGameFocused()) {
             return;
         }
+        this.onWorldClick?.();
         for (const key in this.state.clickables) {
             const obj = this.state.clickables[key];
             if (obj.rect.inRect(this.mousePos)) {
@@ -89,6 +96,10 @@ export class InputDriver {
                 }
                 return;
             }
+        }
+        const player = pickEntity(Object.values(this.state.otherChars), this.mousePos.x, this.mousePos.y);
+        if (player) {
+            this.onPlayerClick?.(player);
         }
     }
 
