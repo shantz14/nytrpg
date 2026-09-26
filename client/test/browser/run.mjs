@@ -78,6 +78,9 @@ function chromePath() {
 let browser;
 let names = 0;
 const errors = [];
+// Every browser context a test opened, closed after it even if it failed, so
+// its players leave the world instead of showing up in the next test
+const contexts = new Set();
 
 // A player in the world, in their own browser context, playing a new character
 // in slot 0. Tracks the player's position and every websocket frame, decoded.
@@ -85,12 +88,17 @@ async function player({ char, cls = "knight" } = {}) {
     const page = await loggedIn();
     await createCharacter(page, 0, char ?? page.name, cls);
     await play(page, 0);
-    await waitFor(() => page.pos, "welcome");
-    // The frame arrives before the page handles it: wait until the game has
-    // (its own name is drawn once it knows who it is). Clicking the map before
-    // that used to hit nothing.
-    await waitFor(() => page.evaluate((n) => window.__texts.some((d) => d.text === n), page.name), "welcome handled");
+    await joined(page);
     return page;
+}
+
+// Waits until the page is in the world, after playing a character. The
+// welcome frame arrives before the page handles it, so wait for the game to
+// have handled it too (its own name is drawn once it knows who it is).
+// Clicking the map before that used to hit nothing, mostly on slow CI.
+async function joined(page) {
+    await waitFor(() => page.pos, "welcome");
+    await waitFor(() => page.evaluate((n) => window.__texts.some((d) => d.text === n), page.name), "welcome handled");
 }
 
 // Makes a character from the character screen
@@ -118,6 +126,7 @@ async function loggedIn() {
     await fetch(base() + "/signup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: name, password: "pw" }) });
 
     const ctx = await browser.createBrowserContext();
+    contexts.add(ctx);
     const page = await ctx.newPage();
     await page.setViewport(VIEW);
     page.on("pageerror", (e) => errors.push(`[${name}] ${e.message}`));
@@ -166,6 +175,18 @@ async function hold(page, key, ms) {
     await page.keyboard.down(key);
     await sleep(ms);
     await page.keyboard.up(key);
+}
+
+// Holds a key until done() is true. For getting somewhere: walking for a set
+// time falls short when frames are slow (the client caps each frame's step),
+// which left the player still in range of things on CI.
+async function walkUntil(page, key, done, timeout = 15000) {
+    await page.keyboard.down(key);
+    try {
+        await waitFor(done, `walking with ${key}`, timeout);
+    } finally {
+        await page.keyboard.up(key);
+    }
 }
 
 const received = (page, type) => page.frames.filter((f) => f.dir === "in" && f.t === type);
@@ -307,7 +328,7 @@ test("wordle: play, reload, guesses come back; popups block the world", async ()
     p.pos = null;
     await p.reload({ waitUntil: "networkidle0" });
     await play(p, 0);
-    await waitFor(() => p.pos, "welcome after reload");
+    await joined(p);
     await p.mouse.click(...toScreen(p, BOARD.x, BOARD.y));
     await p.waitForSelector("#letter-0-0", { timeout: 3000 });
     await waitFor(async () => (await p.$$eval("#wordContainer0 input", (els) => els.map((e) => e.value).join(""))) === "CRANE", "guess restored");
@@ -320,8 +341,8 @@ test("wordle: play, reload, guesses come back; popups block the world", async ()
 
 test("walking is never corrected; far things say walk closer; leaderboard opens", async () => {
     const p = await player();
-    await hold(p, "a", Math.max(0, (p.pos.x - FAR.x) / SPEED * 1000 - 300));
-    await hold(p, "w", Math.max(0, (p.pos.y - FAR.y) / SPEED * 1000 - 300));
+    await walkUntil(p, "a", () => p.pos.x <= FAR.x);
+    await walkUntil(p, "w", () => p.pos.y <= FAR.y);
     await sleep(300);
     assert(received(p, 6).length === 0, "the server corrected normal walking");
 
@@ -700,6 +721,10 @@ try {
             failed++;
             console.log(`✖ ${name}\n  ${e.message}`);
         }
+        for (const ctx of contexts) {
+            await ctx.close().catch(() => {});
+        }
+        contexts.clear();
     }
 } finally {
     await browser?.close();

@@ -52,7 +52,8 @@ Copy-ready templates for each layer are in `references/templates.md`. Read it wh
 - **gorilla/websocket:** after a read deadline fires the connection is dead; don't reuse it. The testkit client reads on its own goroutine for this reason.
 - **msgpack:** slices of `uint8`-based types encode as binary (the browser gets a `Uint8Array`), so enums used in slices are `int`. Maps with int keys don't decode into `map[string]any`. Decode into the protocol structs.
 - **Canvas output: check the recorded draw calls, not pixels.** `recordCharacterDraws` wraps `drawImage` before the page loads; `draws(page, t, self)` returns `{file, sx, mirrored, x}` for character sprites. Extend its file filter for new sprites. Screenshots are for your own eyes only, since the camera and background move.
-- **Browser tests: wait on the DOM, not on frames.** The DevTools frame event fires before the page's JS handles the message. Use `waitFor(() => page.$eval(...))`.
+- **Browser tests: wait on the DOM, not on frames.** The DevTools frame event fires before the page's JS handles the message. Use `waitFor(() => page.$eval(...))`. After playing a character (including after a reload), call `joined(page)` before clicking anything in the world.
+- **CI is slower than your machine.** Don't walk for a fixed time to get somewhere: when frames are slow the client moves less than real time. Use `walkUntil(page, key, () => page.pos...)`. To check a fix holds up, run the suite with the CPU throttled (`Emulation.setCPUThrottlingRate`, rate 4 reproduced CI's failures).
 - **Imports:** `testkit` imports the whole server, so only tests *outside* `internal/server`'s dependencies (e.g. `package server_test`) can use it. Package-internal tests of `store`, `wordle`, `game` etc. use their own small helpers.
 
 ## Commands
