@@ -41,3 +41,22 @@ func TestInfoHasEveryAbilitySlot(t *testing.T) {
 		t.Fatal("Infos should cover every class")
 	}
 }
+
+func TestEveryClassHasItsOwnSprite(t *testing.T) {
+	seen := map[string]ID{}
+	for _, c := range All() {
+		if c.Sprite == "" {
+			t.Fatalf("%s has no sprite", c.ID)
+		}
+		if other, ok := seen[c.Sprite]; ok {
+			t.Fatalf("%s and %s share sprite %s", c.ID, other, c.Sprite)
+		}
+		seen[c.Sprite] = c.ID
+		if Sprite(c.ID) != c.Sprite || c.Info().Sprite != c.Sprite {
+			t.Fatalf("%s: Sprite() or Info() lost the sprite", c.ID)
+		}
+	}
+	if Sprite("bard") != Sprite(Knight) {
+		t.Fatal("unknown classes should look like a knight")
+	}
+}

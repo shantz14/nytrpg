@@ -3,7 +3,7 @@
 //
 // This is scaffolding: classes have names and empty ability slots so the rest of
 // the game (character select, labels, the ability bar) can be built against it.
-// Stats, sprites and real abilities get added here.
+// Stats and real abilities get added here.
 package classes
 
 import (
@@ -38,16 +38,19 @@ type Class struct {
 	ID          ID
 	Name        string
 	Description string
+	// Image file in client/static/assets. The client needs a matching entry in
+	// ANIMATIONS (client/src/animation.ts) for it to walk.
+	Sprite string
 	// nil = empty slot
 	Abilities [AbilitySlots]*Ability
 }
 
 // In the order the character creation screen shows them
 var all = []Class{
-	{ID: Knight, Name: "Knight", Description: "A sturdy fighter in heavy armor."},
-	{ID: Wizard, Name: "Wizard", Description: "A scholar of arcane magic."},
-	{ID: Rogue, Name: "Rogue", Description: "A quick, sly trickster."},
-	{ID: Cleric, Name: "Cleric", Description: "A healer who calls on divine power."},
+	{ID: Knight, Name: "Knight", Description: "A sturdy fighter in heavy armor.", Sprite: "Skoobyuboo.png"},
+	{ID: Wizard, Name: "Wizard", Description: "A scholar of arcane magic.", Sprite: "wizard.png"},
+	{ID: Rogue, Name: "Rogue", Description: "A quick, sly trickster.", Sprite: "rogue.png"},
+	{ID: Cleric, Name: "Cleric", Description: "A healer who calls on divine power.", Sprite: "cleric.png"},
 }
 
 var byID = func() map[ID]*Class {
@@ -76,6 +79,7 @@ func (c Class) Info() protocol.ClassInfo {
 		ID:          string(c.ID),
 		Name:        c.Name,
 		Description: c.Description,
+		Sprite:      c.Sprite,
 		Abilities:   make([]protocol.AbilityInfo, AbilitySlots),
 	}
 	for i, a := range c.Abilities {
@@ -84,6 +88,15 @@ func (c Class) Info() protocol.ClassInfo {
 		}
 	}
 	return info
+}
+
+// The sprite a player of this class is drawn with. Unknown classes look like
+// a knight.
+func Sprite(id ID) string {
+	if c, ok := byID[id]; ok && c.Sprite != "" {
+		return c.Sprite
+	}
+	return byID[Knight].Sprite
 }
 
 // Every class, for the client

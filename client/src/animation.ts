@@ -22,11 +22,20 @@ export type SpriteAnimations = {
 // Animations by the sprite name the server sends for an entity. Sprites not
 // listed here are drawn as a plain image.
 export const ANIMATIONS: Record<string, SpriteAnimations> = {
-    "Skoobyuboo.png": {
-        idle: "Skoobyuboo.png",
-        walk: { image: "player-walk.png", frameWidth: 64, frameHeight: 64, frames: 5, fps: 10, facesRight: true },
-    },
+    // Knight
+    "Skoobyuboo.png": playerAnimations("Skoobyuboo.png", "player-walk.png"),
+    "wizard.png": playerAnimations("wizard.png", "wizard-walk.png"),
+    "rogue.png": playerAnimations("rogue.png", "rogue-walk.png"),
+    "cleric.png": playerAnimations("cleric.png", "cleric-walk.png"),
 };
+
+// Players whose class has no sprite of its own, like the server's fallback
+export const DEFAULT_PLAYER_SPRITE = "Skoobyuboo.png";
+
+// The class sprites are all recolors of one 5 frame walk cycle
+function playerAnimations(idle: string, walk: string): SpriteAnimations {
+    return { idle, walk: { image: walk, frameWidth: 64, frameHeight: 64, frames: 5, fps: 10, facesRight: true } };
+}
 
 // Keep walking this long after the last movement. Other players' positions
 // arrive in bursts, without this they'd flicker to idle between updates.

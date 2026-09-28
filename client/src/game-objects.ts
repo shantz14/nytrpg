@@ -1,6 +1,6 @@
 import { Vector2D } from "./vector2D.js"
 import { ClassInfo, EntityID, RankTier, Vec } from "./protocol.gen.js";
-import { Animator } from "./animation.js";
+import { Animator, DEFAULT_PLAYER_SPRITE } from "./animation.js";
 
 // Draw other entities this far in the past, so there are always two known
 // positions to move smoothly between. Two server ticks.
@@ -158,7 +158,7 @@ export class GameState {
         this.classes = [];
         this.selfElo = 0;
         this.ladder = [];
-        this.selfSprite = "Skoobyuboo.png";
+        this.selfSprite = DEFAULT_PLAYER_SPRITE;
         this.selfAnim = new Animator();
         this.otherChars = {};
         this.clickables = {};

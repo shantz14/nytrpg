@@ -152,6 +152,8 @@ type ClassInfo struct {
 	ID          string `json:"id" msgpack:"id"`
 	Name        string `json:"name" msgpack:"name"`
 	Description string `json:"description" msgpack:"description"`
+	// What players of this class look like, an image in client/static/assets
+	Sprite string `json:"sprite" msgpack:"sprite"`
 	// Always one per ability slot, an empty ID means the slot is empty
 	Abilities []AbilityInfo `json:"abilities" msgpack:"abilities"`
 }

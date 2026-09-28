@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import "./setup.mjs";
-import { Animator, ANIMATIONS, STOP_GRACE_S, pose } from "../static/animation.js";
+import { Animator, ANIMATIONS, DEFAULT_PLAYER_SPRITE, STOP_GRACE_S, pose } from "../static/animation.js";
 
 const PLAYER = "Skoobyuboo.png";
 const sheet = ANIMATIONS[PLAYER].walk;
@@ -17,6 +17,15 @@ test("the player sheet is 5 frames of 64x64", () => {
     assert.equal(sheet.frames, 5);
     assert.equal(sheet.frameWidth, 64);
     assert.equal(sheet.frameHeight, 64);
+});
+
+test("every class sprite walks with its own sheet of the same shape", () => {
+    assert.equal(DEFAULT_PLAYER_SPRITE, PLAYER, "the knight is the default");
+    for (const cls of ["wizard", "rogue", "cleric"]) {
+        const a = ANIMATIONS[`${cls}.png`];
+        assert.equal(a.idle, `${cls}.png`);
+        assert.deepEqual(a.walk, { ...sheet, image: `${cls}-walk.png` });
+    }
 });
 
 test("frames cycle through the sheet while walking and wrap around", () => {

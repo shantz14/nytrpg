@@ -10,6 +10,7 @@ import (
 
 	"github.com/vmihailenco/msgpack/v5"
 
+	"nytrpg/internal/classes"
 	"nytrpg/internal/protocol"
 	"nytrpg/internal/ranked"
 )
@@ -125,6 +126,28 @@ func TestWelcome(t *testing.T) {
 	}
 	if len(w.Classes) != 4 {
 		t.Fatalf("welcome should list every class: %+v", w.Classes)
+	}
+}
+
+// Players are drawn with their class's sprite, for themselves (through the
+// welcome's class list) and for everyone who sees them spawn
+func TestPlayersLookLikeTheirClass(t *testing.T) {
+	tw := newTestWorld()
+	a, _ := tw.join(1, protocol.Vec{X: 100, Y: 100})
+	b := &fakeClient{}
+	tw.Join(b, 2, "bob", protocol.CharacterInfo{ID: 2, Name: "Robin", Class: "rogue"}, ranked.NewRating())
+	tw.flush()
+	var w protocol.Welcome
+	msgpack.Unmarshal(b.take(protocol.ServerWelcome)[0], &w)
+	for _, c := range w.Classes {
+		if c.Sprite != classes.Sprite(classes.ID(c.ID)) {
+			t.Fatalf("welcome class %s has sprite %q", c.ID, c.Sprite)
+		}
+	}
+	tw.tickNow()
+	ua := a.updates(t)
+	if len(ua) != 1 || len(ua[0].Spawn) != 1 || ua[0].Spawn[0].Sprite != "rogue.png" {
+		t.Fatalf("a should see a rogue spawn with the rogue sprite: %+v", ua)
 	}
 }
 

@@ -22,7 +22,6 @@ import (
 const (
 	TickRate = 20 // Hz
 
-	playerSprite = "Skoobyuboo.png"
 	// Players spawn scattered this far around the map's spawn point
 	spawnSpread = 100
 )
@@ -233,7 +232,7 @@ func (w *World) Join(c Client, playerID int, username string, ch protocol.Charac
 		p := &player{
 			client:   c,
 			playerID: playerID,
-			ent:      w.newEntity(protocol.EntityPlayer, username, playerSprite, spawn),
+			ent:      w.newEntity(protocol.EntityPlayer, username, classes.Sprite(classes.ID(ch.Class)), spawn),
 			known:    make(map[protocol.EntityID]uint64),
 		}
 		p.ent.Char = ch.Name

@@ -1,6 +1,7 @@
 import { DisplayDriver } from "./display-driver.js";
 import { InputDriver } from "./input-driver.js";
 import { Clickable, GameState, RemoteEntity } from "./game-objects.js";
+import { DEFAULT_PLAYER_SPRITE } from "./animation.js";
 import { Vector2D } from "./vector2D.js";
 import { Wordle } from "./wordle.js";
 import { Leaderboard } from "./leaderboard.js";
@@ -258,6 +259,7 @@ export class Game {
         this.state.selfName = welcome.username;
         this.state.classes = welcome.classes;
         this.state.selfClass = welcome.classes.find((c) => c.id === welcome.character.class) ?? null;
+        this.state.selfSprite = this.state.selfClass?.sprite || DEFAULT_PLAYER_SPRITE;
         this.state.selfChar = welcome.character.name;
         this.state.selfElo = welcome.elo;
         this.state.ladder = welcome.ladder;

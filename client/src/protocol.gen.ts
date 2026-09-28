@@ -89,6 +89,8 @@ export interface ClassInfo {
     id: string;
     name: string;
     description: string;
+    // What players of this class look like, an image in client/static/assets
+    sprite: string;
     // Always one per ability slot, an empty ID means the slot is empty
     abilities: Array<AbilityInfo>;
 }

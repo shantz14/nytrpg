@@ -207,7 +207,7 @@ function recordCharacterDraws() {
         const file = (img.src || "").split("/").pop();
         // Where the map's background went, to check nothing past its edge shows
         if (file === "background.jpg") window.__bg = { x: args[0], y: args[1] };
-        if (file === "Skoobyuboo.png" || file === "player-walk.png") {
+        if (/^(Skoobyuboo|player-walk|(wizard|rogue|cleric)(-walk)?)\.png$/.test(file)) {
             const m = this.getTransform();
             const dpr = window.devicePixelRatio || 1;
             const dx = args.length === 8 ? args[4] : args[0];
@@ -457,6 +457,33 @@ test("character walks with the sprite sheet, flips left, and keeps facing that w
 
     await watcher.browserContext().close();
     await p.browserContext().close();
+});
+
+test("each class is drawn with its own sprite, for itself and for others", async () => {
+    const knight = await player({ char: "Arthur", cls: "knight" });
+    const wizard = await player({ char: "Merlin", cls: "wizard" });
+    await sleep(300);
+
+    let t = await pageNow(wizard);
+    let tk = await pageNow(knight);
+    await sleep(200);
+    let own = await draws(wizard, t, true);
+    assert(own.length && own.every((d) => d.file === "wizard.png"), `wizard should stand as a wizard: ${JSON.stringify(own.slice(-3))}`);
+    let seen = await draws(knight, tk, false);
+    assert(seen.some((d) => d.file === "wizard.png"), `knight should see the wizard sprite: ${JSON.stringify(seen.slice(-3))}`);
+    own = await draws(knight, tk, true);
+    assert(own.length && own.every((d) => d.file === "Skoobyuboo.png"), "the knight keeps the original sprite");
+
+    t = await pageNow(wizard);
+    tk = await pageNow(knight);
+    await hold(wizard, "d", 500);
+    own = (await draws(wizard, t, true)).filter((d) => d.file === "wizard-walk.png");
+    assert(own.length > 5 && new Set(own.map((d) => d.sx)).size >= 3, `wizard should walk with its sheet, drew ${own.length}`);
+    seen = await draws(knight, tk, false);
+    assert(seen.some((d) => d.file === "wizard-walk.png"), "knight should see the wizard walk with its sheet");
+
+    await knight.browserContext().close();
+    await wizard.browserContext().close();
 });
 
 test("character screen: 4 slots, create with a class, delete asks first, play", async () => {
