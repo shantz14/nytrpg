@@ -84,3 +84,17 @@ Uses a mount point, the db is written to disk outside of the container. `JWT_SEC
 docker build -t nytrpg .
 docker run -p 8080:8080 -e JWT_SECRET=<some long random string> -v $(pwd)/db:/nytrpg/db nytrpg
 ```
+
+### Deploying to EC2
+
+`docker-compose.yml` runs the game behind Caddy, which serves HTTPS with a Let's Encrypt
+certificate when `SITE_ADDRESS` is a domain (or plain HTTP on `:80`) and hides `/debug/*`.
+
+1. Launch an instance (Amazon Linux 2023 or Ubuntu, t3.small or larger; a micro works with the swap
+   the setup script adds). Security group: inbound 22 from your IP, 80 and 443 from anywhere.
+   Attach an Elastic IP so the address survives a stop/start, and point your domain's A record at it.
+2. On the instance: `curl -fsSL https://raw.githubusercontent.com/shantz14/nytrpg/main/deploy/ec2-setup.sh | bash`,
+   log out and back in, fill in `~/nytrpg/.env` (see `.env.example`), then `cd ~/nytrpg && docker compose up -d --build`.
+3. Later deploys, from your machine after pushing to main: `EC2_HOST=ec2-user@<ip> deploy/update.sh`.
+
+Logs: `docker compose logs -f app`. The database lives in `~/nytrpg/db`, so back that directory up.

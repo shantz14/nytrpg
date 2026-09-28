@@ -1,0 +1,11 @@
+# SITE_ADDRESS is a domain (game.example.com) for automatic HTTPS, or :80 for
+# plain HTTP on the bare IP. Websockets are proxied without extra config.
+{$SITE_ADDRESS}
+
+encode gzip
+
+# Metrics and pprof stay private
+@debug path /debug/*
+respond @debug 404
+
+reverse_proxy app:8080

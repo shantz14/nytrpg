@@ -1,2 +1,12 @@
 *.db
 *.db*
+.DS_Store
+.git
+.github
+.claude
+.env
+node_modules
+nytrpg
+app
+client/static/*.js
+client/test
