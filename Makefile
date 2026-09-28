@@ -2,7 +2,7 @@
 # make test-browser  real browser end to end tests (needs Chromium/Chrome, set CHROME_PATH if not found)
 # make check         everything CI runs
 
-.PHONY: test test-go test-client test-browser check generate bench
+.PHONY: test test-go test-client test-browser check generate bench icons
 
 test: test-go test-client
 
@@ -21,6 +21,10 @@ check: generate test test-browser
 
 generate:
 	go generate ./internal/protocol
+
+# Redraws the ability icons in client/static/assets/abilities from cmd/icongen
+icons:
+	go run ./cmd/icongen
 
 bench:
 	go test -run xxx -bench . -benchmem ./internal/game/

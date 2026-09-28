@@ -13,6 +13,9 @@ export const ClientDuelGuess: ClientMsg = 7; // WordleReq, a guess in your duel
 export const ClientDuelForfeit: ClientMsg = 8; // empty, give up your duel
 export const ClientDuelTyping: ClientMsg = 9; // DuelTyping, letters in your current row
 export const ClientProfile: ClientMsg = 10; // ProfileReq, a player's ranked profile
+export const ClientDuelCast: ClientMsg = 11; // DuelCastReq, use an ability in your duel
+export const ClientIllusionGuess: ClientMsg = 12; // WordleReq, a guess in the illusion you're trapped in
+export const ClientDuelReshape: ClientMsg = 13; // DuelReshapeReq, the word picked for Reshape Reality
 
 // Messages sent by the server
 export type ServerMsg = number;
@@ -31,6 +34,15 @@ export const ServerDuelOpponentGuess: ServerMsg = 11; // DuelOpponentGuess, your
 export const ServerDuelEnd: ServerMsg = 12; // DuelEnd, your duel is over
 export const ServerDuelTyping: ServerMsg = 13; // DuelTyping, your opponent's current row
 export const ServerProfile: ServerMsg = 14; // Profile, in reply to ClientProfile
+export const ServerDuelState: ServerMsg = 15; // DuelState, energy and effects on both sides, whenever they change
+export const ServerDuelCast: ServerMsg = 16; // DuelCast, an ability was used or landed in your duel
+export const ServerDuelBoard: ServerMsg = 17; // DuelBoard, a board's colors changed (Reshape Reality)
+export const ServerDuelScry: ServerMsg = 18; // DuelScry, the answer to your Scry
+export const ServerDuelEyes: ServerMsg = 19; // DuelEyes, the opponent's letters your Seeing Eyes show
+export const ServerDuelReshapeOptions: ServerMsg = 20; // DuelReshapeOptions, words to pick for Reshape Reality
+export const ServerIllusionStart: ServerMsg = 21; // IllusionStart, you're trapped in an illusion
+export const ServerIllusionGuess: ServerMsg = 22; // WordleRes, the result of your illusion guess
+export const ServerIllusionEnd: ServerMsg = 23; // IllusionEnd, you escaped the illusion or failed it
 
 // A position in world pixels
 export interface Vec {
@@ -93,12 +105,40 @@ export interface ClassInfo {
     sprite: string;
     // Always one per ability slot, an empty ID means the slot is empty
     abilities: Array<AbilityInfo>;
+    passive: PassiveInfo;
 }
 
 export interface AbilityInfo {
     id: string;
     name: string;
     description: string;
+    // Energy it takes to cast
+    cost: number;
+    // Can only be cast once a duel
+    once: boolean;
+    // What the caster picks when casting it
+    target: AbilityTarget;
+    // Image in client/static/assets/abilities
+    icon: string;
+}
+
+export type AbilityTarget = number;
+
+// Nothing to pick, it's cast right away
+export const TargetNone: AbilityTarget = 0;
+// A letter tile in one of the opponent's guesses
+export const TargetOpponentTile: AbilityTarget = 1;
+// A letter A-Z
+export const TargetLetter: AbilityTarget = 2;
+// A word from options the server sends (DuelReshapeOptions)
+export const TargetWord: AbilityTarget = 3;
+
+// Always on, set off by something in the duel. An empty ID means none.
+export interface PassiveInfo {
+    id: string;
+    name: string;
+    description: string;
+    icon: string;
 }
 
 // The static world, loaded from a JSON map file
@@ -184,6 +224,8 @@ export type WordleColor = number;
 export const Grey: WordleColor = 0;
 export const Yellow: WordleColor = 1;
 export const Green: WordleColor = 2;
+// Duels only: a letter destroyed by Slash, its color is gone
+export const Hidden: WordleColor = 3;
 
 export interface WordleReq {
     guess: string;
@@ -195,6 +237,9 @@ export interface WordleRes {
     colors: Array<WordleColor>;
     solution: string;
     seconds: number;
+    // Duels only: the guess wasn't taken because you're stunned or trapped in
+    // an illusion. Valid is false.
+    blocked: boolean;
 }
 
 // Sent in reply to ClientWordleStart, the guesses already made today
@@ -355,4 +400,109 @@ export interface RankedMatchInfo {
     change: number;
     // Unix seconds
     playedAt: number;
+}
+
+export interface DuelCastReq {
+    // The ability slot, 0 to 4
+    slot: number;
+    // TargetOpponentTile: the tile in the opponent's guesses
+    row: number;
+    col: number;
+    // TargetLetter: the letter
+    letter: string;
+}
+
+export interface DuelReshapeReq {
+    // One of the words from DuelReshapeOptions
+    word: string;
+}
+
+// Energy and effects on both sides of your duel
+export interface DuelState {
+    you: DuelSideState;
+    them: DuelSideState;
+}
+
+export interface DuelSideState {
+    energy: number;
+    // Guess rows they have, used or not
+    rows: number;
+    guesses: number;
+    // How much longer their keyboard is stunned, 0 when it isn't
+    stunnedMs: number;
+    shield: boolean;
+    // Seeing Eyes they have on their opponent
+    eyes: number;
+    // Magic Missiles flying at them, how long until each lands
+    missilesMs: Array<number>;
+    // Trapped in an illusion
+    illusion: boolean;
+    // Once-only abilities they already used
+    used: Array<string>;
+}
+
+export type DuelCastKind = number;
+
+// Someone cast it
+export const CastUsed: DuelCastKind = 0;
+// A delayed ability hit: a Magic Missile landed, an Illusion was failed
+export const CastLanded: DuelCastKind = 1;
+// A delayed ability came to nothing: a Magic Missile beaten by a guess,
+// an Illusion solved
+export const CastFizzled: DuelCastKind = 2;
+// A passive went off
+export const CastTriggered: DuelCastKind = 3;
+
+// Something happened with an ability in your duel, for animations and the
+// event feed
+export interface DuelCast {
+    // You cast it, or it's your passive
+    byYou: boolean;
+    ability: string;
+    kind: DuelCastKind;
+    // A shield stopped it
+    blocked: boolean;
+    // Slash: the tile destroyed
+    row: number;
+    col: number;
+}
+
+// Every guess's colors on one board, after they changed
+export interface DuelBoard {
+    // Your board, or the opponent's
+    yours: boolean;
+    colors: Array<Array<WordleColor>>;
+}
+
+export interface DuelScry {
+    letter: string;
+    inWord: boolean;
+}
+
+// Letters in the opponent's guesses your Seeing Eyes show
+export interface DuelEyes {
+    tiles: Array<EyeTile>;
+}
+
+export interface EyeTile {
+    row: number;
+    col: number;
+    letter: string;
+}
+
+export interface DuelReshapeOptions {
+    words: Array<string>;
+}
+
+// You must solve this small Wordle before you can guess in your duel again
+export interface IllusionStart {
+    wordLength: number;
+    maxGuesses: number;
+}
+
+export interface IllusionEnd {
+    won: boolean;
+    solution: string;
+    // Energy lost for failing it
+    energyLost: number;
 }

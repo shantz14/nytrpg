@@ -9,14 +9,25 @@ import (
 	"nytrpg/internal/testkit"
 )
 
-// Connects players who can all see each other, on a server whose duels use CRANE
+// Connects players who can all see each other, on a server whose duels use
+// CRANE. They play rogues, who have no abilities or passives to get in the way.
 func duelists(t *testing.T, names ...string) (*testkit.Server, []*testkit.Client) {
+	t.Helper()
+	classes := make([]string, len(names))
+	for i := range classes {
+		classes[i] = "rogue"
+	}
+	return duelistsAs(t, classes, names...)
+}
+
+// duelists, the i'th playing classes[i]
+func duelistsAs(t *testing.T, classes []string, names ...string) (*testkit.Server, []*testkit.Client) {
 	t.Helper()
 	ts := testkit.NewServer(t)
 	ts.SetDuelWord("CRANE")
 	var cs []*testkit.Client
-	for _, n := range names {
-		cs = append(cs, ts.Connect(t, testkit.UniqueName(n)))
+	for i, n := range names {
+		cs = append(cs, ts.ConnectAs(t, testkit.UniqueName(n), classes[i]))
 	}
 	// Challenges need the target in view, which takes a world tick
 	for _, c := range cs {

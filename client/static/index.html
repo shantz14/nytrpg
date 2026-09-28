@@ -20,6 +20,10 @@
                 <input type="text" id="chatbox" name="chatbox" placeholder="Press / or Enter to chat" maxlength="200" autocomplete="off" spellcheck="false" aria-label="Chat message">
             </div>
             <div id="hud" hidden>
+                <button type="button" id="hudAbilities" class="hud-btn" title="Your abilities" aria-label="Your abilities" aria-expanded="false" aria-controls="ability-panel">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                    <span class="hud-label">Abilities</span>
+                </button>
                 <button type="button" id="hudProfile" class="hud-btn" title="Your profile" aria-label="Your profile">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/></svg>
                     <span class="hud-label">Profile</span>
@@ -37,6 +41,13 @@
                     <span class="hud-label">Log out</span>
                 </button>
             </div>
+            <aside id="ability-panel" class="ability-panel" hidden aria-labelledby="abilityPanelTitle">
+                <header class="ability-panel-head">
+                    <h2 id="abilityPanelTitle" class="ability-panel-title">Abilities</h2>
+                    <button type="button" id="abilityPanelClose" class="icon-btn" aria-label="Close abilities">&times;</button>
+                </header>
+                <div id="abilityPanelList" class="ability-panel-list"></div>
+            </aside>
             <div id="player-card" class="player-card" hidden>
                 <div class="pc-who">
                     <span class="pc-char"></span>
@@ -157,8 +168,6 @@
                     </div>
                     <p class="hint">Enter submits &middot; Backspace clears the row</p>
                     <button id="submit" class="btn btn-primary btn-wide">Submit</button>
-                    <p class="section-label ability-label">Abilities</p>
-                    <div class="ability-bar" id="abilityBar"></div>
                 </div>
             </div>
         </template>
@@ -212,17 +221,41 @@
                     </header>
                     <div class="duel-boards">
                         <section class="duel-side duel-you">
-                            <p class="section-label">You</p>
-                            <div id="duelBoard" class="board"></div>
+                            <div class="duel-side-head">
+                                <p class="section-label">You</p>
+                                <div id="duelYouEnergy" class="energy" aria-label="0 energy"><img class="energy-icon" src="./assets/abilities/energy.png" alt=""><span class="energy-count">0</span><span class="energy-pips"></span></div>
+                            </div>
+                            <div id="duelYouEffects" class="duel-effects"></div>
+                            <div id="duelYouWrap" class="board-wrap">
+                                <div id="duelBoard" class="board"></div>
+                                <div id="duelYouStun" class="stun-overlay" hidden><img src="./assets/abilities/pommel_strike.png" alt=""><span>Stunned</span><span class="stun-time"></span></div>
+                            </div>
+                            <div id="duelScry" class="scry-chips" aria-label="Letters you scried"></div>
                             <p id="duelYouStatus" class="hint">Enter submits &middot; Backspace clears the row</p>
                             <button id="duelSubmit" class="btn btn-primary btn-wide">Submit</button>
                         </section>
                         <section class="duel-side duel-them">
-                            <p class="section-label"><span id="duelOppLabel"></span></p>
-                            <div id="duelOpponent" class="board opp-board" aria-label="Opponent's guesses, colors only"></div>
+                            <div class="duel-side-head">
+                                <p class="section-label"><span id="duelOppLabel"></span></p>
+                                <div id="duelOppEnergy" class="energy" aria-label="0 energy"><img class="energy-icon" src="./assets/abilities/energy.png" alt=""><span class="energy-count">0</span><span class="energy-pips"></span></div>
+                            </div>
+                            <div id="duelOppEffects" class="duel-effects"></div>
+                            <div id="duelOppWrap" class="board-wrap">
+                                <div id="duelOpponent" class="board opp-board" aria-label="Opponent's guesses, colors only"></div>
+                                <div id="duelOppStun" class="stun-overlay" hidden><img src="./assets/abilities/pommel_strike.png" alt=""><span>Stunned</span><span class="stun-time"></span></div>
+                            </div>
                             <p id="duelOppStatus" class="duel-opp-status"></p>
                         </section>
                     </div>
+                    <div class="duel-abilities">
+                        <div class="duel-abilities-head">
+                            <p class="section-label">Abilities</p>
+                            <button type="button" id="duelAbilityInfo" class="icon-btn info-btn" title="What your abilities do" aria-label="What your abilities do">i</button>
+                        </div>
+                        <div class="ability-bar" id="duelAbilityBar"></div>
+                        <p id="duelTargetHint" class="hint target-hint" hidden></p>
+                    </div>
+                    <ol id="duelFeed" class="duel-feed" aria-live="polite" aria-label="What happened"></ol>
                 </div>
             </div>
         </template>
@@ -238,6 +271,47 @@
                         <button id="cancelForfeit" class="btn btn-ghost">Keep playing</button>
                         <button id="confirmForfeit" class="btn btn-danger">Forfeit</button>
                     </div>
+                </div>
+            </div>
+        </template>
+
+        <template id="tpl-duel-scry">
+            <div id="duelScryPopup" class="overlay overlay-top">
+                <div class="panel result-panel">
+                    <header class="panel-head">
+                        <h1 class="panel-title">Scry</h1>
+                    </header>
+                    <p class="result-text">Pick a letter to learn whether it's in your word.</p>
+                    <div id="scryLetters" class="scry-letters"></div>
+                    <button type="button" class="btn btn-ghost btn-wide layer-cancel">Cancel</button>
+                </div>
+            </div>
+        </template>
+
+        <template id="tpl-duel-reshape">
+            <div id="duelReshapePopup" class="overlay overlay-top">
+                <div class="panel result-panel">
+                    <header class="panel-head">
+                        <h1 class="panel-title">Reshape Reality</h1>
+                    </header>
+                    <p class="result-text">Pick <strong id="reshapeFor"></strong>'s new word. Their guesses will be recolored to match it.</p>
+                    <div id="reshapeWords" class="reshape-words"></div>
+                    <button type="button" class="btn btn-ghost btn-wide layer-cancel">Cancel</button>
+                </div>
+            </div>
+        </template>
+
+        <template id="tpl-duel-illusion">
+            <div id="duelIllusionPopup" class="overlay overlay-top">
+                <div class="panel result-panel illusion-panel">
+                    <header class="panel-head">
+                        <img class="illusion-icon" src="./assets/abilities/illusion.png" alt="">
+                        <h1 class="panel-title">Illusion</h1>
+                    </header>
+                    <p class="result-text"><strong id="illusionCaster"></strong> trapped you in an illusion. Solve this word to get back to your duel. Failing costs 5 energy.</p>
+                    <div id="illusionBoard" class="board illusion-board"></div>
+                    <p id="illusionStatus" class="illusion-status"></p>
+                    <button id="illusionSubmit" class="btn btn-primary btn-wide">Submit</button>
                 </div>
             </div>
         </template>

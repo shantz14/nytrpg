@@ -16,9 +16,17 @@ var allWords string
 //go:embed words/solutions.txt
 var solutionWords string
 
+// Common 3-letter words for a duel's Illusion, both its answers and what can
+// be guessed in one
+//
+//go:embed words/three.txt
+var threeWords string
+
 type Words struct {
 	solutions  []string
 	guessables map[string]bool
+	// 3-letter words, for Illusions
+	three []string
 }
 
 func LoadWords() *Words {
@@ -27,7 +35,11 @@ func LoadWords() *Words {
 		w.guessables[strings.ToUpper(word)] = true
 	}
 	w.solutions = lines(strings.ToUpper(solutionWords))
-	if len(w.solutions) == 0 {
+	w.three = lines(strings.ToUpper(threeWords))
+	for _, word := range w.three {
+		w.guessables[word] = true
+	}
+	if len(w.solutions) == 0 || len(w.three) == 0 {
 		panic("wordle: no solutions")
 	}
 	return w
@@ -57,7 +69,12 @@ func (w *Words) Random(r *rand.Rand) string {
 	return w.solutions[r.Intn(len(w.solutions))]
 }
 
-// guess must be upper case
+// A 3-letter word, for an Illusion in a duel
+func (w *Words) Three(r *rand.Rand) string {
+	return w.three[r.Intn(len(w.three))]
+}
+
+// guess must be upper case. 5-letter words and the 3-letter Illusion words.
 func (w *Words) Guessable(guess string) bool {
 	return w.guessables[guess]
 }

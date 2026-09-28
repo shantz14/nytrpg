@@ -42,7 +42,8 @@ function freePort() {
 
 async function startServer() {
     server = spawn(bin, [], {
-        env: { ...process.env, PORT: String(port), JWT_SECRET: "browser-test", DB_PATH: join(tmp, "test.db"), STATIC_DIR: join(ROOT, "client/static") },
+        // Duels are all on CRANE, so tests know what their guesses earn
+        env: { ...process.env, PORT: String(port), JWT_SECRET: "browser-test", DB_PATH: join(tmp, "test.db"), STATIC_DIR: join(ROOT, "client/static"), DUEL_WORD: "CRANE" },
         stdio: ["ignore", "ignore", "pipe"],
     });
     server.stderr.on("data", (d) => { if (process.env.VERBOSE) process.stderr.write(d); });
@@ -194,6 +195,16 @@ async function walkUntil(page, key, done, timeout = 15000) {
     }
 }
 
+// SHOTS=dir npm run test:browser saves screenshots of key moments there, to
+// look at. Tests never compare them.
+async function shot(page, name) {
+    if (process.env.SHOTS) {
+        // Let animations settle
+        await sleep(600);
+        await page.screenshot({ path: join(process.env.SHOTS, name + ".png") });
+    }
+}
+
 const received = (page, type) => page.frames.filter((f) => f.dir === "in" && f.t === type);
 const visible = (page, sel) => page.$eval(sel, (e) => getComputedStyle(e).display !== "none").catch(() => false);
 
@@ -211,12 +222,14 @@ function recordCharacterDraws() {
             const m = this.getTransform();
             const dpr = window.devicePixelRatio || 1;
             const dx = args.length === 8 ? args[4] : args[0];
+            const dy = args.length === 8 ? args[5] : args[1];
             window.__draws.push({
                 file,
                 sx: args.length === 8 ? args[0] : null,
                 mirrored: m.a < 0,
                 // Left edge on screen in CSS px: a mirrored draw is translated to x + width
                 x: m.e / dpr + dx - (m.a < 0 ? 64 : 0),
+                y: m.f / dpr + dy,
                 t: performance.now(),
             });
             if (window.__draws.length > 5000) window.__draws.splice(0, 2500);
@@ -240,8 +253,10 @@ const texts = (page, t) => page.evaluate((t) => window.__texts.filter((d) => d.t
 // or off-center near the map's edges) or everyone else.
 async function draws(page, t, self) {
     const all = await page.evaluate((t) => window.__draws.filter((d) => d.t >= t), t);
-    const ownX = toScreen(page, page.pos.x, page.pos.y)[0];
-    return all.filter((d) => (Math.abs(d.x - ownX) < 0.5) === self);
+    // Both coordinates: another player can stand at the same x (spawns are
+    // random, it used to happen about 1 run in 200)
+    const [ownX, ownY] = toScreen(page, page.pos.x, page.pos.y);
+    return all.filter((d) => (Math.abs(d.x - ownX) < 0.5 && Math.abs(d.y - ownY) < 0.5) === self);
 }
 const pageNow = (page) => page.evaluate(() => performance.now());
 
@@ -317,9 +332,8 @@ test("wordle: play, reload, guesses come back; popups block the world", async ()
     await p.mouse.click(...toScreen(p, BOARD.x, BOARD.y));
     await p.waitForSelector("#letter-0-0", { timeout: 3000 });
     assert((await p.$$(".wordContainer")).length === 5, "5 rows");
-    // 5 ability slots, all empty until classes get abilities
-    const slots = await p.$$eval("#abilityBar .ability-slot", (els) => els.map((e) => ({ disabled: e.disabled, empty: e.classList.contains("empty") })));
-    assert(slots.length === 5 && slots.every((s) => s.disabled && s.empty), `want 5 empty ability slots: ${JSON.stringify(slots)}`);
+    // Abilities are for duels, the daily wordle has none
+    assert((await p.$$("#wordlePopup .ability-slot")).length === 0, "ability bar in the daily wordle");
 
     // Typed and submitted immediately, usually before the server's reply to opening
     // arrives. That used to reset the row counter and lose the guess.
@@ -761,6 +775,146 @@ test("ranked: ranks over names, explainer before challenging and accepting, elo 
     assert(own.rows.length === 1 && own.rows[0].includes("loss") && own.rows[0].includes("Morgana"), `own recent ${JSON.stringify(own.rows)}`);
     await a.browserContext().close();
     await b.browserContext().close();
+});
+
+// a challenges b from b's player card, b accepts, both have the duel open
+async function startDuel(a, b) {
+    const bId = received(b, 1)[0].d.entityId;
+    await waitFor(() => received(a, 5).some((f) => f.d.spawn?.some((s) => s.id === bId)), "a to see b");
+    await sleep(300);
+    await a.mouse.click(...toScreen(a, b.pos.x + 20, b.pos.y + 20));
+    await waitFor(() => a.$eval("#player-card", (e) => !e.hidden), "player card");
+    await a.click("#pcDuel");
+    await b.waitForSelector(".notice-accept", { timeout: 3000 });
+    await b.click(".notice-accept");
+    for (const page of [a, b]) {
+        await page.waitForSelector("#duelPopup", { timeout: 3000 });
+    }
+}
+
+// Types a guess into the duel and waits for the server's answer
+async function duelGuess(page, word) {
+    const n = received(page, 10).length;
+    await page.keyboard.type(word);
+    await page.keyboard.press("Enter");
+    await waitFor(() => received(page, 10).length > n, `the answer to ${word}`);
+}
+
+const energy = (page, side) => page.$eval(`#duel${side}Energy .energy-count`, (e) => Number(e.textContent));
+const slot = (n) => `#duelAbilityBar .ability-slot[data-slot="${n}"]`;
+
+test("duel abilities: energy from letters, pommel strike stuns, slash destroys a letter, the ability panel", async () => {
+    const a = await player({ char: "Lancelot", cls: "knight" });
+    const b = await player({ char: "Morgana", cls: "wizard" });
+    await startDuel(a, b);
+
+    // 5 abilities with icons and costs, none castable at 0 energy
+    const bar = await a.$$eval("#duelAbilityBar .ability-slot", (els) => els.map((e) => ({
+        icon: e.querySelector(".ability-icon")?.getAttribute("src"),
+        cost: e.querySelector(".ability-cost")?.textContent,
+        grey: e.classList.contains("unaffordable"),
+    })));
+    assert(JSON.stringify(bar.map((s) => s.cost)) === '["2","2","3","3","8"]', `costs ${JSON.stringify(bar)}`);
+    assert(bar.every((s) => s.icon?.endsWith(".png") && s.grey), `bar ${JSON.stringify(bar)}`);
+    await waitFor(async () => (await energy(a, "You")) === 0 && (await energy(a, "Opp")) === 0, "0 energy to start");
+
+    // TRACE on CRANE: 3 new greens and a yellow, 7 energy, which a sees too
+    await duelGuess(b, "trace");
+    await waitFor(async () => (await energy(b, "You")) === 7, "b's energy");
+    await waitFor(async () => (await energy(a, "Opp")) === 7, "a sees b's energy");
+
+    // SLATE then CRANK: 4 + 6. Aggressive: the new greens stun b.
+    await duelGuess(a, "slate");
+    await waitFor(() => visible(b, "#duelYouStun"), "b stunned by Aggressive");
+    await duelGuess(a, "crank");
+    await waitFor(async () => (await energy(a, "You")) === 10, "a's energy");
+    assert(!(await a.$eval(slot(3), (e) => e.classList.contains("unaffordable"))), "pommel strike castable at 10");
+
+    // Pommel Strike: b's board shakes, b is stunned 10s and can't type
+    await a.click(slot(3));
+    await waitFor(async () => (await energy(a, "You")) === 7, "paid 3");
+    await waitFor(() => b.$eval("#duelYouWrap", (e) => e.classList.contains("hit")), "b's board hit");
+    await waitFor(async () => Number((await b.$eval("#duelYouStun .stun-time", (e) => e.textContent)).replace("s", "")) >= 8, "10s stun countdown");
+    assert(await b.$eval("#duel-letter-1-0", (e) => e.readOnly), "b can type while stunned");
+    assert(await visible(a, "#duelOppStun"), "a sees b's stun");
+    assert((await b.$eval("#duelFeed li", (e) => e.textContent)).includes("Pommel Strike"), "b's feed names it");
+    await shot(b, "stunned");
+
+    // Slash: pick b's R on a's screen, it's rubble on both
+    await a.click(slot(0));
+    await waitFor(() => a.$eval("#duelOpponent", (e) => e.classList.contains("targeting")), "picking a tile");
+    await a.click("#duelOpponent .opp-row:first-child .opp-tile:nth-child(2)");
+    await waitFor(() => b.$eval("#duel-letter-0-1", (e) => e.classList.contains("tile-destroyed") && e.value === ""), "b's letter destroyed");
+    await waitFor(() => a.$eval("#duelOpponent .opp-row:first-child .opp-tile:nth-child(2)", (e) => e.classList.contains("tile-destroyed")), "a sees it destroyed");
+    assert(await energy(a, "You") === 5, "paid 2");
+    assert(await a.$eval("#duelOpponent", (e) => e.textContent.trim() === ""), "letters leaked onto the opponent board");
+    await sleep(1000);
+    await shot(a, "knight");
+    await shot(b, "slashed");
+
+    // The ability panel describes the knight's 5 abilities and passive
+    await a.click("#duelAbilityInfo");
+    await waitFor(() => visible(a, "#ability-panel"), "ability panel");
+    const entries = await a.$$eval(".ability-entry", (els) => els.map((e) => e.querySelector(".ability-entry-name").textContent));
+    assert(JSON.stringify(entries) === '["Slash","Shields Up","Determination","Pommel Strike","Cripple","Aggressive"]', `panel ${entries}`);
+    await shot(a, "panel");
+    await a.click("#abilityPanelClose");
+    assert(!(await visible(a, "#ability-panel")), "panel closes");
+});
+
+test("duel abilities: scry answers only the caster, illusion traps the opponent in a 3-letter wordle", async () => {
+    const a = await player({ char: "Merlin", cls: "wizard" });
+    const b = await player({ char: "Gawain", cls: "knight" });
+    await startDuel(a, b);
+
+    // TRACE 7, SNACK +1 (N), CANOE +2 (C and N in place)
+    for (const word of ["trace", "snack", "canoe"]) {
+        await duelGuess(a, word);
+    }
+    await waitFor(async () => (await energy(a, "You")) === 10, "a's energy");
+
+    // Scry Z: a learns it's not in the word, b never hears the answer
+    await a.click(slot(0));
+    await a.waitForSelector("#scryLetters .scry-letter", { timeout: 3000 });
+    await shot(a, "scry");
+    const z = await a.$$("#scryLetters .scry-letter");
+    await z[25].click();
+    await a.waitForSelector('#duelScry .scry-chip[data-letter="Z"].tile-grey', { timeout: 3000 });
+    assert(received(b, 18).length === 0, "b got the scry answer");
+
+    // Illusion: b is stuck in a 3-letter wordle, the duel board is off
+    await a.click(slot(3));
+    await b.waitForSelector("#duelIllusionPopup #illusion-letter-0-0", { timeout: 3000 });
+    assert((await b.$$("#illusionBoard .wordContainer")).length === 6, "6 guesses");
+    assert((await b.$$("#illusionBoard #illusion-letter-0-2")).length === 1 && (await b.$$("#illusion-letter-0-3")).length === 0, "3 letters");
+    assert(await b.$eval("#duelBoard", (e) => e.classList.contains("disabled")), "duel board still on");
+    await waitFor(() => a.$eval("#duelOppEffects", (e) => !!e.querySelector(".effect-illusion")), "a sees the illusion");
+    await shot(b, "illusion");
+    await shot(a, "wizard");
+
+    // Guess until it's over, won or lost. At a human pace: guesses are rate
+    // limited (2/s after a burst of 5).
+    for (const word of ["dog", "pig", "hen", "owl", "elk", "yak"]) {
+        if (received(b, 23).length) break;
+        await sleep(500);
+        const n = received(b, 22).length;
+        await b.keyboard.type(word);
+        await b.keyboard.press("Enter");
+        await waitFor(() => received(b, 22).length > n, `illusion answer to ${word}`);
+    }
+    await waitFor(() => received(b, 23).length === 1, "illusion over");
+    await waitFor(async () => !(await b.$("#duelIllusionPopup")), "illusion closes", 4000);
+    await waitFor(() => b.$eval("#duelBoard", (e) => !e.classList.contains("disabled")), "back to the duel");
+
+    // Out of the duel, the HUD opens the panel too
+    await a.click("#duelForfeit");
+    await a.waitForSelector("#confirmForfeit", { timeout: 3000 });
+    await a.click("#confirmForfeit");
+    await a.waitForSelector("#duelResultPopup .exit", { timeout: 3000 });
+    await a.click("#duelResultPopup .exit");
+    await a.click("#hudAbilities");
+    await waitFor(() => visible(a, "#ability-panel"), "panel from the HUD");
+    assert((await a.$eval("#abilityPanelTitle", (e) => e.textContent)) === "Wizard abilities", "wizard panel");
 });
 
 test("an error while drawing one frame doesn't freeze the game", async () => {

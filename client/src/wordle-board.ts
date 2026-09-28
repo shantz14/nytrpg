@@ -1,5 +1,5 @@
 import { Popup } from "./popup.js";
-import { Green, Grey, WordleColor, Yellow } from "./protocol.gen.js";
+import { EyeTile, Green, Grey, Hidden, WordleColor, Yellow } from "./protocol.gen.js";
 
 export type BoardOptions = {
     wordLength: number;
@@ -8,8 +8,20 @@ export type BoardOptions = {
     idPrefix?: string;
 };
 
+const TILE_CLASSES = ["tile-green", "tile-yellow", "tile-grey", "tile-destroyed"];
+
+// How long a lost row shows its crack before it crumbles away
+export const CRACK_MS = 900;
+
 export function tileClass(c: WordleColor): string | null {
-    return c == Green ? "tile-green" : c == Yellow ? "tile-yellow" : c == Grey ? "tile-grey" : null;
+    return c == Green ? "tile-green" : c == Yellow ? "tile-yellow" : c == Grey ? "tile-grey" : c == Hidden ? "tile-destroyed" : null;
+}
+
+// Cracks a row that was lost, then removes it
+function crumble(row: HTMLElement) {
+    row.classList.add("cracked");
+    row.id = "";
+    setTimeout(() => row.remove(), CRACK_MS);
 }
 
 // The rows of letter boxes you type guesses into, used by the daily Wordle and
@@ -29,6 +41,8 @@ export class WordleBoard {
     private ready: boolean;
     private submitWhenReady: boolean;
     private locked: boolean;
+    // For now, e.g. stunned. Unlike locked, it ends.
+    private disabled: boolean;
     private lastTyped: number;
 
     constructor(popup: Popup, container: HTMLElement, submitBtn: HTMLButtonElement, opts: BoardOptions) {
@@ -42,18 +56,19 @@ export class WordleBoard {
         this.ready = true;
         this.submitWhenReady = false;
         this.locked = false;
+        this.disabled = false;
         this.lastTyped = 0;
 
         this.build();
         popup.on(submitBtn, "click", () => this.submit());
         popup.on(document, "keypress", (e) => {
-            if ((e as KeyboardEvent).key === "Enter") {
+            if ((e as KeyboardEvent).key === "Enter" && !this.inactive) {
                 e.preventDefault();
                 this.submitBtn.click();
             }
         });
         popup.on(document, "keydown", (e) => {
-            if ((e as KeyboardEvent).key === "Backspace") {
+            if ((e as KeyboardEvent).key === "Backspace" && !this.inactive) {
                 e.preventDefault();
                 this.cancelMove();
             }
@@ -62,6 +77,18 @@ export class WordleBoard {
 
     get wordLength(): number {
         return this.opts.wordLength;
+    }
+
+    get rows(): number {
+        return this.opts.rows;
+    }
+
+    get isLocked(): boolean {
+        return this.locked;
+    }
+
+    private get inactive(): boolean {
+        return this.locked || this.disabled;
     }
 
     // Holds guesses until setReady, e.g. while waiting for the server to say
@@ -81,17 +108,46 @@ export class WordleBoard {
     // No more typing or guessing, e.g. once the game is over
     public lock() {
         this.locked = true;
-        this.submitBtn.disabled = true;
-        for (const box of this.container.querySelectorAll<HTMLInputElement>("input.letter")) {
-            box.readOnly = true;
-            box.blur();
-        }
+        this.setReadOnly(true);
         this.markActiveRow();
+    }
+
+    // Guessing again after a lock, e.g. a duel gave you another row
+    public unlock() {
+        this.locked = false;
+        this.setReadOnly(this.disabled);
+        this.markActiveRow();
+        this.focus();
+    }
+
+    // Stops typing and guessing for a while (stunned), or lets it go again
+    public setDisabled(disabled: boolean) {
+        if (this.disabled === disabled) {
+            return;
+        }
+        this.disabled = disabled;
+        this.container.classList.toggle("disabled", disabled);
+        if (!this.locked) {
+            this.setReadOnly(disabled);
+            if (!disabled) {
+                this.focus();
+            }
+        }
+    }
+
+    private setReadOnly(readOnly: boolean) {
+        this.submitBtn.disabled = readOnly;
+        for (const box of this.container.querySelectorAll<HTMLInputElement>("input.letter")) {
+            box.readOnly = readOnly;
+            if (readOnly) {
+                box.blur();
+            }
+        }
     }
 
     // Puts the cursor in the current row
     public focus() {
-        if (!this.locked) {
+        if (!this.inactive) {
             this.getLetter(this.currentGuess, 0)?.focus();
         }
     }
@@ -100,12 +156,12 @@ export class WordleBoard {
         return this.container.querySelector("#" + this.opts.idPrefix + `letter-${row}-${col}`);
     }
 
-    private row(row: number): HTMLDivElement | null {
+    public row(row: number): HTMLDivElement | null {
         return this.container.querySelector("#" + this.opts.idPrefix + "wordContainer" + row);
     }
 
     private submit() {
-        if (this.locked) {
+        if (this.inactive) {
             return;
         }
         if (!this.ready) {
@@ -143,7 +199,7 @@ export class WordleBoard {
         }
     }
 
-    // The last guess wasn't a word: take it back so it can be retyped
+    // The last guess wasn't taken: take it back so it can be retyped
     public reject() {
         this.currentGuess--;
         this.markActiveRow();
@@ -155,12 +211,59 @@ export class WordleBoard {
         for (let i = 0; i < this.wordLength; i++) {
             const box = this.getLetter(row, i);
             const tile = tileClass(colors[i]);
-            if (!box || !tile) {
+            if (!box || !tile || box.classList.contains("tile-destroyed")) {
                 continue;
             }
+            box.classList.remove(...TILE_CLASSES);
             box.classList.add("revealed", tile);
             box.style.setProperty("--delay", i * 120 + "ms");
         }
+    }
+
+    // Every guessed row's colors changed, e.g. the word did
+    public recolor(colors: WordleColor[][]) {
+        colors.forEach((row, r) => {
+            this.colorRow(r, row);
+            this.row(r)?.classList.remove("reshaped");
+            void this.row(r)?.offsetWidth;
+            this.row(r)?.classList.add("reshaped");
+        });
+    }
+
+    // A letter is gone: no letter, no color
+    public destroyTile(row: number, col: number) {
+        const box = this.getLetter(row, col);
+        if (!box) {
+            return;
+        }
+        box.value = "";
+        box.placeholder = "";
+        box.classList.remove(...TILE_CLASSES);
+        box.classList.add("revealed", "tile-destroyed");
+        box.readOnly = true;
+    }
+
+    // Adds rows at the bottom, or cracks and drops unused ones from it
+    public setRows(rows: number) {
+        while (this.opts.rows < rows) {
+            const row = this.buildRow(this.opts.rows);
+            row.classList.add("added");
+            this.container.appendChild(row);
+            this.opts.rows++;
+            if (this.locked || this.disabled) {
+                for (const box of row.querySelectorAll("input")) {
+                    box.readOnly = true;
+                }
+            }
+        }
+        while (this.opts.rows > rows && this.opts.rows > this.currentGuess) {
+            this.opts.rows--;
+            const row = this.row(this.opts.rows);
+            if (row) {
+                crumble(row);
+            }
+        }
+        this.markActiveRow();
     }
 
     // Highlights the row the player is typing into
@@ -182,7 +285,7 @@ export class WordleBoard {
 
     // Clears the current row
     private cancelMove() {
-        if (this.locked) {
+        if (this.inactive) {
             return;
         }
         this.getLetter(this.currentGuess, 0)?.focus();
@@ -211,16 +314,20 @@ export class WordleBoard {
     private build() {
         this.container.replaceChildren();
         for (let r = 0; r < this.opts.rows; r++) {
-            const row = document.createElement("div");
-            row.className = "wordContainer";
-            row.id = this.opts.idPrefix + "wordContainer" + r;
-            for (let c = 0; c < this.wordLength; c++) {
-                row.appendChild(this.letterBox(r, c));
-            }
-            this.container.appendChild(row);
+            this.container.appendChild(this.buildRow(r));
         }
         this.markActiveRow();
         this.getLetter(0, 0)?.focus();
+    }
+
+    private buildRow(r: number): HTMLDivElement {
+        const row = document.createElement("div");
+        row.className = "wordContainer";
+        row.id = this.opts.idPrefix + "wordContainer" + r;
+        for (let c = 0; c < this.wordLength; c++) {
+            row.appendChild(this.letterBox(r, c));
+        }
+        return row;
     }
 
     private letterBox(row: number, col: number): HTMLInputElement {
@@ -260,34 +367,59 @@ export class WordleBoard {
     }
 }
 
-// The opponent's board in a duel: colors only, never letters. Their current row
-// shows how many letters they've typed as plain filled boxes.
+// The opponent's board in a duel: colors only, never letters (except the ones
+// a Seeing Eye shows). Their current row shows how many letters they've typed
+// as plain filled boxes.
 export class OpponentGrid {
     guesses: number;
     solved: boolean;
+    private container: HTMLElement;
     private rows: HTMLDivElement[];
+    private picking: ((tile: { row: number; col: number } | null) => void) | null;
 
-    constructor(container: HTMLElement, private wordLength: number, private maxGuesses: number) {
+    constructor(container: HTMLElement, private wordLength: number, rows: number) {
         this.guesses = 0;
         this.solved = false;
+        this.container = container;
         this.rows = [];
+        this.picking = null;
         container.replaceChildren();
-        for (let r = 0; r < maxGuesses; r++) {
-            const row = document.createElement("div");
-            row.className = "opp-row";
-            for (let c = 0; c < wordLength; c++) {
-                const tile = document.createElement("div");
-                tile.className = "opp-tile";
-                row.appendChild(tile);
-            }
-            container.appendChild(row);
-            this.rows.push(row);
+        for (let r = 0; r < rows; r++) {
+            this.addRow();
         }
         this.markActiveRow();
+        container.addEventListener("click", (e) => {
+            const tile = (e.target as HTMLElement).closest<HTMLElement>(".opp-tile.pickable");
+            if (tile && this.picking) {
+                this.finishPick({ row: Number(tile.dataset.row), col: Number(tile.dataset.col) });
+            }
+        });
+    }
+
+    get rowCount(): number {
+        return this.rows.length;
     }
 
     get done(): boolean {
-        return this.solved || this.guesses >= this.maxGuesses;
+        return this.solved || this.guesses >= this.rows.length;
+    }
+
+    public tile(row: number, col: number): HTMLElement | null {
+        return (this.rows[row]?.children[col] as HTMLElement) ?? null;
+    }
+
+    private addRow() {
+        const row = document.createElement("div");
+        row.className = "opp-row";
+        for (let c = 0; c < this.wordLength; c++) {
+            const tile = document.createElement("div");
+            tile.className = "opp-tile";
+            tile.dataset.row = String(this.rows.length);
+            tile.dataset.col = String(c);
+            row.appendChild(tile);
+        }
+        this.container.appendChild(row);
+        this.rows.push(row);
     }
 
     public addGuess(colors: WordleColor[]) {
@@ -306,6 +438,92 @@ export class OpponentGrid {
         this.guesses++;
         this.solved = colors.length > 0 && colors.every((c) => c == Green);
         this.markActiveRow();
+    }
+
+    // Every guessed row's colors changed, e.g. their word did
+    public recolor(colors: WordleColor[][]) {
+        colors.forEach((row, r) => {
+            row.forEach((c, col) => {
+                const tile = this.tile(r, col);
+                const cls = tileClass(c);
+                if (tile && cls && !tile.classList.contains("tile-destroyed")) {
+                    tile.classList.remove(...TILE_CLASSES);
+                    tile.classList.add(cls);
+                }
+            });
+            const el = this.rows[r];
+            el?.classList.remove("reshaped");
+            void el?.offsetWidth;
+            el?.classList.add("reshaped");
+        });
+    }
+
+    public destroyTile(row: number, col: number) {
+        const tile = this.tile(row, col);
+        if (tile) {
+            tile.classList.remove(...TILE_CLASSES, "eyed");
+            tile.textContent = "";
+            tile.classList.add("revealed", "tile-destroyed");
+        }
+    }
+
+    // Adds rows at the bottom, or cracks and drops unused ones from it
+    public setRows(rows: number) {
+        while (this.rows.length < rows) {
+            this.addRow();
+            this.rows[this.rows.length - 1].classList.add("added");
+        }
+        while (this.rows.length > rows && this.rows.length > this.guesses) {
+            crumble(this.rows.pop()!);
+        }
+        this.markActiveRow();
+    }
+
+    // Shows the letters Seeing Eyes see, in place of the old ones
+    public showEyes(tiles: EyeTile[]) {
+        for (const el of this.container.querySelectorAll(".opp-tile.eyed")) {
+            el.classList.remove("eyed");
+            el.textContent = "";
+        }
+        for (const t of tiles) {
+            const tile = this.tile(t.row, t.col);
+            if (tile) {
+                tile.textContent = t.letter;
+                tile.classList.add("eyed");
+            }
+        }
+    }
+
+    // Lets the player click one of their guessed letters. null if cancelled.
+    public pickTile(): Promise<{ row: number; col: number } | null> {
+        this.cancelPick();
+        this.container.classList.add("targeting");
+        for (let r = 0; r < this.guesses; r++) {
+            for (const tile of this.rows[r].children) {
+                if (!tile.classList.contains("tile-destroyed")) {
+                    tile.classList.add("pickable");
+                }
+            }
+        }
+        return new Promise((resolve) => this.picking = resolve);
+    }
+
+    public cancelPick() {
+        this.finishPick(null);
+    }
+
+    get isPicking(): boolean {
+        return this.picking !== null;
+    }
+
+    private finishPick(tile: { row: number; col: number } | null) {
+        const resolve = this.picking;
+        this.picking = null;
+        this.container.classList.remove("targeting");
+        for (const el of this.container.querySelectorAll(".pickable")) {
+            el.classList.remove("pickable");
+        }
+        resolve?.(tile);
     }
 
     // Fills the first count boxes of the row they're typing in

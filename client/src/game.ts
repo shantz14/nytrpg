@@ -11,7 +11,10 @@ import {
     DuelStart, DuelTyping, DuelUnavailable, ServerChat, ServerCorrection, ServerDuelChallenge, ServerDuelChallengeUpdate, ServerDuelEnd,
     ServerDuelGuess, ServerDuelOpponentGuess, ServerDuelStart, ServerDuelTyping, ServerWelcome, ServerWorld, ServerWordleResult,
     ServerWordleResume, Vec, Welcome, WorldMap, WorldUpdate, WordleRes, WordleResume, ClientProfile, EntityID, Profile, ProfileReq, ServerProfile,
+    DuelBoard, DuelCast, DuelEyes, DuelReshapeOptions, DuelScry, DuelState, IllusionEnd, IllusionStart, ServerDuelBoard, ServerDuelCast,
+    ServerDuelEyes, ServerDuelReshapeOptions, ServerDuelScry, ServerDuelState, ServerIllusionEnd, ServerIllusionGuess, ServerIllusionStart,
 } from "./protocol.gen.js";
+import { AbilityPanel } from "./ability-panel.js";
 import { Popup } from "./popup.js";
 import { ProfileView } from "./profile.js";
 import { showRankedInfo } from "./ranked-info.js";
@@ -36,6 +39,8 @@ export class Game {
     wordle: Wordle | null;
     // The duel we're in, if any
     duel: Duel | null;
+    // Describes your class's abilities, made once the welcome says your class
+    abilityPanel: AbilityPanel | null;
     notifications: Notifications;
     playerCard: PlayerCard;
     userData: UserData;
@@ -57,6 +62,7 @@ export class Game {
         this.chatLog = new ChatLog(document.getElementById("chat-log")!);
         this.wordle = null;
         this.duel = null;
+        this.abilityPanel = null;
         this.notifications = new Notifications(document.getElementById("notifications")!);
         this.playerCard = new PlayerCard(document.getElementById("player-card")!);
         this.userData = userData;
@@ -85,6 +91,7 @@ export class Game {
                 }
             },
             leaderboard: () => new Leaderboard(this.userData, this.character.id, this.state.classes, this.inputDriver).run(),
+            abilities: () => this.abilityPanel?.toggle(),
             characters: () => {
                 // The saved login is kept, so the page starts again on the character screen
                 this.conn.close();
@@ -161,6 +168,15 @@ export class Game {
         this.conn.on<WordleRes>(ServerDuelGuess, (res) => this.duel?.handleGuess(res));
         this.conn.on<DuelOpponentGuess>(ServerDuelOpponentGuess, (g) => this.duel?.handleOpponentGuess(g));
         this.conn.on<DuelTyping>(ServerDuelTyping, (t) => this.duel?.handleTyping(t));
+        this.conn.on<DuelState>(ServerDuelState, (s) => this.duel?.handleState(s));
+        this.conn.on<DuelCast>(ServerDuelCast, (ev) => this.duel?.handleCast(ev));
+        this.conn.on<DuelBoard>(ServerDuelBoard, (b) => this.duel?.handleBoard(b));
+        this.conn.on<DuelScry>(ServerDuelScry, (s) => this.duel?.handleScry(s));
+        this.conn.on<DuelEyes>(ServerDuelEyes, (e) => this.duel?.handleEyes(e));
+        this.conn.on<DuelReshapeOptions>(ServerDuelReshapeOptions, (o) => this.duel?.handleReshapeOptions(o));
+        this.conn.on<IllusionStart>(ServerIllusionStart, (s) => this.duel?.handleIllusionStart(s));
+        this.conn.on<WordleRes>(ServerIllusionGuess, (res) => this.duel?.handleIllusionGuess(res));
+        this.conn.on<IllusionEnd>(ServerIllusionEnd, (end) => this.duel?.handleIllusionEnd(end));
         this.conn.on<DuelEnd>(ServerDuelEnd, (end) => {
             if (end.ranked) {
                 this.state.selfElo = end.eloAfter;
@@ -275,6 +291,8 @@ export class Game {
         this.state.selfElo = welcome.elo;
         this.state.ladder = welcome.ladder;
         this.moveSpeed = welcome.moveSpeed;
+        // The class never changes on a reconnect
+        this.abilityPanel ??= new AbilityPanel(this.state.selfClass);
         // Duels and challenges don't survive a disconnect
         this.duel?.abandon();
         this.duel = null;

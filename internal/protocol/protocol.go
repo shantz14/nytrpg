@@ -28,6 +28,9 @@ const (
 	ClientDuelForfeit   ClientMsg = 8  // empty, give up your duel
 	ClientDuelTyping    ClientMsg = 9  // DuelTyping, letters in your current row
 	ClientProfile       ClientMsg = 10 // ProfileReq, a player's ranked profile
+	ClientDuelCast      ClientMsg = 11 // DuelCastReq, use an ability in your duel
+	ClientIllusionGuess ClientMsg = 12 // WordleReq, a guess in the illusion you're trapped in
+	ClientDuelReshape   ClientMsg = 13 // DuelReshapeReq, the word picked for Reshape Reality
 )
 
 // Messages sent by the server
@@ -48,6 +51,15 @@ const (
 	ServerDuelEnd             ServerMsg = 12 // DuelEnd, your duel is over
 	ServerDuelTyping          ServerMsg = 13 // DuelTyping, your opponent's current row
 	ServerProfile             ServerMsg = 14 // Profile, in reply to ClientProfile
+	ServerDuelState           ServerMsg = 15 // DuelState, energy and effects on both sides, whenever they change
+	ServerDuelCast            ServerMsg = 16 // DuelCast, an ability was used or landed in your duel
+	ServerDuelBoard           ServerMsg = 17 // DuelBoard, a board's colors changed (Reshape Reality)
+	ServerDuelScry            ServerMsg = 18 // DuelScry, the answer to your Scry
+	ServerDuelEyes            ServerMsg = 19 // DuelEyes, the opponent's letters your Seeing Eyes show
+	ServerDuelReshapeOptions  ServerMsg = 20 // DuelReshapeOptions, words to pick for Reshape Reality
+	ServerIllusionStart       ServerMsg = 21 // IllusionStart, you're trapped in an illusion
+	ServerIllusionGuess       ServerMsg = 22 // WordleRes, the result of your illusion guess
+	ServerIllusionEnd         ServerMsg = 23 // IllusionEnd, you escaped the illusion or failed it
 )
 
 type envelope struct {
@@ -156,12 +168,42 @@ type ClassInfo struct {
 	Sprite string `json:"sprite" msgpack:"sprite"`
 	// Always one per ability slot, an empty ID means the slot is empty
 	Abilities []AbilityInfo `json:"abilities" msgpack:"abilities"`
+	Passive   PassiveInfo   `json:"passive" msgpack:"passive"`
 }
 
 type AbilityInfo struct {
 	ID          string `json:"id" msgpack:"id"`
 	Name        string `json:"name" msgpack:"name"`
 	Description string `json:"description" msgpack:"description"`
+	// Energy it takes to cast
+	Cost int `json:"cost" msgpack:"cost"`
+	// Can only be cast once a duel
+	Once bool `json:"once" msgpack:"once"`
+	// What the caster picks when casting it
+	Target AbilityTarget `json:"target" msgpack:"target"`
+	// Image in client/static/assets/abilities
+	Icon string `json:"icon" msgpack:"icon"`
+}
+
+type AbilityTarget int
+
+const (
+	// Nothing to pick, it's cast right away
+	TargetNone AbilityTarget = 0
+	// A letter tile in one of the opponent's guesses
+	TargetOpponentTile AbilityTarget = 1
+	// A letter A-Z
+	TargetLetter AbilityTarget = 2
+	// A word from options the server sends (DuelReshapeOptions)
+	TargetWord AbilityTarget = 3
+)
+
+// Always on, set off by something in the duel. An empty ID means none.
+type PassiveInfo struct {
+	ID          string `json:"id" msgpack:"id"`
+	Name        string `json:"name" msgpack:"name"`
+	Description string `json:"description" msgpack:"description"`
+	Icon        string `json:"icon" msgpack:"icon"`
 }
 
 // The static world, loaded from a JSON map file
@@ -259,6 +301,8 @@ const (
 	Grey   WordleColor = 0
 	Yellow WordleColor = 1
 	Green  WordleColor = 2
+	// Duels only: a letter destroyed by Slash, its color is gone
+	Hidden WordleColor = 3
 )
 
 type WordleReq struct {
@@ -271,6 +315,9 @@ type WordleRes struct {
 	Colors   []WordleColor `msgpack:"colors"`
 	Solution string        `msgpack:"solution"`
 	Seconds  float64       `msgpack:"seconds"`
+	// Duels only: the guess wasn't taken because you're stunned or trapped in
+	// an illusion. Valid is false.
+	Blocked bool `msgpack:"blocked"`
 }
 
 // Sent in reply to ClientWordleStart, the guesses already made today
@@ -437,4 +484,111 @@ type RankedMatchInfo struct {
 	Change int `msgpack:"change"`
 	// Unix seconds
 	PlayedAt int64 `msgpack:"playedAt"`
+}
+
+type DuelCastReq struct {
+	// The ability slot, 0 to 4
+	Slot int `msgpack:"slot"`
+	// TargetOpponentTile: the tile in the opponent's guesses
+	Row int `msgpack:"row"`
+	Col int `msgpack:"col"`
+	// TargetLetter: the letter
+	Letter string `msgpack:"letter"`
+}
+
+type DuelReshapeReq struct {
+	// One of the words from DuelReshapeOptions
+	Word string `msgpack:"word"`
+}
+
+// Energy and effects on both sides of your duel
+type DuelState struct {
+	You  DuelSideState `msgpack:"you"`
+	Them DuelSideState `msgpack:"them"`
+}
+
+type DuelSideState struct {
+	Energy int `msgpack:"energy"`
+	// Guess rows they have, used or not
+	Rows    int `msgpack:"rows"`
+	Guesses int `msgpack:"guesses"`
+	// How much longer their keyboard is stunned, 0 when it isn't
+	StunnedMs int  `msgpack:"stunnedMs"`
+	Shield    bool `msgpack:"shield"`
+	// Seeing Eyes they have on their opponent
+	Eyes int `msgpack:"eyes"`
+	// Magic Missiles flying at them, how long until each lands
+	MissilesMs []int `msgpack:"missilesMs"`
+	// Trapped in an illusion
+	Illusion bool `msgpack:"illusion"`
+	// Once-only abilities they already used
+	Used []string `msgpack:"used"`
+}
+
+type DuelCastKind int
+
+const (
+	// Someone cast it
+	CastUsed DuelCastKind = 0
+	// A delayed ability hit: a Magic Missile landed, an Illusion was failed
+	CastLanded DuelCastKind = 1
+	// A delayed ability came to nothing: a Magic Missile beaten by a guess,
+	// an Illusion solved
+	CastFizzled DuelCastKind = 2
+	// A passive went off
+	CastTriggered DuelCastKind = 3
+)
+
+// Something happened with an ability in your duel, for animations and the
+// event feed
+type DuelCast struct {
+	// You cast it, or it's your passive
+	ByYou   bool         `msgpack:"byYou"`
+	Ability string       `msgpack:"ability"`
+	Kind    DuelCastKind `msgpack:"kind"`
+	// A shield stopped it
+	Blocked bool `msgpack:"blocked"`
+	// Slash: the tile destroyed
+	Row int `msgpack:"row"`
+	Col int `msgpack:"col"`
+}
+
+// Every guess's colors on one board, after they changed
+type DuelBoard struct {
+	// Your board, or the opponent's
+	Yours  bool            `msgpack:"yours"`
+	Colors [][]WordleColor `msgpack:"colors"`
+}
+
+type DuelScry struct {
+	Letter string `msgpack:"letter"`
+	InWord bool   `msgpack:"inWord"`
+}
+
+// Letters in the opponent's guesses your Seeing Eyes show
+type DuelEyes struct {
+	Tiles []EyeTile `msgpack:"tiles"`
+}
+
+type EyeTile struct {
+	Row    int    `msgpack:"row"`
+	Col    int    `msgpack:"col"`
+	Letter string `msgpack:"letter"`
+}
+
+type DuelReshapeOptions struct {
+	Words []string `msgpack:"words"`
+}
+
+// You must solve this small Wordle before you can guess in your duel again
+type IllusionStart struct {
+	WordLength int `msgpack:"wordLength"`
+	MaxGuesses int `msgpack:"maxGuesses"`
+}
+
+type IllusionEnd struct {
+	Won      bool   `msgpack:"won"`
+	Solution string `msgpack:"solution"`
+	// Energy lost for failing it
+	EnergyLost int `msgpack:"energyLost"`
 }

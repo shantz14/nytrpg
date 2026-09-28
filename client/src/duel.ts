@@ -6,15 +6,48 @@ import { LatestThrottle } from "./throttle.js";
 import { className } from "./classes.js";
 import { signed, tierFor } from "./ranks.js";
 import { rankBadge } from "./ranked-info.js";
+import { AbilityBar, castable, iconUrl } from "./abilities.js";
 import {
-    ClientDuelForfeit, ClientDuelGuess, ClientDuelTyping, DuelDisconnect, DuelDraw, DuelEnd, DuelForfeit, DuelOpponentGuess,
-    DuelOutOfGuesses, DuelSolved, DuelStart, DuelTyping, DuelWin, WordleLose, WordleRes, WordleWin,
+    AbilityInfo, CastFizzled, CastLanded, CastTriggered, ClassInfo, ClientDuelCast, ClientDuelForfeit, ClientDuelGuess,
+    ClientDuelReshape, ClientDuelTyping, ClientIllusionGuess, DuelBoard, DuelCast, DuelCastReq, DuelDisconnect, DuelDraw,
+    DuelEnd, DuelEyes, DuelForfeit, DuelOpponentGuess, DuelOutOfGuesses, DuelReshapeOptions, DuelScry, DuelSideState,
+    DuelSolved, DuelStart, DuelState, DuelTyping, DuelWin, IllusionEnd, IllusionStart, TargetLetter, TargetOpponentTile,
+    TargetWord, WordleLose, WordleRes, WordleWin,
 } from "./protocol.gen.js";
 
 // Typing updates go out at most this often
 const TYPING_INTERVAL_MS = 50;
+// Stun and missile countdowns redraw this often
+const COUNTDOWN_MS = 100;
+// Matches the server's MissileFlight
+const MISSILE_FLIGHT_MS = 15000;
+// Energy pips shown, the most any ability costs
+const ENERGY_PIPS = 12;
+// Lines kept in the event feed
+const FEED_LINES = 4;
+// How long an escaped or failed Illusion stays up before closing
+const ILLUSION_END_MS = 1600;
 
-// A duel in progress: your board and the opponent's colors side by side
+const DEFAULT_HINT = "Enter submits · Backspace clears the row";
+
+type Side = "you" | "them";
+
+// An ability or passive by ID, whichever class has it
+function findAbility(classes: ClassInfo[], id: string): { name: string; icon: string } | null {
+    for (const c of classes) {
+        const a = c.abilities.find((a) => a.id === id);
+        if (a) {
+            return a;
+        }
+        if (c.passive.id === id) {
+            return c.passive;
+        }
+    }
+    return null;
+}
+
+// A duel in progress: your board and the opponent's colors side by side,
+// with energy, abilities and their effects
 export class Duel {
     private game: Game;
     private start: DuelStart;
@@ -24,6 +57,17 @@ export class Duel {
     private stopwatch: Stopwatch | null;
     private typing: LatestThrottle<number>;
     private ended: boolean;
+    // Out of guesses, waiting (or for Determination)
+    private out: boolean;
+    private bar: AbilityBar | null;
+    // The latest energy and effects, and when it came in (performance.now())
+    private state: DuelState | null;
+    private stateAt: number;
+    private countdown: number | undefined;
+    // Letters scried, and whether each is in the word
+    private scried: Map<string, boolean>;
+    private layer: HTMLElement | null;
+    private illusion: { board: WordleBoard; layer: HTMLElement } | null;
 
     constructor(game: Game, start: DuelStart) {
         this.game = game;
@@ -33,6 +77,13 @@ export class Duel {
         this.opponent = null;
         this.stopwatch = null;
         this.ended = false;
+        this.out = false;
+        this.bar = null;
+        this.state = null;
+        this.stateAt = 0;
+        this.scried = new Map();
+        this.layer = null;
+        this.illusion = null;
         this.typing = new LatestThrottle<number>((count) => {
             const t: DuelTyping = { count };
             this.game.send(ClientDuelTyping, t);
@@ -52,6 +103,8 @@ export class Duel {
         popup.onCleanup(() => {
             this.stopwatch?.stop();
             this.typing.cancel();
+            clearInterval(this.countdown);
+            this.opponent?.cancelPick();
         });
         popup.onClose = () => {
             if (this.game.duel === this) {
@@ -79,10 +132,115 @@ export class Duel {
         this.opponent = new OpponentGrid(popup.q("#duelOpponent"), s.wordLength, s.maxGuesses);
         this.updateOpponentStatus();
 
+        this.bar = new AbilityBar(popup.q("#duelAbilityBar"), this.game.state.selfClass, (slot, a) => this.use(slot, a));
+        this.bar.update(null);
+        popup.on(popup.q("#duelAbilityInfo"), "click", () => {
+            this.game.abilityPanel?.toggle();
+            this.board?.focus();
+        });
+        popup.on(document, "keydown", (e) => this.onKey(e as KeyboardEvent));
+
         this.stopwatch = new Stopwatch(popup.q("#duelTimer"));
         this.stopwatch.start();
+        this.countdown = setInterval(() => this.tickCountdowns(), COUNTDOWN_MS);
 
         popup.on(popup.q("#duelForfeit"), "click", () => this.confirmForfeit());
+    }
+
+    // 1-5 cast, Escape cancels picking a target
+    private onKey(e: KeyboardEvent) {
+        if (e.key === "Escape") {
+            if (this.opponent?.isPicking) {
+                this.opponent.cancelPick();
+            } else if (this.layer) {
+                this.closeLayer();
+            }
+            return;
+        }
+        const slot = Number(e.key) - 1;
+        if (e.key.length === 1 && slot >= 0 && slot < 5 && !this.layer && !this.illusion && !e.repeat) {
+            const a = this.game.state.selfClass?.abilities[slot];
+            if (a?.id) {
+                e.preventDefault();
+                this.use(slot, a);
+            }
+        }
+    }
+
+    // Casts the ability in slot, picking its target first if it needs one
+    private async use(slot: number, a: AbilityInfo) {
+        if (this.ended || !castable(a, this.state) || this.illusion) {
+            return;
+        }
+        const opponent = this.opponent!;
+        if (opponent.isPicking) {
+            // Clicking it again cancels
+            opponent.cancelPick();
+            return;
+        }
+        const req: DuelCastReq = { slot, row: 0, col: 0, letter: "" };
+        if (a.target === TargetOpponentTile) {
+            this.bar?.setPicking(slot);
+            this.setHint(`Click a letter in ${this.opponentName}'s guesses to ${a.name.toLowerCase()} it · Esc cancels`);
+            const tile = await opponent.pickTile();
+            this.bar?.setPicking(null);
+            this.setHint(null);
+            if (!tile || this.ended) {
+                this.board?.focus();
+                return;
+            }
+            req.row = tile.row;
+            req.col = tile.col;
+        } else if (a.target === TargetLetter) {
+            this.pickLetter(slot, a);
+            return;
+        }
+        // TargetWord: the server replies with the words to pick from
+        this.game.send(ClientDuelCast, req);
+        if (a.target !== TargetWord) {
+            this.board?.focus();
+        }
+    }
+
+    // Scry: pick a letter from the alphabet
+    private pickLetter(slot: number, a: AbilityInfo) {
+        const layer = this.openLayer("tpl-duel-scry");
+        layer.querySelector(".panel-title")!.textContent = a.name;
+        const grid = layer.querySelector("#scryLetters")!;
+        for (const letter of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "scry-letter";
+            btn.textContent = letter;
+            const known = this.scried.get(letter);
+            if (known !== undefined) {
+                btn.classList.add(known ? "tile-yellow" : "tile-grey");
+            }
+            btn.addEventListener("click", () => {
+                this.closeLayer();
+                this.game.send(ClientDuelCast, { slot, row: 0, col: 0, letter } as DuelCastReq);
+            });
+            grid.appendChild(btn);
+        }
+        (grid.firstElementChild as HTMLElement).focus();
+    }
+
+    private openLayer(templateId: string): HTMLElement {
+        this.closeLayer();
+        const layer = this.popup!.addLayer(templateId);
+        for (const btn of layer.querySelectorAll(".layer-cancel")) {
+            btn.addEventListener("click", () => this.closeLayer());
+        }
+        this.layer = layer;
+        return layer;
+    }
+
+    private closeLayer() {
+        if (this.layer) {
+            this.popup?.removeLayer(this.layer);
+            this.layer = null;
+            this.board?.focus();
+        }
     }
 
     private confirmForfeit() {
@@ -108,6 +266,11 @@ export class Duel {
         if (!board || this.ended) {
             return;
         }
+        if (res.blocked) {
+            board.reject();
+            this.game.toast(this.state?.you.illusion ? "You're trapped in an illusion" : "Your keyboard is stunned");
+            return;
+        }
         if (!res.valid) {
             board.reject();
             this.game.toast("Not in word list");
@@ -116,6 +279,7 @@ export class Duel {
         board.colorRow(board.currentGuess - 1, res.colors);
         if (res.status == WordleLose) {
             board.lock();
+            this.out = true;
             this.setYouStatus("Out of guesses. Waiting for " + this.opponentName + "…");
         } else if (res.status == WordleWin) {
             board.lock();
@@ -131,19 +295,384 @@ export class Duel {
         this.opponent?.setTyping(t.count);
     }
 
+    // Energy and effects on both sides changed
+    public handleState(s: DuelState) {
+        const popup = this.popup;
+        if (!popup || this.ended) {
+            return;
+        }
+        const before = this.state;
+        this.state = s;
+        this.stateAt = performance.now();
+
+        this.renderEnergy(popup.q("#duelYouEnergy"), s.you.energy, before?.you.energy);
+        this.renderEnergy(popup.q("#duelOppEnergy"), s.them.energy, before?.them.energy);
+        this.renderEffects(popup.q("#duelYouEffects"), s.you, "you");
+        this.renderEffects(popup.q("#duelOppEffects"), s.them, "them");
+
+        const board = this.board!;
+        board.setRows(s.you.rows);
+        this.opponent!.setRows(s.them.rows);
+        // Determination after running out of guesses
+        if (this.out && s.you.rows > s.you.guesses) {
+            this.out = false;
+            board.unlock();
+            this.setYouStatus(DEFAULT_HINT);
+        }
+        board.setDisabled(s.you.stunnedMs > 0 || s.you.illusion);
+        this.bar?.update(s);
+        this.updateOpponentStatus();
+        this.tickCountdowns();
+    }
+
+    private renderEnergy(el: HTMLElement, energy: number, before: number | undefined) {
+        el.querySelector(".energy-count")!.textContent = String(energy);
+        el.setAttribute("aria-label", `${energy} energy`);
+        el.dataset.energy = String(energy);
+        const pips = el.querySelector(".energy-pips")!;
+        if (pips.childElementCount === 0) {
+            for (let i = 0; i < ENERGY_PIPS; i++) {
+                pips.appendChild(document.createElement("i"));
+            }
+        }
+        [...pips.children].forEach((pip, i) => pip.classList.toggle("full", i < energy));
+        el.classList.toggle("overflow", energy > ENERGY_PIPS);
+        if (before !== undefined && energy !== before) {
+            const cls = energy > before ? "gain" : "loss";
+            el.classList.remove("gain", "loss");
+            void el.offsetWidth;
+            el.classList.add(cls);
+        }
+    }
+
+    // Shield, Seeing Eyes, Illusion and missiles on a side, as chips
+    private renderEffects(el: HTMLElement, st: DuelSideState, side: Side) {
+        el.replaceChildren();
+        const chip = (icon: string, text: string, cls: string) => {
+            const c = document.createElement("span");
+            c.className = "effect-chip " + cls;
+            const img = document.createElement("img");
+            img.src = iconUrl("abilities/" + icon + ".png");
+            img.alt = "";
+            c.append(img, text);
+            el.appendChild(c);
+            return c;
+        };
+        if (st.shield) {
+            chip("shields_up", "Shield", "effect-shield");
+        }
+        if (st.eyes > 0) {
+            chip("seeing_eye", st.eyes > 1 ? `Seeing Eye ×${st.eyes}` : "Seeing Eye", "effect-eye");
+        }
+        if (st.illusion) {
+            chip("illusion", "In an illusion", "effect-illusion");
+        }
+        st.missilesMs.forEach((ms) => {
+            const c = chip("magic_missile", side === "you" ? "Guess before it lands!" : "Missile", "effect-missile");
+            c.dataset.ms = String(ms);
+            const bar = document.createElement("span");
+            bar.className = "missile-bar";
+            bar.appendChild(document.createElement("span"));
+            c.appendChild(bar);
+        });
+        const stun = this.popup!.q(side === "you" ? "#duelYouStun" : "#duelOppStun");
+        stun.hidden = st.stunnedMs <= 0;
+        stun.dataset.ms = String(st.stunnedMs);
+    }
+
+    // Counts stuns and missiles down between states
+    private tickCountdowns() {
+        const popup = this.popup;
+        if (!popup || !this.state) {
+            return;
+        }
+        const elapsed = performance.now() - this.stateAt;
+        for (const id of ["#duelYouStun", "#duelOppStun"]) {
+            const stun = popup.q(id);
+            const left = Number(stun.dataset.ms ?? 0) - elapsed;
+            stun.querySelector(".stun-time")!.textContent = `${Math.max(0, Math.ceil(left / 1000))}s`;
+        }
+        for (const chip of popup.root.querySelectorAll<HTMLElement>(".effect-missile")) {
+            const left = Math.max(0, Number(chip.dataset.ms) - elapsed);
+            const fill = chip.querySelector<HTMLElement>(".missile-bar span")!;
+            fill.style.width = `${100 * (1 - left / MISSILE_FLIGHT_MS)}%`;
+        }
+    }
+
+    // An ability was cast, landed, fizzled or went off
+    public handleCast(ev: DuelCast) {
+        if (!this.popup || this.ended) {
+            return;
+        }
+        const target: Side = ev.byYou ? "them" : "you";
+        const a = findAbility(this.game.state.classes, ev.ability);
+        const name = a?.name ?? ev.ability;
+        const opp = this.opponentName;
+
+        if (ev.blocked) {
+            this.fx(target, "shields_up", "fx-blocked");
+            this.feed(ev.byYou ? `${opp}'s shield blocked your ${name}` : `Your shield blocked ${opp}'s ${name}`, "blocked");
+            return;
+        }
+
+        let text: string;
+        switch (ev.kind) {
+            case CastLanded:
+                if (ev.ability === "magic_missile") {
+                    this.missileFx(target);
+                    text = ev.byYou ? `Your Magic Missile hit ${opp}` : `A Magic Missile hit you`;
+                } else {
+                    text = ev.byYou ? `${opp} failed your Illusion` : `You failed the Illusion`;
+                }
+                break;
+            case CastFizzled:
+                if (ev.ability === "magic_missile") {
+                    text = ev.byYou ? `${opp} guessed in time, your Magic Missile fizzled` : `You guessed in time, the Magic Missile fizzled`;
+                } else {
+                    text = ev.byYou ? `${opp} saw through your Illusion` : `You escaped the Illusion`;
+                }
+                break;
+            case CastTriggered:
+                if (ev.ability === "wise") {
+                    text = "Wise: your Seeing Eyes moved";
+                    this.fx("you", ev.ability, "fx-cast");
+                } else {
+                    text = ev.byYou ? `${name}: ${opp} is stunned` : `${opp}'s ${name} stunned you`;
+                    this.fx(target, ev.ability, "fx-slam");
+                    this.hit(target);
+                }
+                break;
+            default:
+                text = ev.byYou ? `You cast ${name}` : `${opp} cast ${name}`;
+                this.castFx(ev, target);
+        }
+        this.feed(text, ev.byYou ? "mine" : "theirs");
+    }
+
+    // What a cast looks like
+    private castFx(ev: DuelCast, target: Side) {
+        switch (ev.ability) {
+            case "slash": {
+                const tile = ev.byYou ? this.opponent?.tile(ev.row, ev.col) : this.board?.getLetter(ev.row, ev.col);
+                tile?.classList.add("slashed");
+                setTimeout(() => tile?.classList.remove("slashed"), 700);
+                if (ev.byYou) {
+                    this.opponent?.destroyTile(ev.row, ev.col);
+                } else {
+                    this.board?.destroyTile(ev.row, ev.col);
+                }
+                break;
+            }
+            case "pommel_strike":
+                this.fx(target, ev.ability, "fx-slam");
+                this.hit(target);
+                break;
+            case "cripple":
+                this.fx(target, ev.ability, "fx-slam");
+                break;
+            case "shields_up":
+            case "determination":
+            case "scry":
+                // On the caster
+                this.fx(ev.byYou ? "you" : "them", ev.ability, "fx-cast");
+                break;
+            case "magic_missile":
+                this.fx(ev.byYou ? "you" : "them", ev.ability, "fx-cast");
+                break;
+            default:
+                this.fx(target, ev.ability, "fx-cast");
+        }
+    }
+
+    // An icon that pops over a side's board and fades
+    private fx(side: Side, ability: string, cls: string) {
+        const wrap = this.popup?.q(side === "you" ? "#duelYouWrap" : "#duelOppWrap");
+        if (!wrap) {
+            return;
+        }
+        const img = document.createElement("img");
+        img.className = "cast-fx " + cls;
+        img.src = iconUrl("abilities/" + ability + ".png");
+        img.alt = "";
+        img.addEventListener("animationend", () => img.remove());
+        setTimeout(() => img.remove(), 1500);
+        wrap.appendChild(img);
+    }
+
+    // The side's board shakes
+    private hit(side: Side) {
+        const wrap = this.popup?.q(side === "you" ? "#duelYouWrap" : "#duelOppWrap");
+        wrap?.classList.remove("hit");
+        void wrap?.offsetWidth;
+        wrap?.classList.add("hit");
+    }
+
+    // A missile flies across into the side's board
+    private missileFx(side: Side) {
+        const boards = this.popup?.q(".duel-boards");
+        if (!boards) {
+            return;
+        }
+        const img = document.createElement("img");
+        img.className = "missile-fx " + (side === "you" ? "fly-left" : "fly-right");
+        img.src = iconUrl("abilities/magic_missile.png");
+        img.alt = "";
+        img.addEventListener("animationend", () => {
+            img.remove();
+            this.hit(side);
+        });
+        setTimeout(() => img.remove(), 1500);
+        boards.appendChild(img);
+    }
+
+    private feed(text: string, cls: string) {
+        const list = this.popup?.q("#duelFeed");
+        if (!list) {
+            return;
+        }
+        const li = document.createElement("li");
+        li.className = cls;
+        li.textContent = text;
+        list.prepend(li);
+        while (list.childElementCount > FEED_LINES) {
+            list.lastElementChild!.remove();
+        }
+    }
+
+    public handleScry(s: DuelScry) {
+        const popup = this.popup;
+        if (!popup || this.ended) {
+            return;
+        }
+        this.scried.set(s.letter, s.inWord);
+        const chips = popup.q("#duelScry");
+        chips.querySelector(`[data-letter="${s.letter}"]`)?.remove();
+        const chip = document.createElement("span");
+        chip.className = "scry-chip " + (s.inWord ? "tile-yellow" : "tile-grey");
+        chip.dataset.letter = s.letter;
+        chip.textContent = s.letter;
+        chip.title = s.inWord ? `${s.letter} is in your word` : `${s.letter} isn't in your word`;
+        chips.appendChild(chip);
+        this.feed(chip.title, "mine");
+    }
+
+    public handleEyes(e: DuelEyes) {
+        this.opponent?.showEyes(e.tiles);
+    }
+
+    public handleBoard(b: DuelBoard) {
+        if (this.ended) {
+            return;
+        }
+        if (b.yours) {
+            this.board?.recolor(b.colors);
+            this.game.toast("Reality shifted: your word changed");
+        } else {
+            this.opponent?.recolor(b.colors);
+        }
+    }
+
+    // Reshape Reality: pick the opponent's new word
+    public handleReshapeOptions(o: DuelReshapeOptions) {
+        if (!this.popup || this.ended) {
+            return;
+        }
+        if (o.words.length === 0) {
+            this.game.toast("No words to reshape into");
+            return;
+        }
+        const layer = this.openLayer("tpl-duel-reshape");
+        layer.querySelector("#reshapeFor")!.textContent = this.opponentName;
+        const list = layer.querySelector("#reshapeWords")!;
+        for (const word of o.words) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "reshape-word";
+            btn.textContent = word;
+            btn.addEventListener("click", () => {
+                this.closeLayer();
+                this.game.send(ClientDuelReshape, { word });
+            });
+            list.appendChild(btn);
+        }
+        (list.firstElementChild as HTMLElement).focus();
+    }
+
+    // Trapped in a small Wordle until it's solved or failed
+    public handleIllusionStart(s: IllusionStart) {
+        const popup = this.popup;
+        if (!popup || this.ended) {
+            return;
+        }
+        this.closeLayer();
+        this.opponent?.cancelPick();
+        this.illusion?.layer.remove();
+        const layer = popup.addLayer("tpl-duel-illusion");
+        layer.querySelector("#illusionCaster")!.textContent = this.opponentName;
+        const board = new WordleBoard(popup, layer.querySelector("#illusionBoard")!, layer.querySelector("#illusionSubmit")!, {
+            wordLength: s.wordLength,
+            rows: s.maxGuesses,
+            idPrefix: "illusion-",
+        });
+        board.onSubmit = (guess) => this.game.send(ClientIllusionGuess, { guess });
+        this.board?.setDisabled(true);
+        this.illusion = { board, layer };
+        board.focus();
+    }
+
+    public handleIllusionGuess(res: WordleRes) {
+        const board = this.illusion?.board;
+        if (!board) {
+            return;
+        }
+        if (res.blocked) {
+            board.reject();
+            this.game.toast("Your keyboard is stunned");
+        } else if (!res.valid) {
+            board.reject();
+            this.game.toast("Not in word list");
+        } else {
+            board.colorRow(board.currentGuess - 1, res.colors);
+        }
+    }
+
+    public handleIllusionEnd(end: IllusionEnd) {
+        const ill = this.illusion;
+        if (!ill) {
+            return;
+        }
+        ill.board.lock();
+        const status = ill.layer.querySelector("#illusionStatus")!;
+        status.textContent = end.won ? "You saw through the illusion!" : `The word was ${end.solution}. You lost ${end.energyLost} energy.`;
+        status.classList.add(end.won ? "won" : "lost");
+        this.illusion = null;
+        setTimeout(() => {
+            ill.layer.remove();
+            this.board?.focus();
+        }, ILLUSION_END_MS);
+    }
+
     private updateOpponentStatus() {
         const opp = this.opponent;
         if (!opp || !this.popup) {
             return;
         }
         const status = this.popup.q("#duelOppStatus");
-        status.textContent = opp.solved ? "Solved" : opp.done ? "Out of guesses" : `${opp.guesses}/${this.start.maxGuesses}`;
+        status.textContent = opp.solved ? "Solved" : opp.done ? "Out of guesses" : `${opp.guesses}/${opp.rowCount}`;
         status.classList.toggle("solved", opp.solved);
         status.classList.toggle("out", opp.done && !opp.solved);
     }
 
     private setYouStatus(text: string) {
         this.popup?.q("#duelYouStatus").replaceChildren(text);
+    }
+
+    private setHint(text: string | null) {
+        const hint = this.popup?.q("#duelTargetHint");
+        if (hint) {
+            hint.hidden = text === null;
+            hint.textContent = text ?? "";
+        }
     }
 
     public handleEnd(end: DuelEnd) {
@@ -154,7 +683,15 @@ export class Duel {
         this.ended = true;
         this.stopwatch?.stop();
         this.typing.cancel();
+        clearInterval(this.countdown);
+        this.opponent?.cancelPick();
+        this.closeLayer();
+        this.illusion?.layer.remove();
+        this.illusion = null;
         this.board?.lock();
+        this.bar?.update(null);
+        popup.q("#duelYouStun").hidden = true;
+        popup.q("#duelOppStun").hidden = true;
         popup.q<HTMLButtonElement>("#duelForfeit").disabled = true;
 
         const layer = popup.addLayer("tpl-duel-result");

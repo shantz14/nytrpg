@@ -1,6 +1,5 @@
 import { Game } from "./game.js";
 import { Popup } from "./popup.js";
-import { renderAbilityBar } from "./abilities.js";
 import { WordleBoard } from "./wordle-board.js";
 import { ClientWordleGuess, ClientWordleStart, WordleLose, WordleReq, WordleRes, WordleResume, WordleWin } from "./protocol.gen.js";
 
@@ -90,8 +89,6 @@ export class Wordle {
             this.game.send(ClientWordleGuess, data);
         };
         this.board = board;
-        // Empty for now, abilities will be usable during the puzzle
-        renderAbilityBar(popup.q("#abilityBar"), this.game.state.selfClass);
 
         // Server starts the clock and replies with any guesses already made
         this.game.send(ClientWordleStart, {});

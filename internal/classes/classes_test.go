@@ -1,6 +1,10 @@
 package classes
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestRegistry(t *testing.T) {
 	want := []ID{Knight, Wizard, Rogue, Cleric}
@@ -58,5 +62,54 @@ func TestEveryClassHasItsOwnSprite(t *testing.T) {
 	}
 	if Sprite("bard") != Sprite(Knight) {
 		t.Fatal("unknown classes should look like a knight")
+	}
+}
+
+func TestKnightAndWizardAbilities(t *testing.T) {
+	want := map[ID]struct {
+		abilities []string
+		costs     []int
+		passive   string
+	}{
+		Knight: {[]string{Slash, ShieldsUp, Determination, PommelStrike, Cripple}, []int{2, 2, 3, 3, 8}, Aggressive},
+		Wizard: {[]string{Scry, SeeingEye, MagicMissile, Illusion, ReshapeReality}, []int{2, 5, 6, 8, 12}, Wise},
+	}
+	for id, w := range want {
+		info := byID[id].Info()
+		for slot, a := range info.Abilities {
+			if a.ID != w.abilities[slot] || a.Cost != w.costs[slot] || a.Name == "" || a.Description == "" || a.Once {
+				t.Fatalf("%s slot %d: %+v", id, slot, a)
+			}
+			if AbilityAt(id, slot).ID != a.ID {
+				t.Fatalf("AbilityAt(%s, %d)", id, slot)
+			}
+		}
+		if info.Passive.ID != w.passive || PassiveOf(id) != w.passive || info.Passive.Description == "" {
+			t.Fatalf("%s passive %+v", id, info.Passive)
+		}
+	}
+	if AbilityAt(Knight, 5) != nil || AbilityAt(Knight, -1) != nil || AbilityAt("bard", 0) != nil || AbilityAt(Rogue, 0) != nil {
+		t.Fatal("AbilityAt outside the filled slots")
+	}
+	if PassiveOf(Rogue) != "" {
+		t.Fatal("rogues have no passive yet")
+	}
+}
+
+// Every ability and passive needs its pixel art (make icons)
+func TestEveryAbilityHasAnIcon(t *testing.T) {
+	for _, c := range Infos() {
+		icons := []string{c.Passive.Icon}
+		for _, a := range c.Abilities {
+			icons = append(icons, a.Icon)
+		}
+		for _, icon := range icons {
+			if icon == "" {
+				continue
+			}
+			if _, err := os.Stat(filepath.Join("../../client/static/assets", icon)); err != nil {
+				t.Errorf("%s: %v", c.ID, err)
+			}
+		}
 	}
 }

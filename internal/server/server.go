@@ -64,7 +64,11 @@ func New(cfg config.Config) (*Server, error) {
 
 	// Each feature registers the websocket messages it handles
 	s.chars = characters.New(st, s.auth)
-	world.Duels = wordle.NewDuelPuzzle(s.wordle.Words())
+	duels := wordle.NewDuelPuzzle(s.wordle.Words())
+	if cfg.DuelWord != "" {
+		duels = duels.WithWord(cfg.DuelWord)
+	}
+	world.Duels = duels
 	s.ranked = ranked.NewService(st)
 	world.OnRanked = s.ranked.Record
 	world.History = s.ranked

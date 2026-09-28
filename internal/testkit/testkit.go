@@ -182,6 +182,12 @@ func (s *Server) CreateCharacter(t testing.TB, acct Account, slot int, name, cla
 // has no character there, and plays it.
 func (s *Server) Login(t testing.TB, username string) Account {
 	t.Helper()
+	return s.LoginAs(t, username, "knight")
+}
+
+// Login, making the slot 0 character of the given class
+func (s *Server) LoginAs(t testing.TB, username, class string) Account {
+	t.Helper()
 	creds := map[string]string{"username": username, "password": password}
 	s.PostJSON(t, "/signup", creds, nil)
 	var res struct {
@@ -204,7 +210,7 @@ func (s *Server) Login(t testing.TB, username string) Account {
 	if c := list.Slots[0]; c != nil {
 		acct.CharacterID = c.ID
 	} else {
-		acct.CharacterID = s.CreateCharacter(t, acct, 0, username, "knight").ID
+		acct.CharacterID = s.CreateCharacter(t, acct, 0, username, class).ID
 	}
 	return acct
 }
@@ -213,6 +219,12 @@ func (s *Server) Login(t testing.TB, username string) Account {
 func (s *Server) Connect(t testing.TB, username string) *Client {
 	t.Helper()
 	return s.Dial(t, s.Login(t, username))
+}
+
+// Connect, playing a character of the given class
+func (s *Server) ConnectAs(t testing.TB, username, class string) *Client {
+	t.Helper()
+	return s.Dial(t, s.LoginAs(t, username, class))
 }
 
 // Opens a websocket as the account's character and waits for the welcome

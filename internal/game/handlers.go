@@ -64,6 +64,27 @@ func (w *World) RegisterHandlers(r *netconn.Router) {
 		}
 		w.DuelTyping(s, req.Count)
 	})
+	r.Handle(protocol.ClientDuelCast, func(s *netconn.Session, data msgpack.RawMessage) {
+		var req protocol.DuelCastReq
+		if err := msgpack.Unmarshal(data, &req); err != nil || !s.Allow("duelCast", 2, 5) {
+			return
+		}
+		w.CastAbility(s, req)
+	})
+	r.Handle(protocol.ClientDuelReshape, func(s *netconn.Session, data msgpack.RawMessage) {
+		var req protocol.DuelReshapeReq
+		if err := msgpack.Unmarshal(data, &req); err != nil || !s.Allow("duelCast", 2, 5) {
+			return
+		}
+		w.ReshapeReality(s, req.Word)
+	})
+	r.Handle(protocol.ClientIllusionGuess, func(s *netconn.Session, data msgpack.RawMessage) {
+		var req protocol.WordleReq
+		if err := msgpack.Unmarshal(data, &req); err != nil || !s.Allow("duelGuess", 2, 5) {
+			return
+		}
+		w.IllusionGuess(s, req.Guess)
+	})
 	r.Handle(protocol.ClientDuelForfeit, func(s *netconn.Session, _ msgpack.RawMessage) {
 		w.ForfeitDuel(s)
 	})

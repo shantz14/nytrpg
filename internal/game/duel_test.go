@@ -16,8 +16,9 @@ import (
 // place are green, the rest grey.
 type fakePuzzle struct{}
 
-func (fakePuzzle) NewWord(*rand.Rand) string { return "CRANE" }
-func (fakePuzzle) MaxGuesses() int           { return 3 }
+func (fakePuzzle) NewWord(*rand.Rand) string      { return "CRANE" }
+func (fakePuzzle) MaxGuesses() int                { return 3 }
+func (fakePuzzle) IllusionWord(*rand.Rand) string { return "CAT" }
 func (fakePuzzle) Score(guess, word string) (bool, []protocol.WordleColor) {
 	guess = strings.ToUpper(guess)
 	if len(guess) != len(word) || guess == "XXXXX" {

@@ -97,6 +97,8 @@ type World struct {
 	// Duel challenges waiting for an answer, by id
 	challenges    map[uint32]*challenge
 	nextChallenge uint32
+	// Duels being played
+	duels map[*duel]struct{}
 
 	cmds chan func()
 	// For tests
@@ -114,8 +116,9 @@ func NewWorld(m *protocol.WorldMap) *World {
 		players:  make(map[Client]*player),
 		grid:     newGrid(),
 		// Built in systems run before any added ones
-		systems:    []System{(*World).expireChallenges},
+		systems:    []System{(*World).expireChallenges, (*World).tickDuels},
 		challenges: make(map[uint32]*challenge),
+		duels:      make(map[*duel]struct{}),
 		cmds:       make(chan func(), 1024),
 		now:        time.Now,
 		rng:        rand.New(rand.NewSource(time.Now().UnixNano())),

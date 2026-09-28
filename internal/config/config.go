@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -14,6 +15,8 @@ type Config struct {
 	JWTSecret []byte
 	// Enables /debug/pprof
 	Debug bool
+	// Every duel is on this word, for end-to-end tests. Empty = a random word.
+	DuelWord string
 }
 
 func FromEnv() (Config, error) {
@@ -23,6 +26,7 @@ func FromEnv() (Config, error) {
 		StaticDir: getenv("STATIC_DIR", "client/static"),
 		JWTSecret: []byte(os.Getenv("JWT_SECRET")),
 		Debug:     os.Getenv("DEBUG") == "1",
+		DuelWord:  strings.ToUpper(os.Getenv("DUEL_WORD")),
 	}
 	if p := os.Getenv("PORT"); p != "" {
 		port, err := strconv.Atoi(p)

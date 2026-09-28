@@ -2,6 +2,7 @@ package game
 
 import (
 	"math/rand"
+	"strings"
 	"time"
 
 	"nytrpg/internal/protocol"
@@ -16,6 +17,8 @@ const ChallengeTimeout = 30 * time.Second
 type DuelPuzzle interface {
 	// A fresh word for one duel
 	NewWord(rng *rand.Rand) string
+	// A short word for an Illusion, a small puzzle inside the duel
+	IllusionWord(rng *rand.Rand) string
 	// Scores a guess against the word, valid is false if it isn't a guessable word
 	Score(guess, word string) (valid bool, colors []protocol.WordleColor)
 	MaxGuesses() int
@@ -29,26 +32,45 @@ type challenge struct {
 	ranked   bool
 }
 
-// One player's half of a duel
-type duelSide struct {
-	p       *player
-	guesses int
-	solved  bool
-	// Used every guess without solving. They wait for the other side to finish.
-	out bool
-	// How close their best guess was, 0 to 1, for ranked margins
-	best float64
+// A guess that was scored, upper case
+type guessRow struct {
+	word   string
+	colors []protocol.WordleColor
 }
 
-func (s *duelSide) done() bool { return s.solved || s.out }
+// One player's half of a duel
+type duelSide struct {
+	p *player
+	// The word they're after. Both sides start on the same one, Reshape
+	// Reality changes one.
+	word    string
+	guesses []guessRow
+	// Guess rows they have. Starts at MaxGuesses, abilities add and take rows.
+	rows   int
+	solved bool
+	// How close their best guess was, 0 to 1, for ranked margins
+	best float64
+	// Energy and what abilities have done to them
+	sideEffects
+}
 
-// Two players racing on the same word. Both players point at it.
+// Used every row without solving. They wait for the other side to finish,
+// unless Determination gives them another row.
+func (s *duelSide) out() bool { return !s.solved && len(s.guesses) >= s.rows }
+
+func (s *duelSide) done() bool { return s.solved || s.out() }
+
+// Rows they haven't guessed in yet
+func (s *duelSide) unusedRows() int { return s.rows - len(s.guesses) }
+
+// Two players racing to solve their word. Both players point at it.
 type duel struct {
-	word  string
 	start time.Time
 	sides [2]*duelSide
 	// Changes both players' elo when it ends
 	ranked bool
+	// When both sides get their next energy
+	nextEnergy time.Time
 }
 
 // The player's side and their opponent's
@@ -163,25 +185,30 @@ func (w *World) startDuel(a, b *player, isRanked bool) {
 	w.cancelChallenges(a)
 	w.cancelChallenges(b)
 
+	word := w.Duels.NewWord(w.rng)
+	now := w.now()
 	d := &duel{
-		word:   w.Duels.NewWord(w.rng),
-		start:  w.now(),
-		sides:  [2]*duelSide{{p: a}, {p: b}},
-		ranked: isRanked,
+		start:      now,
+		ranked:     isRanked,
+		nextEnergy: now.Add(EnergyInterval),
 	}
-	a.duel = d
-	b.duel = d
+	for i, p := range []*player{a, b} {
+		d.sides[i] = &duelSide{p: p, word: word, rows: w.Duels.MaxGuesses(), sideEffects: newSideEffects(len(word))}
+		p.duel = d
+	}
+	w.duels[d] = struct{}{}
 	for _, s := range d.sides {
 		_, them := d.sidesOf(s.p)
 		w.send(s.p.client, protocol.ServerDuelStart, protocol.DuelStart{
 			Name:       them.p.ent.Name,
 			Char:       them.p.ent.Char,
 			Class:      them.p.ent.Class,
-			WordLength: len(d.word),
-			MaxGuesses: w.Duels.MaxGuesses(),
+			WordLength: len(word),
+			MaxGuesses: s.rows,
 			Ranked:     isRanked,
 		})
 	}
+	w.syncDuel(d)
 }
 
 // Drops every challenge to or from p, telling the other player
@@ -226,12 +253,18 @@ func (w *World) DuelGuess(c Client, guess string) {
 			return
 		}
 		res := protocol.WordleRes{Status: protocol.WordleInGame}
-		valid, colors := w.Duels.Score(guess, d.word)
+		if me.blocked(w.now()) {
+			res.Blocked = true
+			w.send(c, protocol.ServerDuelGuess, res)
+			return
+		}
+		valid, colors := w.Duels.Score(guess, me.word)
 		if !valid {
 			w.send(c, protocol.ServerDuelGuess, res)
 			return
 		}
-		me.guesses++
+		guess = strings.ToUpper(guess)
+		me.guesses = append(me.guesses, guessRow{word: guess, colors: colors})
 		me.best = max(me.best, ranked.Closeness(colors))
 		res.Valid = true
 		res.Colors = colors
@@ -239,8 +272,7 @@ func (w *World) DuelGuess(c Client, guess string) {
 		if solves(colors) {
 			me.solved = true
 			res.Status = protocol.WordleWin
-		} else if me.guesses >= w.Duels.MaxGuesses() {
-			me.out = true
+		} else if me.out() {
 			res.Status = protocol.WordleLose
 		}
 		w.send(c, protocol.ServerDuelGuess, res)
@@ -249,8 +281,10 @@ func (w *World) DuelGuess(c Client, guess string) {
 		switch {
 		case me.solved:
 			w.endDuel(d, me, protocol.DuelSolved)
-		case me.out && them.out:
+		case me.out() && them.out():
 			w.endDuel(d, nil, protocol.DuelOutOfGuesses)
+		default:
+			w.afterGuess(d, me, them)
 		}
 	})
 }
@@ -273,7 +307,7 @@ func (w *World) DuelTyping(c Client, count int) {
 			return
 		}
 		me, them := p.duel.sidesOf(p)
-		if me.done() || count < 0 || count > len(p.duel.word) {
+		if me.done() || me.blocked(w.now()) || count < 0 || count > len(me.word) {
 			return
 		}
 		w.send(them.p.client, protocol.ServerDuelTyping, protocol.DuelTyping{Count: count})
@@ -301,7 +335,7 @@ func (w *World) endDuel(d *duel, winner *duelSide, reason protocol.DuelEndReason
 		} else if winner == s {
 			outcome = protocol.DuelWin
 		}
-		ends[i] = protocol.DuelEnd{Outcome: outcome, Reason: reason, Solution: d.word, Seconds: secs}
+		ends[i] = protocol.DuelEnd{Outcome: outcome, Reason: reason, Solution: s.word, Seconds: secs}
 	}
 	if d.ranked {
 		w.settleRanked(d, winner, reason, secs, &ends)
@@ -310,6 +344,7 @@ func (w *World) endDuel(d *duel, winner *duelSide, reason protocol.DuelEndReason
 		w.send(s.p.client, protocol.ServerDuelEnd, ends[i])
 		s.p.duel = nil
 	}
+	delete(w.duels, d)
 }
 
 // Changes both players' elo for a finished ranked duel, fills in what each
@@ -326,10 +361,10 @@ func (w *World) settleRanked(d *duel, winner *duelSide, reason protocol.DuelEndR
 			outcome = ranked.AWins
 		}
 		margin = ranked.Margin{
-			WinnerGuesses: winner.guesses,
+			WinnerGuesses: len(winner.guesses),
 			WinnerSeconds: secs,
-			LoserGuesses:  loser.guesses,
-			LoserOut:      loser.out,
+			LoserGuesses:  len(loser.guesses),
+			LoserOut:      loser.out(),
 			LoserBest:     loser.best,
 			Forfeit:       reason == protocol.DuelForfeit || reason == protocol.DuelDisconnect,
 		}
@@ -358,8 +393,8 @@ func (w *World) settleRanked(d *duel, winner *duelSide, reason protocol.DuelEndR
 			Outcome:  outcome,
 			Reason:   int(reason),
 			Result:   res,
-			AGuesses: a.guesses,
-			BGuesses: b.guesses,
+			AGuesses: len(a.guesses),
+			BGuesses: len(b.guesses),
 			Seconds:  secs,
 		})
 	}
