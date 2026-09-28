@@ -402,6 +402,23 @@ test("HUD buttons stay put on screen while walking, and log out works", async ()
     await p.browserContext().close();
 });
 
+test("HUD Characters button goes back to the character screen, still logged in", async () => {
+    const p = await player();
+    await p.click("#hudCharacters");
+    await p.waitForSelector("#charactersPopup", { timeout: 5000 });
+    assert(await p.evaluate(() => !!localStorage.getItem("jwt")), "still logged in");
+    assert(!(await visible(p, "#hud")), "HUD hidden on the character screen");
+    assert(await p.$eval('.char-slot[data-slot="0"]', (e, n) => e.textContent.includes(n), p.name), "our character is still there");
+
+    // Play a different character
+    await createCharacter(p, 1, "Lancelot", "rogue");
+    await play(p, 1);
+    const welcome = await waitFor(() => received(p, 1).at(-1)?.d?.character.name === "Lancelot" && received(p, 1).at(-1).d, "welcome as Lancelot");
+    assert(welcome.character.class === "rogue", `welcome: ${JSON.stringify(welcome.character)}`);
+    assert(await visible(p, "#hud"), "HUD back in game");
+    await p.browserContext().close();
+});
+
 test("camera stops at the map edge instead of showing past it", async () => {
     const p = await player();
     // Near spawn the background covers the whole screen with us in the middle

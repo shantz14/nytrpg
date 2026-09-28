@@ -85,6 +85,11 @@ export class Game {
                 }
             },
             leaderboard: () => new Leaderboard(this.userData, this.character.id, this.state.classes, this.inputDriver).run(),
+            characters: () => {
+                // The saved login is kept, so the page starts again on the character screen
+                this.conn.close();
+                window.location.reload();
+            },
             logout: () => {
                 this.conn.close();
                 logout();
