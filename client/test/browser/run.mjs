@@ -382,6 +382,19 @@ test("HUD buttons stay put on screen while walking, and log out works", async ()
     // Top right corner
     assert(before[0] > VIEW.width / 2 && before[1] < 60, `HUD not in the top right: ${before}`);
 
+    // Your own profile, from the HUD
+    const prof = await p.$eval("#hudProfile", (e) => { const r = e.getBoundingClientRect(); return [r.x, r.y]; });
+    assert(prof[0] > VIEW.width / 2 && prof[1] < 60, `profile button not in the top right: ${prof}`);
+    await p.click("#hudProfile");
+    await p.waitForSelector("#profilePopup:not(.loading)", { timeout: 3000 });
+    const own = await p.$eval("#profilePopup", (e) => ({
+        char: e.querySelector("#pfChar").textContent,
+        empty: !e.querySelector("#pfNoGames").hidden,
+    }));
+    assert(own.char === p.name && own.empty, `own profile ${JSON.stringify(own)}`);
+    await p.keyboard.press("Escape");
+    await waitFor(async () => !(await p.$("#profilePopup")), "profile to close");
+
     await p.click("#hudLogout");
     await p.waitForSelector("#loginPopup", { timeout: 5000 });
     assert(!(await visible(p, "#hud")), "HUD hidden on the login screen");
@@ -715,6 +728,20 @@ test("ranked: ranks over names, explainer before challenging and accepting, elo 
     }));
     assert(prof.char === "Morgana" && prof.games === "1" && prof.record === "1–0–0" && prof.empty, `profile ${JSON.stringify(prof)}`);
     assert(prof.rows.length === 1 && prof.rows[0].includes("win") && prof.rows[0].includes("Gawain"), `recent ${JSON.stringify(prof.rows)}`);
+
+    // a's own profile from the HUD has the loss
+    await a.keyboard.press("Escape");
+    await waitFor(async () => !(await a.$("#profilePopup")), "b's profile to close");
+    await a.click("#hudProfile");
+    await a.waitForSelector("#profilePopup:not(.loading)", { timeout: 3000 });
+    const own = await a.$eval("#profilePopup", (e) => ({
+        char: e.querySelector("#pfChar").textContent,
+        games: e.querySelector("#pfGames").textContent,
+        record: e.querySelector("#pfRecord").textContent,
+        rows: [...e.querySelectorAll(".pf-match")].map((r) => r.className + " " + r.textContent),
+    }));
+    assert(own.char === "Gawain" && own.games === "1" && own.record === "0–1–0", `own profile ${JSON.stringify(own)}`);
+    assert(own.rows.length === 1 && own.rows[0].includes("loss") && own.rows[0].includes("Morgana"), `own recent ${JSON.stringify(own.rows)}`);
     await a.browserContext().close();
     await b.browserContext().close();
 });

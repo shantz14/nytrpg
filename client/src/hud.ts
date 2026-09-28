@@ -1,6 +1,7 @@
 import { InputDriver } from "./input-driver.js";
 
 export type HudActions = {
+    profile: () => void;
     leaderboard: () => void;
     logout: () => void;
 };
@@ -10,6 +11,7 @@ export type HudActions = {
 export function mountHud(actions: HudActions, input: InputDriver) {
     const hud = document.getElementById("hud")!;
     const buttons: [string, () => void][] = [
+        ["hudProfile", actions.profile],
         ["hudLeaderboard", actions.leaderboard],
         ["hudLogout", actions.logout],
     ];

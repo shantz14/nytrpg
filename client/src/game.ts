@@ -78,6 +78,12 @@ export class Game {
             info: (target) => this.openProfile(target),
         });
         mountHud({
+            profile: () => {
+                // selfId is 0 until the welcome arrives
+                if (this.state.selfId) {
+                    this.openProfile(this.state.selfId);
+                }
+            },
             leaderboard: () => new Leaderboard(this.userData, this.character.id, this.state.classes, this.inputDriver).run(),
             logout: () => {
                 this.conn.close();
