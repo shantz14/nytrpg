@@ -102,12 +102,33 @@ export function pickEntity(entities: Iterable<RemoteEntity>, x: number, y: numbe
     return hit;
 }
 
+// Top left of the view (world point) for a player at pos: centered on them,
+// but never past the map edge, so nobody sees off the map. A screen bigger
+// than the map shows the whole map centered. Map size 0 (no welcome yet)
+// just centers on pos.
+export function cameraFor(pos: Vec, viewW: number, viewH: number, mapW: number, mapH: number): Vec {
+    return { x: cameraAxis(pos.x, viewW, mapW), y: cameraAxis(pos.y, viewH, mapH) };
+}
+
+function cameraAxis(pos: number, view: number, map: number): number {
+    if (map <= 0) {
+        return pos - view / 2;
+    }
+    if (view >= map) {
+        return (map - view) / 2;
+    }
+    return Math.min(Math.max(pos - view / 2, 0), map - view);
+}
+
 export class GameState {
     // Our position in the world
     selfPos: Vector2D;
-    // Camera: the world point at the top left of the screen. Set each frame so
-    // selfPos is in the middle.
+    // Camera: the world point at the top left of the screen. Set each frame by
+    // cameraFor: selfPos is in the middle except near the map's edges.
     charVec: Vector2D;
+    // Map size in world px, from the welcome
+    mapW: number;
+    mapH: number;
     // Our own entity and name, set by the welcome message
     selfId: EntityID;
     selfName: string;
@@ -128,6 +149,8 @@ export class GameState {
     constructor() {
         this.selfPos = new Vector2D(0, 0);
         this.charVec = new Vector2D(0, 0);
+        this.mapW = 0;
+        this.mapH = 0;
         this.selfId = 0;
         this.selfName = "";
         this.selfChar = "";

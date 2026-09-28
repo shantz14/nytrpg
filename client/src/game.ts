@@ -337,6 +337,8 @@ export class Game {
     };
 
     private createMap(map: WorldMap) {
+        this.state.mapW = map.width;
+        this.state.mapH = map.height;
         this.displayDriver.loadImage("bg", map.background);
         this.state.clickables = {};
         for (const it of map.interactables) {

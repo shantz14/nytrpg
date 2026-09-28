@@ -1,7 +1,6 @@
-import { GameState } from "./game-objects.js";
+import { GameState, cameraFor } from "./game-objects.js";
 import { ANIMATIONS, Animator, pose } from "./animation.js";
 import { ChatMsg } from "./protocol.gen.js";
-import { Vector2D } from "./vector2D.js";
 import { classFont, classStyle, loadClassFonts } from "./class-style.js";
 import { className } from "./classes.js";
 import { wrapText } from "./chat-log.js";
@@ -60,15 +59,13 @@ export class DisplayDriver {
         loadClassFonts();
     }
 
-    // Screen point our own player is drawn at
-    get middle(): Vector2D {
-        return new Vector2D(this.width / 2, this.height / 2);
-    }
-
-    // Points the camera at us and moves click areas to match. Call before draw.
+    // Points the camera at us, stopping at the map's edges, and moves click
+    // areas to match. Call before draw.
     public updateCamera() {
-        const cam = this.state.charVec;
-        cam.set(this.state.selfPos.x - this.width / 2, this.state.selfPos.y - this.height / 2);
+        const s = this.state;
+        const c = cameraFor(s.selfPos, this.width, this.height, s.mapW, s.mapH);
+        const cam = s.charVec;
+        cam.set(c.x, c.y);
         for (const name in this.state.clickables) {
             this.state.clickables[name].rect.adjust(cam);
         }
@@ -155,11 +152,13 @@ export class DisplayDriver {
     }
 
     private drawCharacter(labels: Label[]) {
-        const m = this.middle;
+        // Mid-screen, except near the map's edges where the camera stops
         const s = this.state;
-        const [w] = this.drawEntity(s.selfSprite, m.x, m.y, s.selfAnim);
+        const x = s.selfPos.x - s.charVec.x;
+        const y = s.selfPos.y - s.charVec.y;
+        const [w] = this.drawEntity(s.selfSprite, x, y, s.selfAnim);
         if (w) {
-            labels.push({ id: s.selfId, name: s.selfName, char: s.selfChar, cls: s.selfClass?.id ?? "", elo: s.selfElo, cx: m.x + w / 2, top: m.y });
+            labels.push({ id: s.selfId, name: s.selfName, char: s.selfChar, cls: s.selfClass?.id ?? "", elo: s.selfElo, cx: x + w / 2, top: y });
         }
     }
 

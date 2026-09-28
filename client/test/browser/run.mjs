@@ -168,8 +168,13 @@ async function waitFor(fn, what, timeout = 5000) {
     throw new Error(`timed out waiting for ${what}`);
 }
 
-// Screen point of a world point: the camera keeps the player in the middle
-const toScreen = (page, x, y) => [x - page.pos.x + VIEW.width / 2, y - page.pos.y + VIEW.height / 2];
+// Screen point of a world point: the camera keeps the player in the middle,
+// but stops at the map's edges (cameraFor in game-objects.ts)
+const camAxis = (pos, view, map) => Math.min(Math.max(pos - view / 2, 0), map - view);
+const toScreen = (page, x, y) => [
+    x - camAxis(page.pos.x, VIEW.width, MAP.width),
+    y - camAxis(page.pos.y, VIEW.height, MAP.height),
+];
 
 async function hold(page, key, ms) {
     await page.keyboard.down(key);
@@ -200,6 +205,8 @@ function recordCharacterDraws() {
     const drawImage = CanvasRenderingContext2D.prototype.drawImage;
     CanvasRenderingContext2D.prototype.drawImage = function (img, ...args) {
         const file = (img.src || "").split("/").pop();
+        // Where the map's background went, to check nothing past its edge shows
+        if (file === "background.jpg") window.__bg = { x: args[0], y: args[1] };
         if (file === "Skoobyuboo.png" || file === "player-walk.png") {
             const m = this.getTransform();
             const dpr = window.devicePixelRatio || 1;
@@ -229,14 +236,17 @@ function recordCharacterDraws() {
 // Text drawn on the canvas since page time t
 const texts = (page, t) => page.evaluate((t) => window.__texts.filter((d) => d.t >= t), t);
 
-// Character draws since page time t. self: our own player (drawn mid-screen) or everyone else.
+// Character draws since page time t. self: our own player (drawn mid-screen,
+// or off-center near the map's edges) or everyone else.
 async function draws(page, t, self) {
     const all = await page.evaluate((t) => window.__draws.filter((d) => d.t >= t), t);
-    return all.filter((d) => (d.x === VIEW.width / 2) === self);
+    const ownX = toScreen(page, page.pos.x, page.pos.y)[0];
+    return all.filter((d) => (Math.abs(d.x - ownX) < 0.5) === self);
 }
 const pageNow = (page) => page.evaluate(() => performance.now());
 
 // World positions from internal/game/maps/town.json
+const MAP = { width: 4690, height: 4690 };
 const BOARD = { x: 750 + 64, y: 500 + 64 };
 // Out of the board's range, where the leaderboard used to stand
 const FAR = { x: 200 + 64, y: 200 + 64 };
@@ -376,6 +386,30 @@ test("HUD buttons stay put on screen while walking, and log out works", async ()
     await p.waitForSelector("#loginPopup", { timeout: 5000 });
     assert(!(await visible(p, "#hud")), "HUD hidden on the login screen");
     assert(await p.evaluate(() => !localStorage.getItem("jwt")), "token cleared");
+    await p.browserContext().close();
+});
+
+test("camera stops at the map edge instead of showing past it", async () => {
+    const p = await player();
+    // Near spawn the background covers the whole screen with us in the middle
+    let bg = await waitFor(() => p.evaluate(() => window.__bg), "background drawn");
+    assert(bg.x <= 0 && bg.y <= 0 && bg.x + MAP.width >= VIEW.width && bg.y + MAP.height >= VIEW.height, `background should cover the screen: ${JSON.stringify(bg)}`);
+
+    // Into the top left corner, closer to the edges than half a screen
+    await walkUntil(p, "a", () => p.pos.x <= FAR.x);
+    await walkUntil(p, "w", () => p.pos.y <= FAR.y);
+    await sleep(300);
+
+    // The map's corner is pinned to the screen's corner (it used to keep
+    // following us and show black past the edge)
+    bg = await p.evaluate(() => window.__bg);
+    assert(bg.x === 0 && bg.y === 0, `background should stop at the top left corner: ${JSON.stringify(bg)}`);
+
+    // So we walked off-center, and are drawn where we are on the map
+    const t = await pageNow(p);
+    await sleep(200);
+    const own = await draws(p, t, true);
+    assert(own.length && own.every((d) => d.x < VIEW.width / 2 && Math.abs(d.x - p.pos.x) < 1), `we should be drawn at our map x ${p.pos.x}: ${JSON.stringify(own.slice(-3))}`);
     await p.browserContext().close();
 });
 
