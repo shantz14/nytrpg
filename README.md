@@ -71,7 +71,7 @@ npx tsc && JWT_SECRET=devsecret go run ./cmd/server
 go run ./cmd/bots --n 10   # optional, in another terminal
 ```
 
-Settings come from the environment: `JWT_SECRET` (required), `PORT` (8080), `DB_PATH` (`db/nytrpg.db`), `STATIC_DIR` (`client/static`), `DEBUG=1` (debug logs and `/debug/pprof`), `DUEL_WORD` (every duel uses this word, for end-to-end tests).
+Settings come from the environment: `JWT_SECRET` (required), `PORT` (8080), `DB_PATH` (`db/nytrpg.db`), `STATIC_DIR` (`client/static`), `DEBUG=1` (debug logs and `/debug/pprof`), `DUEL_WORD` (every duel uses this word, for end-to-end tests), `ANTHROPIC_API_KEY` (lets the gods answer Clerics' prayers through the Claude API; without it prayers are refunded), `PRAYER_FAKE=1` (canned prayer answers, no network, for end-to-end tests).
 
 Metrics are at `/debug/vars`. To load test: `go run ./cmd/bots --n 200 --stagger 20ms --duration 30s --quiet`
 prints throughput, bandwidth per bot, the largest gap between updates, and disconnects.

@@ -65,7 +65,7 @@ func TestEveryClassHasItsOwnSprite(t *testing.T) {
 	}
 }
 
-func TestKnightAndWizardAbilities(t *testing.T) {
+func TestEveryClassHasItsAbilities(t *testing.T) {
 	want := map[ID]struct {
 		abilities []string
 		costs     []int
@@ -73,6 +73,11 @@ func TestKnightAndWizardAbilities(t *testing.T) {
 	}{
 		Knight: {[]string{Slash, ShieldsUp, Determination, PommelStrike, Cripple}, []int{2, 2, 3, 3, 8}, Aggressive},
 		Wizard: {[]string{Scry, SeeingEye, MagicMissile, Illusion, ReshapeReality}, []int{2, 5, 6, 8, 12}, Wise},
+		Rogue:  {[]string{Pickpocket, Cheat, Feint, UnderTheirNose, Confuse}, []int{2, 5, 6, 7, 10}, Sneaky},
+		Cleric: {[]string{MinorPrayer, Mend, Purify, MajorPrayer, DivineIntervention}, []int{2, 3, 4, 6, 10}, DivineWill},
+	}
+	if len(want) != len(All()) {
+		t.Fatal("a class is missing from the test")
 	}
 	for id, w := range want {
 		info := byID[id].Info()
@@ -88,11 +93,11 @@ func TestKnightAndWizardAbilities(t *testing.T) {
 			t.Fatalf("%s passive %+v", id, info.Passive)
 		}
 	}
-	if AbilityAt(Knight, 5) != nil || AbilityAt(Knight, -1) != nil || AbilityAt("bard", 0) != nil || AbilityAt(Rogue, 0) != nil {
-		t.Fatal("AbilityAt outside the filled slots")
+	if AbilityAt(Knight, 5) != nil || AbilityAt(Knight, -1) != nil || AbilityAt("bard", 0) != nil {
+		t.Fatal("AbilityAt outside the slots")
 	}
-	if PassiveOf(Rogue) != "" {
-		t.Fatal("rogues have no passive yet")
+	if PassiveOf("bard") != "" {
+		t.Fatal("unknown classes have no passive")
 	}
 }
 

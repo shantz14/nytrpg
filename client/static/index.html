@@ -41,6 +41,14 @@
                     <span class="hud-label">Log out</span>
                 </button>
             </div>
+            <aside id="prayer-window" class="prayer-window" hidden aria-labelledby="prayerTitle">
+                <header class="ability-panel-head">
+                    <h2 id="prayerTitle" class="ability-panel-title prayer-title">Prayers</h2>
+                    <button type="button" id="prayerClose" class="icon-btn" aria-label="Close prayers">&times;</button>
+                </header>
+                <div id="prayerList" class="prayer-list" aria-live="polite"></div>
+            </aside>
+            <div id="divine-banner" class="divine-banner" hidden role="alert"><p id="divineText"></p></div>
             <aside id="ability-panel" class="ability-panel" hidden aria-labelledby="abilityPanelTitle">
                 <header class="ability-panel-head">
                     <h2 id="abilityPanelTitle" class="ability-panel-title">Abilities</h2>
@@ -216,6 +224,7 @@
                     <header class="panel-head">
                         <h1 class="panel-title">Duel <span class="duel-vs">vs</span> <span id="duelVsName" class="duel-vs-name"></span> <span id="duelVsClass" class="duel-vs-class"></span></h1>
                         <span id="duelRankedTag" class="ranked-tag" hidden>Ranked</span>
+                        <div id="duelDeadline" class="timer deadline" title="The gods end the duel in a draw when this runs out" hidden></div>
                         <div id="duelTimer" class="timer">0:00</div>
                         <button id="duelForfeit" class="icon-btn" aria-label="Forfeit" title="Forfeit">&times;</button>
                     </header>
@@ -284,6 +293,23 @@
                     <p class="result-text">Pick a letter to learn whether it's in your word.</p>
                     <div id="scryLetters" class="scry-letters"></div>
                     <button type="button" class="btn btn-ghost btn-wide layer-cancel">Cancel</button>
+                </div>
+            </div>
+        </template>
+
+        <template id="tpl-duel-colors">
+            <div id="duelColorsPopup" class="overlay overlay-top">
+                <div class="panel result-panel">
+                    <header class="panel-head">
+                        <h1 class="panel-title" id="colorsTitle"></h1>
+                    </header>
+                    <p class="result-text" id="colorsText"></p>
+                    <div id="colorTiles" class="color-tiles"></div>
+                    <p class="hint">Click a tile to change its color. Not all green.</p>
+                    <div class="btn-row">
+                        <button type="button" class="btn btn-ghost layer-cancel">Cancel</button>
+                        <button type="button" id="colorsCast" class="btn btn-primary">Cast</button>
+                    </div>
                 </div>
             </div>
         </template>

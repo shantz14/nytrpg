@@ -10,7 +10,8 @@ import (
 )
 
 // Connects players who can all see each other, on a server whose duels use
-// CRANE. They play rogues, who have no abilities or passives to get in the way.
+// CRANE. They play rogues: their passive only scrambles the other's keyboard,
+// which the client applies, so it can't get in the way here.
 func duelists(t *testing.T, names ...string) (*testkit.Server, []*testkit.Client) {
 	t.Helper()
 	classes := make([]string, len(names))

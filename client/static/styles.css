@@ -2560,3 +2560,264 @@ canvas {
 @keyframes reshaped {
     30% { filter: hue-rotate(90deg) brightness(1.4); }
 }
+
+/* ---- rogue and cleric ---- */
+
+.effect-silenced, .effect-scrambled {
+    border-color: rgba(204, 108, 98, 0.6);
+}
+
+.effect-ready {
+    border-color: rgba(111, 207, 142, 0.6);
+}
+
+/* Silence: the whole bar goes dark */
+.ability-bar.silenced {
+    position: relative;
+    filter: grayscale(1) brightness(0.6);
+}
+
+/* Confuse: the letters you type aren't the ones you pressed */
+.board.scrambled .wordContainer.active .letter {
+    border-color: rgba(240, 138, 60, 0.7);
+    animation: jitter 1.2s ease-in-out infinite;
+}
+
+@keyframes jitter {
+    25% { transform: rotate(-3deg); }
+    75% { transform: rotate(3deg); }
+}
+
+/* Mend: pick one of your guesses */
+.board.targeting .wordContainer.pickable {
+    cursor: pointer;
+    outline: 2px dashed rgba(111, 207, 142, 0.5);
+    outline-offset: 2px;
+}
+
+.board.targeting .wordContainer.pickable:hover {
+    outline-color: #6fcf8e;
+}
+
+/* A letter Pickpocket revealed stays, in gold */
+.opp-tile.picked {
+    color: #fff3c4;
+    box-shadow: inset 0 0 0 2px var(--gold);
+}
+
+.reveal-chip {
+    width: auto;
+    padding: 0 6px;
+}
+
+.deadline {
+    color: #ffd0c9;
+    border-color: rgba(204, 108, 98, 0.6);
+    animation: missile-warn 1s ease-in-out infinite;
+}
+
+.deadline[hidden] {
+    display: none;
+}
+
+.color-tiles {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin: 4px 0 8px;
+}
+
+.color-tile {
+    width: 48px;
+    height: 48px;
+    border: 2px solid var(--line-strong);
+    border-radius: 2px;
+    cursor: pointer;
+}
+
+.color-tile:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+#colorsCast:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* The prayer window, docked left and above the duel, where the gods answer */
+.prayer-window {
+    position: absolute;
+    top: 60px;
+    left: 12px;
+    bottom: 12px;
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    width: min(320px, calc(100% - 24px));
+    font-family: var(--font);
+    color: var(--text);
+    background:
+        radial-gradient(ellipse at 50% 0%, rgba(232, 200, 114, 0.12), transparent 60%),
+        rgba(28, 27, 26, 0.96);
+    border: 1px solid rgba(232, 200, 114, 0.4);
+    border-radius: 3px;
+    box-shadow:
+        inset 0 0 0 3px rgba(28, 27, 26, 0.96),
+        inset 0 0 0 4px rgba(232, 200, 114, 0.2),
+        0 12px 40px rgba(0, 0, 0, 0.55);
+    animation: slide-in 180ms ease-out;
+}
+
+.prayer-window[hidden] {
+    display: none;
+}
+
+/* With room to spare, the duel moves over so the window doesn't cover it */
+@media (min-width: 1100px) {
+    #container:has(#prayer-window:not([hidden])) #duelPopup {
+        padding-left: 330px;
+    }
+}
+
+.prayer-title {
+    font-family: 'Cormorant Garamond', serif;
+    color: var(--gold);
+}
+
+.prayer-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 16px 16px;
+    overflow-y: auto;
+}
+
+.prayer-empty {
+    margin: 0;
+    font-style: italic;
+    color: var(--muted);
+}
+
+.prayer {
+    padding: 10px 12px;
+    background-color: var(--panel-sunk);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    animation: rise 220ms ease-out;
+}
+
+.prayer-kind {
+    margin: 0 0 4px;
+    font-size: 0.7rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.prayer-god {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 6px;
+}
+
+.prayer-god-name {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--god-color, var(--gold));
+    text-shadow: 0 0 12px color-mix(in srgb, var(--god-color, #e8c872) 50%, transparent);
+}
+
+.prayer-god-title {
+    font-size: 0.75rem;
+    font-style: italic;
+    color: var(--muted);
+}
+
+.prayer-text {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.45;
+}
+
+.prayer.answered .prayer-text {
+    font-style: italic;
+    color: var(--text-strong);
+}
+
+.prayer.pending .prayer-text {
+    background: linear-gradient(90deg, var(--muted), var(--gold), var(--muted));
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer 1.6s linear infinite;
+}
+
+.prayer.failed .prayer-text {
+    color: var(--muted);
+}
+
+/* Divine Intervention: the gods' words across the screen, over everything */
+.divine-banner {
+    position: absolute;
+    inset: 0;
+    z-index: 8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    pointer-events: none;
+    background: radial-gradient(ellipse at center, rgba(232, 200, 114, 0.25), rgba(8, 8, 8, 0.55) 70%);
+}
+
+.divine-banner[hidden] {
+    display: none;
+}
+
+.divine-banner p {
+    margin: 0;
+    max-width: 1100px;
+    font-family: var(--font-display);
+    font-size: clamp(2rem, 6vw, 4.5rem);
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: 3px;
+    text-align: center;
+    text-transform: uppercase;
+    color: #fff3c4;
+    text-shadow:
+        0 0 18px rgba(232, 200, 114, 0.9),
+        0 0 48px rgba(232, 200, 114, 0.6),
+        0 4px 0 #6b4f12;
+}
+
+.divine-banner.show {
+    animation: divine 3400ms ease-in-out forwards;
+}
+
+.divine-banner.show p {
+    animation: divine-words 3400ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.duel-feed li.divine:first-child {
+    color: var(--gold);
+}
+
+@keyframes shimmer {
+    to { background-position: -200% 0; }
+}
+
+@keyframes divine {
+    0% { opacity: 0; }
+    10%, 80% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+@keyframes divine-words {
+    0% { transform: scale(1.8); filter: blur(8px); letter-spacing: 20px; }
+    18% { transform: scale(1); filter: none; letter-spacing: 3px; }
+    80% { transform: scale(1.04); }
+    100% { transform: scale(1.1); filter: blur(4px); }
+}

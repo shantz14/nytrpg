@@ -34,6 +34,12 @@ const (
 	IllusionEnergy  = 5
 	// Words offered by Reshape Reality
 	ReshapeOptions = 5
+	// Guesses a Confuse or Sneaky scramble lasts
+	ScrambleGuesses = 2
+	// How long Divine Will silences
+	DivineWillSilence = 10 * time.Second
+	// Divine Intervention's Sudden Death
+	SuddenDeath = 2 * time.Minute
 )
 
 // A letter in a board, by guess and position
@@ -75,6 +81,21 @@ type sideEffects struct {
 	reshape []string
 	// Once-only abilities they used
 	used map[string]bool
+
+	// Their next guess needn't be a word (Cheat)
+	cheat bool
+	// Colors their next guess shows the opponent (Feint)
+	feint []protocol.WordleColor
+	// Colors their next guess shows them, and they don't know (Under Their
+	// Nose)
+	falseNext []protocol.WordleColor
+	// What each key A-Z types, nil when their keyboard isn't scrambled, and
+	// for how many more guesses. The client applies it: it has to show the
+	// scrambled letters anyway, so a modified client could ignore it.
+	keymap           []byte
+	scrambledGuesses int
+	// They can't cast abilities until then (Divine Will)
+	silencedUntil time.Time
 }
 
 func newSideEffects(wordLength int) sideEffects {
@@ -157,7 +178,9 @@ func (s *duelSide) visibleColors() [][]protocol.WordleColor {
 	return out
 }
 
-func (s *duelSide) state(now time.Time) protocol.DuelSideState {
+// What a duelist is told about a side. own: their own side, with what only
+// they may know.
+func (s *duelSide) state(now time.Time, own bool) protocol.DuelSideState {
 	st := protocol.DuelSideState{
 		Energy:     s.energy,
 		Rows:       s.rows,
@@ -179,6 +202,15 @@ func (s *duelSide) state(now time.Time) protocol.DuelSideState {
 		st.Used = append(st.Used, id)
 	}
 	slices.Sort(st.Used)
+	if now.Before(s.silencedUntil) {
+		st.SilencedMs = int(s.silencedUntil.Sub(now) / time.Millisecond)
+	}
+	st.ScrambledGuesses = s.scrambledGuesses
+	if own {
+		st.Keymap = string(s.keymap)
+		st.CheatReady = s.cheat
+		st.FeintReady = s.feint != nil
+	}
 	return st
 }
 
@@ -192,7 +224,11 @@ func (w *World) syncDuel(d *duel) {
 func (w *World) sendDuelState(d *duel, s *duelSide) {
 	_, other := d.sidesOf(s.p)
 	now := w.now()
-	w.send(s.p.client, protocol.ServerDuelState, protocol.DuelState{You: s.state(now), Them: other.state(now)})
+	st := protocol.DuelState{You: s.state(now, true), Them: other.state(now, false)}
+	if !d.deadline.IsZero() {
+		st.DeadlineMs = int(max(0, d.deadline.Sub(now)) / time.Millisecond)
+	}
+	w.send(s.p.client, protocol.ServerDuelState, st)
 }
 
 // Tells both duelists something happened with an ability by
@@ -240,6 +276,16 @@ func (w *World) afterGuess(d *duel, me, them *duelSide) {
 				// Only the wizard needs to know their eyes moved
 				w.send(me.p.client, protocol.ServerDuelCast, protocol.DuelCast{ByYou: true, Ability: classes.Wise, Kind: protocol.CastTriggered})
 			}
+		case classes.Sneaky:
+			if w.hostile(d, me, them, classes.Sneaky, protocol.CastTriggered, tile{}) {
+				w.swapKeys(them)
+			}
+		case classes.DivineWill:
+			if w.hostile(d, me, them, classes.DivineWill, protocol.CastTriggered, tile{}) {
+				if until := now.Add(DivineWillSilence); until.After(them.silencedUntil) {
+					them.silencedUntil = until
+				}
+			}
 		}
 	}
 
@@ -266,7 +312,8 @@ func (w *World) CastAbility(c Client, req protocol.DuelCastReq) {
 		d := p.duel
 		me, them := d.sidesOf(p)
 		a := classes.AbilityAt(classes.ID(p.ent.Class), req.Slot)
-		if a == nil || me.energy < a.Cost || (a.Once && me.used[a.ID]) || !canCast(a.ID, me, them, req) {
+		silenced := w.now().Before(me.silencedUntil)
+		if a == nil || silenced || me.energy < a.Cost || (a.Once && me.used[a.ID]) || !canCast(a.ID, me, them, req) {
 			// The client thought it could, set it straight
 			w.sendDuelState(d, me)
 			return
@@ -301,8 +348,33 @@ func canCast(id string, me, them *duelSide, req protocol.DuelCastReq) bool {
 	case classes.Scry:
 		l := strings.ToUpper(req.Letter)
 		return len(l) == 1 && l[0] >= 'A' && l[0] <= 'Z'
+	case classes.Pickpocket:
+		// A letter that looks yellow to the caster
+		t := tile{req.Row, req.Col}
+		return t.row >= 0 && t.row < len(them.guesses) && t.col >= 0 && t.col < len(them.guesses[t.row].shown) &&
+			them.guesses[t.row].shown[t.col] == protocol.Yellow && !them.destroyed[t]
+	case classes.Cheat:
+		return !me.cheat
+	case classes.Feint, classes.UnderTheirNose:
+		return validPattern(req.Colors, len(me.word))
+	case classes.Mend:
+		return req.Row >= 0 && req.Row < len(me.guesses)
 	}
 	return true
+}
+
+// Colors picked for Feint or Under Their Nose: one per letter, each grey,
+// yellow or green, and not all green (that would be a solve that isn't)
+func validPattern(colors []protocol.WordleColor, n int) bool {
+	if len(colors) != n {
+		return false
+	}
+	for _, c := range colors {
+		if c != protocol.Grey && c != protocol.Yellow && c != protocol.Green {
+			return false
+		}
+	}
+	return !solves(colors)
 }
 
 // What each ability does, once it's paid for
@@ -349,6 +421,10 @@ func (w *World) cast(d *duel, me, them *duelSide, id string, req protocol.DuelCa
 			word := w.Duels.IllusionWord(w.rng)
 			them.illusion = &illusionGame{word: word}
 			w.send(them.p.client, protocol.ServerIllusionStart, protocol.IllusionStart{WordLength: len(word), MaxGuesses: IllusionGuesses})
+		}
+	default:
+		if !w.castRogue(d, me, them, id, req) {
+			w.castCleric(d, me, them, id, req)
 		}
 	}
 }
@@ -457,11 +533,7 @@ func (w *World) ReshapeReality(c Client, word string) {
 		me.reshape = nil
 		me.energy -= cost
 		if w.hostile(d, me, them, classes.ReshapeReality, protocol.CastUsed, tile{}) {
-			them.word = word
-			for i, g := range them.guesses {
-				_, them.guesses[i].colors = w.Duels.Score(g.word, word)
-			}
-			them.relearn()
+			w.rescore(them, word)
 			colors := them.visibleColors()
 			w.send(them.p.client, protocol.ServerDuelBoard, protocol.DuelBoard{Yours: true, Colors: colors})
 			w.send(me.p.client, protocol.ServerDuelBoard, protocol.DuelBoard{Colors: colors})
@@ -469,6 +541,17 @@ func (w *World) ReshapeReality(c Client, word string) {
 		}
 		w.syncDuel(d)
 	})
+}
+
+// s's word becomes word: every guess is scored again, and both players see
+// the real colors, fakes and all. ScoreAny, a Cheat guess needn't be a word.
+func (w *World) rescore(s *duelSide, word string) {
+	s.word = word
+	for i, g := range s.guesses {
+		_, colors := w.Duels.ScoreAny(g.word, word)
+		s.guesses[i] = newGuessRow(g.word, colors)
+	}
+	s.relearn()
 }
 
 // What an ability of the class costs, -1 if the class doesn't have it
@@ -538,6 +621,11 @@ func (w *World) IllusionGuess(c Client, guess string) {
 func (w *World) tickDuels() {
 	now := w.now()
 	for d := range w.duels {
+		if !d.deadline.IsZero() && !now.Before(d.deadline) {
+			// Deleting the current key while ranging is fine in Go
+			w.endDuel(d, nil, protocol.DuelTimeUp)
+			continue
+		}
 		changed := false
 		for !now.Before(d.nextEnergy) {
 			for _, s := range d.sides {
@@ -550,6 +638,10 @@ func (w *World) tickDuels() {
 			_, other := d.sidesOf(s.p)
 			if !s.stunnedUntil.IsZero() && !now.Before(s.stunnedUntil) {
 				s.stunnedUntil = time.Time{}
+				changed = true
+			}
+			if !s.silencedUntil.IsZero() && !now.Before(s.silencedUntil) {
+				s.silencedUntil = time.Time{}
 				changed = true
 			}
 			if len(s.missiles) > 0 {

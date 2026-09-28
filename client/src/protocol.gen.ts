@@ -43,6 +43,11 @@ export const ServerDuelReshapeOptions: ServerMsg = 20; // DuelReshapeOptions, wo
 export const ServerIllusionStart: ServerMsg = 21; // IllusionStart, you're trapped in an illusion
 export const ServerIllusionGuess: ServerMsg = 22; // WordleRes, the result of your illusion guess
 export const ServerIllusionEnd: ServerMsg = 23; // IllusionEnd, you escaped the illusion or failed it
+export const ServerDuelPickpocket: ServerMsg = 24; // DuelPickpocket, the letter your Pickpocket revealed
+export const ServerDuelPrayer: ServerMsg = 25; // DuelPrayer, your prayer was heard, answered or went unanswered
+export const ServerDuelDivine: ServerMsg = 26; // DuelDivine, Divine Intervention changed the duel
+export const ServerDuelGuessRemoved: ServerMsg = 27; // DuelGuessRemoved, a guess was mended away
+export const ServerDuelReveal: ServerMsg = 28; // DuelReveal, the gods revealed a letter of your word
 
 // A position in world pixels
 export interface Vec {
@@ -132,6 +137,10 @@ export const TargetOpponentTile: AbilityTarget = 1;
 export const TargetLetter: AbilityTarget = 2;
 // A word from options the server sends (DuelReshapeOptions)
 export const TargetWord: AbilityTarget = 3;
+// One of your own guesses, by row
+export const TargetOwnRow: AbilityTarget = 4;
+// A color for each letter, not all green
+export const TargetColors: AbilityTarget = 5;
 
 // Always on, set off by something in the duel. An empty ID means none.
 export interface PassiveInfo {
@@ -352,6 +361,8 @@ export const DuelOutOfGuesses: DuelEndReason = 1;
 export const DuelForfeit: DuelEndReason = 2;
 // Someone disconnected
 export const DuelDisconnect: DuelEndReason = 3;
+// Divine Intervention's time limit ran out, a draw
+export const DuelTimeUp: DuelEndReason = 4;
 
 export interface DuelEnd {
     outcome: DuelOutcome;
@@ -410,6 +421,9 @@ export interface DuelCastReq {
     col: number;
     // TargetLetter: the letter
     letter: string;
+    // TargetOwnRow: the row is Row
+    // TargetColors: one per letter
+    colors: Array<WordleColor>;
 }
 
 export interface DuelReshapeReq {
@@ -421,6 +435,9 @@ export interface DuelReshapeReq {
 export interface DuelState {
     you: DuelSideState;
     them: DuelSideState;
+    // Divine Intervention's time limit: the duel is a draw in this long. 0
+    // when there's none.
+    deadlineMs: number;
 }
 
 export interface DuelSideState {
@@ -439,6 +456,17 @@ export interface DuelSideState {
     illusion: boolean;
     // Once-only abilities they already used
     used: Array<string>;
+    // How much longer they can't cast abilities, 0 when they can
+    silencedMs: number;
+    // Guesses left on a scrambled keyboard, 0 when it isn't
+    scrambledGuesses: number;
+    // Your side only: what each key A-Z types while scrambled, "" when it
+    // isn't. Key i types Keymap[i].
+    keymap: string;
+    // Your side only: your next guess needn't be a word (Cheat), and shows
+    // your opponent colors you picked (Feint)
+    cheatReady: boolean;
+    feintReady: boolean;
 }
 
 export type DuelCastKind = number;
@@ -505,4 +533,67 @@ export interface IllusionEnd {
     solution: string;
     // Energy lost for failing it
     energyLost: number;
+    // Purify ended it, neither won nor lost
+    purified: boolean;
+}
+
+// A letter in the opponent's guesses your Pickpocket revealed
+export interface DuelPickpocket {
+    row: number;
+    col: number;
+    letter: string;
+}
+
+export type PrayerKind = number;
+
+// A riddle about one letter of your word and where it goes
+export const PrayerMinor: PrayerKind = 0;
+// A riddle about your whole word
+export const PrayerMajor: PrayerKind = 1;
+
+// A Cleric's prayer, sent when it's heard (Pending) and again when a god
+// answers or none does (Failed, the energy is given back)
+export interface DuelPrayer {
+    id: number;
+    kind: PrayerKind;
+    pending: boolean;
+    failed: boolean;
+    // The god who answered: name, title, and a CSS color for them
+    god: string;
+    godTitle: string;
+    godColor: string;
+    text: string;
+    // Energy given back when no god answered
+    refunded: number;
+}
+
+export type DivineFate = number;
+
+// Both sides' guesses, energy and effects are wiped, the word stays
+export const FateCleanSlate: DivineFate = 0;
+// Both sides get one new word, guesses are scored against it
+export const FateNewWord: DivineFate = 1;
+// The duel is a draw if nobody solves in 2 minutes
+export const FateSuddenDeath: DivineFate = 2;
+// Both are shown the same position of their word (DuelReveal)
+export const FateRevelation: DivineFate = 3;
+// The two sides swap energy
+export const FateFortune: DivineFate = 4;
+
+// Divine Intervention: what the gods did, and what to proclaim about it
+export interface DuelDivine {
+    fate: DivineFate;
+    banner: string;
+}
+
+// Mend took a guess back: later rows move up one
+export interface DuelGuessRemoved {
+    yours: boolean;
+    row: number;
+}
+
+// A letter of your word and where it goes, from the gods
+export interface DuelReveal {
+    col: number;
+    letter: string;
 }

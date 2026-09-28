@@ -13,8 +13,11 @@ import {
     ServerWordleResume, Vec, Welcome, WorldMap, WorldUpdate, WordleRes, WordleResume, ClientProfile, EntityID, Profile, ProfileReq, ServerProfile,
     DuelBoard, DuelCast, DuelEyes, DuelReshapeOptions, DuelScry, DuelState, IllusionEnd, IllusionStart, ServerDuelBoard, ServerDuelCast,
     ServerDuelEyes, ServerDuelReshapeOptions, ServerDuelScry, ServerDuelState, ServerIllusionEnd, ServerIllusionGuess, ServerIllusionStart,
+    DuelDivine, DuelGuessRemoved, DuelPickpocket, DuelPrayer, DuelReveal, ServerDuelDivine, ServerDuelGuessRemoved, ServerDuelPickpocket,
+    ServerDuelPrayer, ServerDuelReveal,
 } from "./protocol.gen.js";
 import { AbilityPanel } from "./ability-panel.js";
+import { PrayerWindow } from "./prayer-window.js";
 import { Popup } from "./popup.js";
 import { ProfileView } from "./profile.js";
 import { showRankedInfo } from "./ranked-info.js";
@@ -41,6 +44,8 @@ export class Game {
     duel: Duel | null;
     // Describes your class's abilities, made once the welcome says your class
     abilityPanel: AbilityPanel | null;
+    // Where the gods answer a Cleric's prayers
+    prayerWindow: PrayerWindow | null;
     notifications: Notifications;
     playerCard: PlayerCard;
     userData: UserData;
@@ -63,6 +68,7 @@ export class Game {
         this.wordle = null;
         this.duel = null;
         this.abilityPanel = null;
+        this.prayerWindow = null;
         this.notifications = new Notifications(document.getElementById("notifications")!);
         this.playerCard = new PlayerCard(document.getElementById("player-card")!);
         this.userData = userData;
@@ -164,6 +170,10 @@ export class Game {
             this.wordle = null;
             this.duel = new Duel(this, start);
             this.duel.open();
+            if (this.state.selfClass?.id === "cleric") {
+                this.prayerWindow ??= new PrayerWindow();
+                this.prayerWindow.open();
+            }
         });
         this.conn.on<WordleRes>(ServerDuelGuess, (res) => this.duel?.handleGuess(res));
         this.conn.on<DuelOpponentGuess>(ServerDuelOpponentGuess, (g) => this.duel?.handleOpponentGuess(g));
@@ -177,6 +187,11 @@ export class Game {
         this.conn.on<IllusionStart>(ServerIllusionStart, (s) => this.duel?.handleIllusionStart(s));
         this.conn.on<WordleRes>(ServerIllusionGuess, (res) => this.duel?.handleIllusionGuess(res));
         this.conn.on<IllusionEnd>(ServerIllusionEnd, (end) => this.duel?.handleIllusionEnd(end));
+        this.conn.on<DuelPickpocket>(ServerDuelPickpocket, (p) => this.duel?.handlePickpocket(p));
+        this.conn.on<DuelPrayer>(ServerDuelPrayer, (p) => this.prayerWindow?.handle(p));
+        this.conn.on<DuelDivine>(ServerDuelDivine, (d) => this.duel?.handleDivine(d));
+        this.conn.on<DuelGuessRemoved>(ServerDuelGuessRemoved, (r) => this.duel?.handleGuessRemoved(r));
+        this.conn.on<DuelReveal>(ServerDuelReveal, (r) => this.duel?.handleReveal(r));
         this.conn.on<DuelEnd>(ServerDuelEnd, (end) => {
             if (end.ranked) {
                 this.state.selfElo = end.eloAfter;

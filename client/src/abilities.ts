@@ -8,6 +8,11 @@ export const SLASH = "slash";
 export const SHIELDS_UP = "shields_up";
 export const CRIPPLE = "cripple";
 export const ILLUSION = "illusion";
+export const PICKPOCKET = "pickpocket";
+export const CHEAT = "cheat";
+export const MEND = "mend";
+// The one ability that works from inside an Illusion
+export const PURIFY = "purify";
 
 export function iconUrl(icon: string): string {
     return "./assets/" + icon;
@@ -16,7 +21,10 @@ export function iconUrl(icon: string): string {
 // Whether the ability can be cast now. The server has the final say, this
 // just greys out the ones that would be refused.
 export function castable(a: AbilityInfo, s: DuelState | null): boolean {
-    if (!a.id || !s || s.you.energy < a.cost) {
+    if (!a.id || !s || s.you.energy < a.cost || s.you.silencedMs > 0) {
+        return false;
+    }
+    if (s.you.illusion && a.id !== PURIFY) {
         return false;
     }
     if (a.once && s.you.used.includes(a.id)) {
@@ -30,9 +38,27 @@ export function castable(a: AbilityInfo, s: DuelState | null): boolean {
         case ILLUSION:
             return !s.them.illusion;
         case SLASH:
+        case PICKPOCKET:
             return s.them.guesses > 0;
+        case CHEAT:
+            return !s.you.cheatReady;
+        case MEND:
+            return s.you.guesses > 0;
     }
     return true;
+}
+
+// Colors picked for Feint or Under Their Nose, as the server wants them: one
+// per letter, and not all green
+export function validPattern(colors: number[], wordLength: number): boolean {
+    return colors.length === wordLength && colors.every((c) => c >= 0 && c <= 2) && !colors.every((c) => c === 2);
+}
+
+// The letter a key types on a keyboard scrambled by keymap ("" = not
+// scrambled). Anything but A-Z is left alone.
+export function remapKey(letter: string, keymap: string): string {
+    const i = letter.toUpperCase().charCodeAt(0) - 65;
+    return keymap && letter.length === 1 && i >= 0 && i < 26 ? keymap[i] : letter.toUpperCase();
 }
 
 // The ability buttons: icon, key and energy cost. Empty slots are disabled.

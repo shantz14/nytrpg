@@ -25,9 +25,15 @@ func (p scoringPuzzle) NewWord(*rand.Rand) string {
 }
 func (scoringPuzzle) MaxGuesses() int                { return 3 }
 func (scoringPuzzle) IllusionWord(*rand.Rand) string { return "CAT" }
-func (scoringPuzzle) Score(guess, word string) (bool, []protocol.WordleColor) {
+func (p scoringPuzzle) Score(guess, word string) (bool, []protocol.WordleColor) {
+	if strings.ToUpper(guess) == "XXXXX" {
+		return false, nil
+	}
+	return p.ScoreAny(guess, word)
+}
+func (scoringPuzzle) ScoreAny(guess, word string) (bool, []protocol.WordleColor) {
 	guess = strings.ToUpper(guess)
-	if len(guess) != len(word) || guess == "XXXXX" {
+	if len(guess) != len(word) {
 		return false, nil
 	}
 	colors := make([]protocol.WordleColor, len(word))
@@ -169,8 +175,14 @@ func TestCastingNeedsEnergyAFilledSlotAndADuel(t *testing.T) {
 	}
 
 	dt.side(dt.pb).energy = 50
-	for _, slot := range []int{0, 4, -1, 5, 99} {
-		// Rogues have no abilities, and nobody has slots outside 0-4
+	for _, slot := range []int{-1, 5, 99} {
+		// Nobody has slots outside 0-4
+		dt.cast(dt.b, slot, protocol.DuelCastReq{})
+		none(t, dt.b, protocol.ServerDuelCast)
+	}
+	dt.pb.ent.Class = "bard"
+	for _, slot := range []int{0, 4} {
+		// An unknown class has no abilities
 		dt.cast(dt.b, slot, protocol.DuelCastReq{})
 		none(t, dt.b, protocol.ServerDuelCast)
 	}

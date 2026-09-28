@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
@@ -61,6 +62,53 @@ func TestAbilitiesOverTheWire(t *testing.T) {
 		t.Fatalf("knight saw %+v", ev)
 	}
 	knight.ExpectNone(t, protocol.ServerDuelScry, 200*time.Millisecond)
+}
+
+func TestRogueAndClericOverTheWire(t *testing.T) {
+	t.Parallel()
+	_, cs := duelistsAs(t, []string{"rogue", "cleric"}, "rogue", "cleric")
+	rogue, cleric := cs[0], cs[1]
+	accept(t, rogue, cleric, challenge(t, rogue, cleric))
+
+	// TRACE: 7 energy, enough for Under Their Nose
+	rogue.Send(t, protocol.ClientDuelGuess, protocol.WordleReq{Guess: "trace"})
+	testkit.Expect[protocol.WordleRes](t, rogue, protocol.ServerDuelGuess)
+	expectState(t, rogue, func(s protocol.DuelState) bool { return s.You.Energy == 7 })
+	fake := []protocol.WordleColor{protocol.Green, protocol.Yellow, protocol.Grey, protocol.Grey, protocol.Green}
+	rogue.Send(t, protocol.ClientDuelCast, protocol.DuelCastReq{Slot: 3, Colors: fake})
+	if ev := testkit.Expect[protocol.DuelCast](t, rogue, protocol.ServerDuelCast); ev.Ability != classes.UnderTheirNose || !ev.ByYou {
+		t.Fatalf("rogue told %+v", ev)
+	}
+	// The cleric heard about TRACE's Sneaky, and nothing since
+	if ev := testkit.Expect[protocol.DuelCast](t, cleric, protocol.ServerDuelCast); ev.Ability != classes.Sneaky {
+		t.Fatalf("cleric told %+v", ev)
+	}
+	cleric.ExpectNone(t, protocol.ServerDuelCast, 200*time.Millisecond)
+
+	// The cleric's PILOT shows them the fake colors, the rogue sees the real
+	// ones, and the cleric is never told
+	cleric.Send(t, protocol.ClientDuelGuess, protocol.WordleReq{Guess: "pilot"})
+	if res := testkit.Expect[protocol.WordleRes](t, cleric, protocol.ServerDuelGuess); !reflect.DeepEqual(res.Colors, fake) {
+		t.Fatalf("cleric saw %v", res.Colors)
+	}
+	grey := make([]protocol.WordleColor, 5)
+	if og := testkit.Expect[protocol.DuelOpponentGuess](t, rogue, protocol.ServerDuelOpponentGuess); !reflect.DeepEqual(og.Colors, grey) {
+		t.Fatalf("rogue saw %v", og.Colors)
+	}
+
+	// SLATE: 4 energy, then a Minor Prayer, answered (by the test server's
+	// canned gods, never the network)
+	cleric.Send(t, protocol.ClientDuelGuess, protocol.WordleReq{Guess: "slate"})
+	testkit.Expect[protocol.WordleRes](t, cleric, protocol.ServerDuelGuess)
+	expectState(t, cleric, func(s protocol.DuelState) bool { return s.You.Energy == 4 })
+	cleric.Send(t, protocol.ClientDuelCast, protocol.DuelCastReq{Slot: 0})
+	if p := testkit.Expect[protocol.DuelPrayer](t, cleric, protocol.ServerDuelPrayer); !p.Pending {
+		t.Fatalf("pending %+v", p)
+	}
+	if p := testkit.Expect[protocol.DuelPrayer](t, cleric, protocol.ServerDuelPrayer); p.Failed || p.God == "" || p.Text == "" {
+		t.Fatalf("answer %+v", p)
+	}
+	rogue.ExpectNone(t, protocol.ServerDuelPrayer, 200*time.Millisecond)
 }
 
 func TestCastsAreRateLimited(t *testing.T) {

@@ -19,6 +19,9 @@ type fakePuzzle struct{}
 func (fakePuzzle) NewWord(*rand.Rand) string      { return "CRANE" }
 func (fakePuzzle) MaxGuesses() int                { return 3 }
 func (fakePuzzle) IllusionWord(*rand.Rand) string { return "CAT" }
+func (p fakePuzzle) ScoreAny(guess, word string) (bool, []protocol.WordleColor) {
+	return p.Score(guess, word)
+}
 func (fakePuzzle) Score(guess, word string) (bool, []protocol.WordleColor) {
 	guess = strings.ToUpper(guess)
 	if len(guess) != len(word) || guess == "XXXXX" {

@@ -17,7 +17,26 @@ func Score(guess string, word string, words *Words) (bool, []protocol.WordleColo
 	if len(guess) != len(word) || !words.Guessable(guess) {
 		return false, nil
 	}
+	return true, colorsFor(guess, word)
+}
 
+// Scores any letters against the word, word or not (a duel's Cheat). Returns
+// false if it isn't len(word) letters A-Z.
+func ScoreAny(guess string, word string) (bool, []protocol.WordleColor) {
+	guess = strings.ToUpper(guess)
+	if len(guess) != len(word) {
+		return false, nil
+	}
+	for i := range len(guess) {
+		if guess[i] < 'A' || guess[i] > 'Z' {
+			return false, nil
+		}
+	}
+	return true, colorsFor(guess, word)
+}
+
+// guess is upper case and as long as word
+func colorsFor(guess, word string) []protocol.WordleColor {
 	letterCounts := make(map[rune]int)
 	for _, letter := range word {
 		letterCounts[letter]++
@@ -39,8 +58,7 @@ func Score(guess string, word string, words *Words) (bool, []protocol.WordleColo
 			lettersCounted[letter]++
 		}
 	}
-
-	return true, colors
+	return colors
 }
 
 func allGreen(colors []protocol.WordleColor) bool {

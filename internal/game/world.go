@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"nytrpg/internal/classes"
+	"nytrpg/internal/oracle"
 	"nytrpg/internal/protocol"
 	"nytrpg/internal/ranked"
 )
@@ -83,6 +84,9 @@ type World struct {
 	OnRanked func(ranked.Match)
 	// Players' ranked history, for profiles. Called off the world goroutine.
 	History RankedHistory
+	// Answers Clerics' prayers, off the world goroutine. nil: nobody answers
+	// and the energy is given back. Set before Run.
+	Oracle oracle.Oracle
 
 	// Owned by the world goroutine
 	entities map[protocol.EntityID]*Entity
@@ -99,11 +103,16 @@ type World struct {
 	nextChallenge uint32
 	// Duels being played
 	duels map[*duel]struct{}
+	// A slot per prayer waiting on the Oracle, and the last prayer's id
+	prayerSlots chan struct{}
+	nextPrayer  int
 
 	cmds chan func()
 	// For tests
 	now func() time.Time
 	rng *rand.Rand
+	// Picks Divine Intervention's fate, nil = at random
+	fate func() protocol.DivineFate
 
 	Stats Stats
 }
@@ -116,12 +125,13 @@ func NewWorld(m *protocol.WorldMap) *World {
 		players:  make(map[Client]*player),
 		grid:     newGrid(),
 		// Built in systems run before any added ones
-		systems:    []System{(*World).expireChallenges, (*World).tickDuels},
-		challenges: make(map[uint32]*challenge),
-		duels:      make(map[*duel]struct{}),
-		cmds:       make(chan func(), 1024),
-		now:        time.Now,
-		rng:        rand.New(rand.NewSource(time.Now().UnixNano())),
+		systems:     []System{(*World).expireChallenges, (*World).tickDuels},
+		challenges:  make(map[uint32]*challenge),
+		duels:       make(map[*duel]struct{}),
+		prayerSlots: make(chan struct{}, MaxPrayers),
+		cmds:        make(chan func(), 1024),
+		now:         time.Now,
+		rng:         rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 

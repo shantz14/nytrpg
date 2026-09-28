@@ -21,6 +21,9 @@ type DuelPuzzle interface {
 	IllusionWord(rng *rand.Rand) string
 	// Scores a guess against the word, valid is false if it isn't a guessable word
 	Score(guess, word string) (valid bool, colors []protocol.WordleColor)
+	// Scores any letters, word or not (Cheat). valid is false if it isn't
+	// len(word) letters.
+	ScoreAny(guess, word string) (valid bool, colors []protocol.WordleColor)
 	MaxGuesses() int
 }
 
@@ -34,8 +37,16 @@ type challenge struct {
 
 // A guess that was scored, upper case
 type guessRow struct {
-	word   string
+	word string
+	// The real colors
 	colors []protocol.WordleColor
+	// What its guesser was shown (Under Their Nose fakes these), and what their
+	// opponent was shown (Feint fakes those)
+	seen, shown []protocol.WordleColor
+}
+
+func newGuessRow(word string, colors []protocol.WordleColor) guessRow {
+	return guessRow{word: word, colors: colors, seen: colors, shown: colors}
 }
 
 // One player's half of a duel
@@ -71,6 +82,9 @@ type duel struct {
 	ranked bool
 	// When both sides get their next energy
 	nextEnergy time.Time
+	// Divine Intervention's Sudden Death: a draw then, unless someone solves.
+	// Zero when there's none.
+	deadline time.Time
 }
 
 // The player's side and their opponent's
@@ -258,16 +272,37 @@ func (w *World) DuelGuess(c Client, guess string) {
 			w.send(c, protocol.ServerDuelGuess, res)
 			return
 		}
-		valid, colors := w.Duels.Score(guess, me.word)
+		score := w.Duels.Score
+		if me.cheat {
+			score = w.Duels.ScoreAny
+		}
+		valid, colors := score(guess, me.word)
 		if !valid {
 			w.send(c, protocol.ServerDuelGuess, res)
 			return
 		}
-		guess = strings.ToUpper(guess)
-		me.guesses = append(me.guesses, guessRow{word: guess, colors: colors})
+		me.cheat = false
+		row := newGuessRow(strings.ToUpper(guess), colors)
+		// Faked colors never hide a solve: the duel ends and everyone sees it
+		if !solves(colors) {
+			if me.feint != nil {
+				row.shown = me.feint
+			}
+			if me.falseNext != nil {
+				row.seen = me.falseNext
+			}
+		}
+		me.feint, me.falseNext = nil, nil
+		if me.scrambledGuesses > 0 {
+			me.scrambledGuesses--
+			if me.scrambledGuesses == 0 {
+				me.keymap = nil
+			}
+		}
+		me.guesses = append(me.guesses, row)
 		me.best = max(me.best, ranked.Closeness(colors))
 		res.Valid = true
-		res.Colors = colors
+		res.Colors = row.seen
 		res.Seconds = w.now().Sub(d.start).Seconds()
 		if solves(colors) {
 			me.solved = true
@@ -276,7 +311,7 @@ func (w *World) DuelGuess(c Client, guess string) {
 			res.Status = protocol.WordleLose
 		}
 		w.send(c, protocol.ServerDuelGuess, res)
-		w.send(them.p.client, protocol.ServerDuelOpponentGuess, protocol.DuelOpponentGuess{Colors: colors})
+		w.send(them.p.client, protocol.ServerDuelOpponentGuess, protocol.DuelOpponentGuess{Colors: row.shown})
 
 		switch {
 		case me.solved:

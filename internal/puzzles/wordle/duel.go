@@ -41,6 +41,10 @@ func (p DuelPuzzle) Score(guess, word string) (bool, []protocol.WordleColor) {
 	return Score(guess, word, p.words)
 }
 
+func (p DuelPuzzle) ScoreAny(guess, word string) (bool, []protocol.WordleColor) {
+	return ScoreAny(guess, word)
+}
+
 func (p DuelPuzzle) MaxGuesses() int {
 	return GuessesAllowed
 }

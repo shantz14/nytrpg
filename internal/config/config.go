@@ -17,7 +17,16 @@ type Config struct {
 	Debug bool
 	// Every duel is on this word, for end-to-end tests. Empty = a random word.
 	DuelWord string
+	// Who answers Clerics' prayers: PrayersClaude (the Claude API, when
+	// ANTHROPIC_API_KEY is set), PrayersFake (canned answers for end-to-end
+	// tests, PRAYER_FAKE=1), or nobody ("")
+	Prayers string
 }
+
+const (
+	PrayersClaude = "claude"
+	PrayersFake   = "fake"
+)
 
 func FromEnv() (Config, error) {
 	c := Config{
@@ -27,6 +36,13 @@ func FromEnv() (Config, error) {
 		JWTSecret: []byte(os.Getenv("JWT_SECRET")),
 		Debug:     os.Getenv("DEBUG") == "1",
 		DuelWord:  strings.ToUpper(os.Getenv("DUEL_WORD")),
+	}
+	// The SDK reads the key itself, this only checks one is there
+	switch {
+	case os.Getenv("PRAYER_FAKE") == "1":
+		c.Prayers = PrayersFake
+	case os.Getenv("ANTHROPIC_API_KEY") != "":
+		c.Prayers = PrayersClaude
 	}
 	if p := os.Getenv("PORT"); p != "" {
 		port, err := strconv.Atoi(p)

@@ -60,6 +60,11 @@ const (
 	ServerIllusionStart       ServerMsg = 21 // IllusionStart, you're trapped in an illusion
 	ServerIllusionGuess       ServerMsg = 22 // WordleRes, the result of your illusion guess
 	ServerIllusionEnd         ServerMsg = 23 // IllusionEnd, you escaped the illusion or failed it
+	ServerDuelPickpocket      ServerMsg = 24 // DuelPickpocket, the letter your Pickpocket revealed
+	ServerDuelPrayer          ServerMsg = 25 // DuelPrayer, your prayer was heard, answered or went unanswered
+	ServerDuelDivine          ServerMsg = 26 // DuelDivine, Divine Intervention changed the duel
+	ServerDuelGuessRemoved    ServerMsg = 27 // DuelGuessRemoved, a guess was mended away
+	ServerDuelReveal          ServerMsg = 28 // DuelReveal, the gods revealed a letter of your word
 )
 
 type envelope struct {
@@ -196,6 +201,10 @@ const (
 	TargetLetter AbilityTarget = 2
 	// A word from options the server sends (DuelReshapeOptions)
 	TargetWord AbilityTarget = 3
+	// One of your own guesses, by row
+	TargetOwnRow AbilityTarget = 4
+	// A color for each letter, not all green
+	TargetColors AbilityTarget = 5
 )
 
 // Always on, set off by something in the duel. An empty ID means none.
@@ -435,6 +444,8 @@ const (
 	DuelForfeit DuelEndReason = 2
 	// Someone disconnected
 	DuelDisconnect DuelEndReason = 3
+	// Divine Intervention's time limit ran out, a draw
+	DuelTimeUp DuelEndReason = 4
 )
 
 type DuelEnd struct {
@@ -494,6 +505,9 @@ type DuelCastReq struct {
 	Col int `msgpack:"col"`
 	// TargetLetter: the letter
 	Letter string `msgpack:"letter"`
+	// TargetOwnRow: the row is Row
+	// TargetColors: one per letter
+	Colors []WordleColor `msgpack:"colors"`
 }
 
 type DuelReshapeReq struct {
@@ -505,6 +519,9 @@ type DuelReshapeReq struct {
 type DuelState struct {
 	You  DuelSideState `msgpack:"you"`
 	Them DuelSideState `msgpack:"them"`
+	// Divine Intervention's time limit: the duel is a draw in this long. 0
+	// when there's none.
+	DeadlineMs int `msgpack:"deadlineMs"`
 }
 
 type DuelSideState struct {
@@ -523,6 +540,17 @@ type DuelSideState struct {
 	Illusion bool `msgpack:"illusion"`
 	// Once-only abilities they already used
 	Used []string `msgpack:"used"`
+	// How much longer they can't cast abilities, 0 when they can
+	SilencedMs int `msgpack:"silencedMs"`
+	// Guesses left on a scrambled keyboard, 0 when it isn't
+	ScrambledGuesses int `msgpack:"scrambledGuesses"`
+	// Your side only: what each key A-Z types while scrambled, "" when it
+	// isn't. Key i types Keymap[i].
+	Keymap string `msgpack:"keymap"`
+	// Your side only: your next guess needn't be a word (Cheat), and shows
+	// your opponent colors you picked (Feint)
+	CheatReady bool `msgpack:"cheatReady"`
+	FeintReady bool `msgpack:"feintReady"`
 }
 
 type DuelCastKind int
@@ -591,4 +619,71 @@ type IllusionEnd struct {
 	Solution string `msgpack:"solution"`
 	// Energy lost for failing it
 	EnergyLost int `msgpack:"energyLost"`
+	// Purify ended it, neither won nor lost
+	Purified bool `msgpack:"purified"`
+}
+
+// A letter in the opponent's guesses your Pickpocket revealed
+type DuelPickpocket struct {
+	Row    int    `msgpack:"row"`
+	Col    int    `msgpack:"col"`
+	Letter string `msgpack:"letter"`
+}
+
+type PrayerKind int
+
+const (
+	// A riddle about one letter of your word and where it goes
+	PrayerMinor PrayerKind = 0
+	// A riddle about your whole word
+	PrayerMajor PrayerKind = 1
+)
+
+// A Cleric's prayer, sent when it's heard (Pending) and again when a god
+// answers or none does (Failed, the energy is given back)
+type DuelPrayer struct {
+	ID      int        `msgpack:"id"`
+	Kind    PrayerKind `msgpack:"kind"`
+	Pending bool       `msgpack:"pending"`
+	Failed  bool       `msgpack:"failed"`
+	// The god who answered: name, title, and a CSS color for them
+	God      string `msgpack:"god"`
+	GodTitle string `msgpack:"godTitle"`
+	GodColor string `msgpack:"godColor"`
+	Text     string `msgpack:"text"`
+	// Energy given back when no god answered
+	Refunded int `msgpack:"refunded"`
+}
+
+type DivineFate int
+
+const (
+	// Both sides' guesses, energy and effects are wiped, the word stays
+	FateCleanSlate DivineFate = 0
+	// Both sides get one new word, guesses are scored against it
+	FateNewWord DivineFate = 1
+	// The duel is a draw if nobody solves in 2 minutes
+	FateSuddenDeath DivineFate = 2
+	// Both are shown the same position of their word (DuelReveal)
+	FateRevelation DivineFate = 3
+	// The two sides swap energy
+	FateFortune DivineFate = 4
+)
+
+// Divine Intervention: what the gods did, and what to proclaim about it
+type DuelDivine struct {
+	Fate   DivineFate `msgpack:"fate"`
+	Banner string     `msgpack:"banner"`
+}
+
+// Mend took a guess back: later rows move up one
+type DuelGuessRemoved struct {
+	Yours bool `msgpack:"yours"`
+	Row   int  `msgpack:"row"`
+}
+
+// A letter of your word and where it goes, from the gods
+type DuelReveal struct {
+	Col    int    `msgpack:"col"`
+	Letter string `msgpack:"letter"`
 }

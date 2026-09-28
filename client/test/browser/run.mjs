@@ -43,7 +43,11 @@ function freePort() {
 async function startServer() {
     server = spawn(bin, [], {
         // Duels are all on CRANE, so tests know what their guesses earn
-        env: { ...process.env, PORT: String(port), JWT_SECRET: "browser-test", DB_PATH: join(tmp, "test.db"), STATIC_DIR: join(ROOT, "client/static"), DUEL_WORD: "CRANE" },
+        env: { ...process.env, PORT: String(port), JWT_SECRET: "browser-test", DB_PATH: join(tmp, "test.db"), STATIC_DIR: join(ROOT, "client/static"), DUEL_WORD: "CRANE",
+            // Canned prayers: never the network, even with ANTHROPIC_API_KEY
+            // set. REAL_PRAYERS=1 asks Claude instead (costs a cent or two),
+            // to see real gods answer.
+            PRAYER_FAKE: process.env.REAL_PRAYERS ? "" : "1" },
         stdio: ["ignore", "ignore", "pipe"],
     });
     server.stderr.on("data", (d) => { if (process.env.VERBOSE) process.stderr.write(d); });
@@ -253,10 +257,11 @@ const texts = (page, t) => page.evaluate((t) => window.__texts.filter((d) => d.t
 // or off-center near the map's edges) or everyone else.
 async function draws(page, t, self) {
     const all = await page.evaluate((t) => window.__draws.filter((d) => d.t >= t), t);
-    // Both coordinates: another player can stand at the same x (spawns are
-    // random, it used to happen about 1 run in 200)
+    // y too: another player can stand at the same x (spawns are random, it
+    // used to happen about 1 run in 200). Within a pixel: page.pos is sent
+    // rounded, what's drawn can be half a pixel off it (that used to fail too).
     const [ownX, ownY] = toScreen(page, page.pos.x, page.pos.y);
-    return all.filter((d) => (Math.abs(d.x - ownX) < 0.5 && Math.abs(d.y - ownY) < 0.5) === self);
+    return all.filter((d) => (Math.abs(d.x - ownX) <= 1 && Math.abs(d.y - ownY) <= 1) === self);
 }
 const pageNow = (page) => page.evaluate(() => performance.now());
 
@@ -915,6 +920,92 @@ test("duel abilities: scry answers only the caster, illusion traps the opponent 
     await a.click("#hudAbilities");
     await waitFor(() => visible(a, "#ability-panel"), "panel from the HUD");
     assert((await a.$eval("#abilityPanelTitle", (e) => e.textContent)) === "Wizard abilities", "wizard panel");
+});
+
+test("rogue: feint fakes the colors the opponent sees, sneaky swaps their keys", async () => {
+    const a = await player({ char: "Robin", cls: "rogue" });
+    const b = await player({ char: "Tristan", cls: "knight" });
+    await startDuel(a, b);
+
+    // TRACE: 7 energy. Its greens set off Sneaky: two of b's keys swap.
+    await duelGuess(a, "trace");
+    await waitFor(async () => (await energy(a, "You")) === 7, "a's energy");
+    const keymap = await waitFor(() => received(b, 15).map((f) => f.d.you.keymap).findLast((k) => k), "b's scrambled keymap");
+    await waitFor(() => b.$eval("#duelYouEffects", (e) => !!e.querySelector(".effect-scrambled")), "b sees the scramble");
+    // Typing a swapped key puts the other letter in the box
+    const i = [...keymap].findIndex((k, i) => k !== String.fromCharCode(65 + i));
+    await b.keyboard.type(String.fromCharCode(97 + i));
+    await waitFor(async () => (await b.$eval("#duel-letter-0-0", (e) => e.value)) === keymap[i], "the swapped letter typed");
+    await b.keyboard.press("Backspace");
+
+    // Feint: pick green, yellow, grey, grey, grey for a's next guess
+    await a.click(slot(2));
+    await a.waitForSelector("#colorTiles .color-tile", { timeout: 3000 });
+    await a.click("#colorTiles .color-tile:nth-child(1)");
+    await a.click("#colorTiles .color-tile:nth-child(1)");
+    await a.click("#colorTiles .color-tile:nth-child(2)");
+    await shot(a, "feint-picker");
+    await a.click("#colorsCast");
+    await waitFor(async () => (await energy(a, "You")) === 1, "paid 6");
+    await duelGuess(a, "pilot");
+    const row2 = () => b.$$eval("#duelOpponent .opp-row:nth-child(2) .opp-tile", (els) => els.map((e) => (e.className.match(/tile-(green|yellow|grey)/) ?? [])[1]));
+    await waitFor(async () => JSON.stringify(await row2()) === '["green","yellow","grey","grey","grey"]', "b sees the feint");
+    assert(await a.$eval("#duel-letter-1-0", (e) => e.classList.contains("tile-grey")), "a sees PILOT's real colors");
+    await shot(b, "feinted");
+});
+
+test("cleric: a god answers a prayer in the prayer window, mend takes back a guess", async () => {
+    const a = await player({ char: "Anselm", cls: "cleric" });
+    const b = await player({ char: "Viviane", cls: "wizard" });
+    await startDuel(a, b);
+    await waitFor(() => visible(a, "#prayer-window"), "prayer window for the cleric");
+    assert(!(await visible(b, "#prayer-window")), "no prayer window for the wizard");
+
+    await duelGuess(a, "trace");
+    await waitFor(async () => (await energy(a, "You")) === 7, "a's energy");
+    await a.click(slot(0));
+    await waitFor(() => a.$eval(".prayer.answered .prayer-god-name", (e) => e.textContent).catch(() => ""), "an answer", 30000);
+    const answer = await a.$eval(".prayer.answered", (e) => ({
+        god: e.querySelector(".prayer-god-name").textContent,
+        kind: e.querySelector(".prayer-kind").textContent,
+        text: e.querySelector(".prayer-text").dataset.full,
+    }));
+    // The canned god, or with REAL_PRAYERS whoever Claude spoke for
+    const canned = answer.god === "Vaelith" && answer.text.startsWith("Seek the");
+    assert(answer.kind === "Minor prayer" && (canned || (process.env.REAL_PRAYERS && answer.text)), `answer ${JSON.stringify(answer)}`);
+    if (process.env.REAL_PRAYERS) {
+        console.log(`  ${answer.god}: ${answer.text}`);
+        await sleep(4000);
+    }
+    await waitFor(async () => (await energy(a, "You")) === 5, "paid 2");
+
+    // PILOT, then mend TRACE away: PILOT moves up on both screens
+    await duelGuess(a, "pilot");
+    await a.click(slot(1));
+    await waitFor(() => a.$eval("#duelBoard", (e) => e.classList.contains("targeting")), "picking a row");
+    await a.click("#duel-wordContainer0");
+    await waitFor(async () => (await a.$eval("#duel-letter-0-0", (e) => e.value)) === "P", "PILOT moved up");
+    assert(await a.$eval("#duel-letter-1-0", (e) => e.value === "" && !e.classList.contains("revealed")), "row 2 is free again");
+    await waitFor(() => b.$$eval("#duelOpponent .opp-row:nth-child(2) .opp-tile", (els) => els.every((e) => !e.classList.contains("revealed"))), "b sees the row go");
+    await shot(a, "prayer");
+});
+
+test("cleric: divine intervention proclaims the gods' will to both players", async () => {
+    const a = await player({ char: "Benedict", cls: "cleric" });
+    const b = await player({ char: "Morgause", cls: "wizard" });
+    await startDuel(a, b);
+    // TRACE 7, CANOE +3 (C in place, N found)
+    await duelGuess(a, "trace");
+    await duelGuess(a, "canoe");
+    await waitFor(async () => (await energy(a, "You")) === 10, "a's energy");
+    await a.click(slot(4));
+    for (const page of [a, b]) {
+        await waitFor(() => visible(page, "#divine-banner"), "the banner");
+        const text = await page.$eval("#divineText", (e) => e.textContent);
+        assert(/^THE GODS /.test(text), `banner ${text}`);
+    }
+    await shot(b, "divine");
+    await waitFor(async () => !(await visible(a, "#divine-banner")), "the banner goes", 6000);
 });
 
 test("an error while drawing one frame doesn't freeze the game", async () => {

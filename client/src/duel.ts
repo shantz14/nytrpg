@@ -6,14 +6,17 @@ import { LatestThrottle } from "./throttle.js";
 import { className } from "./classes.js";
 import { signed, tierFor } from "./ranks.js";
 import { rankBadge } from "./ranked-info.js";
-import { AbilityBar, castable, iconUrl } from "./abilities.js";
+import { AbilityBar, PICKPOCKET, PURIFY, castable, iconUrl, validPattern } from "./abilities.js";
+import { tileClass } from "./wordle-board.js";
 import {
     AbilityInfo, CastFizzled, CastLanded, CastTriggered, ClassInfo, ClientDuelCast, ClientDuelForfeit, ClientDuelGuess,
-    ClientDuelReshape, ClientDuelTyping, ClientIllusionGuess, DuelBoard, DuelCast, DuelCastReq, DuelDisconnect, DuelDraw,
-    DuelEnd, DuelEyes, DuelForfeit, DuelOpponentGuess, DuelOutOfGuesses, DuelReshapeOptions, DuelScry, DuelSideState,
-    DuelSolved, DuelStart, DuelState, DuelTyping, DuelWin, IllusionEnd, IllusionStart, TargetLetter, TargetOpponentTile,
-    TargetWord, WordleLose, WordleRes, WordleWin,
+    ClientDuelReshape, ClientDuelTyping, ClientIllusionGuess, DuelBoard, DuelCast, DuelCastReq, DuelDisconnect, DuelDivine,
+    DuelDraw, DuelEnd, DuelEyes, DuelForfeit, DuelGuessRemoved, DuelOpponentGuess, DuelOutOfGuesses, DuelPickpocket,
+    DuelReshapeOptions, DuelReveal, DuelScry, DuelSideState, DuelSolved, DuelStart, DuelState, DuelTimeUp, DuelTyping,
+    DuelWin, FateCleanSlate, Green, Grey, IllusionEnd, IllusionStart, TargetColors, TargetLetter, TargetOpponentTile,
+    TargetOwnRow, TargetWord, WordleColor, WordleLose, WordleRes, WordleWin, Yellow,
 } from "./protocol.gen.js";
+import { proclaim } from "./prayer-window.js";
 
 // Typing updates go out at most this often
 const TYPING_INTERVAL_MS = 50;
@@ -29,6 +32,16 @@ const FEED_LINES = 4;
 const ILLUSION_END_MS = 1600;
 
 const DEFAULT_HINT = "Enter submits · Backspace clears the row";
+
+// What a passive did, for the event feed: "<Passive>: <opponent> <did>" and
+// "<opponent>'s <Passive> <did to you>"
+const PASSIVE_EFFECTS: Record<string, [string, string]> = {
+    aggressive: ["is stunned", "stunned you"],
+    sneaky: ["has two keys swapped", "swapped two of your keys"],
+    divine_will: ["is silenced", "silenced you"],
+};
+
+const ORDINALS = ["1st", "2nd", "3rd", "4th", "5th", "6th"];
 
 type Side = "you" | "them";
 
@@ -152,13 +165,15 @@ export class Duel {
         if (e.key === "Escape") {
             if (this.opponent?.isPicking) {
                 this.opponent.cancelPick();
+            } else if (this.board?.isPickingRow) {
+                this.board.cancelPickRow();
             } else if (this.layer) {
                 this.closeLayer();
             }
             return;
         }
         const slot = Number(e.key) - 1;
-        if (e.key.length === 1 && slot >= 0 && slot < 5 && !this.layer && !this.illusion && !e.repeat) {
+        if (e.key.length === 1 && slot >= 0 && slot < 5 && !this.layer && !e.repeat) {
             const a = this.game.state.selfClass?.abilities[slot];
             if (a?.id) {
                 e.preventDefault();
@@ -169,20 +184,40 @@ export class Duel {
 
     // Casts the ability in slot, picking its target first if it needs one
     private async use(slot: number, a: AbilityInfo) {
-        if (this.ended || !castable(a, this.state) || this.illusion) {
+        // Only Purify works from inside an Illusion
+        if (this.ended || !castable(a, this.state) || (this.illusion && a.id !== PURIFY)) {
             return;
         }
         const opponent = this.opponent!;
-        if (opponent.isPicking) {
+        const board = this.board!;
+        if (opponent.isPicking || board.isPickingRow) {
             // Clicking it again cancels
             opponent.cancelPick();
+            board.cancelPickRow();
             return;
         }
-        const req: DuelCastReq = { slot, row: 0, col: 0, letter: "" };
-        if (a.target === TargetOpponentTile) {
+        const req: DuelCastReq = { slot, row: 0, col: 0, letter: "", colors: [] };
+        if (a.target === TargetOwnRow) {
             this.bar?.setPicking(slot);
-            this.setHint(`Click a letter in ${this.opponentName}'s guesses to ${a.name.toLowerCase()} it · Esc cancels`);
-            const tile = await opponent.pickTile();
+            this.setHint(`Click one of your guesses to ${a.name.toLowerCase()} it · Esc cancels`);
+            const row = await board.pickRow();
+            this.bar?.setPicking(null);
+            this.setHint(null);
+            if (row === null || this.ended) {
+                board.focus();
+                return;
+            }
+            req.row = row;
+            this.game.send(ClientDuelCast, req);
+            return;
+        } else if (a.target === TargetColors) {
+            this.pickColors(slot, a);
+            return;
+        } else if (a.target === TargetOpponentTile) {
+            const yellowOnly = a.id === PICKPOCKET;
+            this.bar?.setPicking(slot);
+            this.setHint(`Click ${yellowOnly ? "a yellow" : "a"} letter in ${this.opponentName}'s guesses to ${a.name.toLowerCase()} it · Esc cancels`);
+            const tile = await opponent.pickTile(yellowOnly);
             this.bar?.setPicking(null);
             this.setHint(null);
             if (!tile || this.ended) {
@@ -223,6 +258,35 @@ export class Duel {
             grid.appendChild(btn);
         }
         (grid.firstElementChild as HTMLElement).focus();
+    }
+
+    // Feint and Under Their Nose: click tiles to cycle grey, yellow, green
+    private pickColors(slot: number, a: AbilityInfo) {
+        const layer = this.openLayer("tpl-duel-colors");
+        layer.querySelector("#colorsTitle")!.textContent = a.name;
+        layer.querySelector("#colorsText")!.textContent = a.description;
+        const cycle: WordleColor[] = [Grey, Yellow, Green];
+        const colors: WordleColor[] = Array(this.start.wordLength).fill(Grey);
+        const cast = layer.querySelector<HTMLButtonElement>("#colorsCast")!;
+        const tiles = layer.querySelector("#colorTiles")!;
+        colors.forEach((_, i) => {
+            const tile = document.createElement("button");
+            tile.type = "button";
+            tile.className = "color-tile tile-grey";
+            tile.setAttribute("aria-label", `Letter ${i + 1}`);
+            tile.addEventListener("click", () => {
+                colors[i] = cycle[(cycle.indexOf(colors[i]) + 1) % cycle.length];
+                tile.className = "color-tile " + tileClass(colors[i]);
+                cast.disabled = !validPattern(colors, this.start.wordLength);
+            });
+            tiles.appendChild(tile);
+        });
+        cast.addEventListener("click", () => {
+            this.closeLayer();
+            const req: DuelCastReq = { slot, row: 0, col: 0, letter: "", colors };
+            this.game.send(ClientDuelCast, req);
+        });
+        (tiles.firstElementChild as HTMLElement).focus();
     }
 
     private openLayer(templateId: string): HTMLElement {
@@ -320,6 +384,10 @@ export class Duel {
             this.setYouStatus(DEFAULT_HINT);
         }
         board.setDisabled(s.you.stunnedMs > 0 || s.you.illusion);
+        board.setKeymap(s.you.keymap);
+        this.illusion?.board.setKeymap(s.you.keymap);
+        popup.q("#duelAbilityBar").classList.toggle("silenced", s.you.silencedMs > 0);
+        popup.q("#duelDeadline").hidden = s.deadlineMs <= 0;
         this.bar?.update(s);
         this.updateOpponentStatus();
         this.tickCountdowns();
@@ -367,6 +435,19 @@ export class Duel {
         if (st.illusion) {
             chip("illusion", "In an illusion", "effect-illusion");
         }
+        if (st.silencedMs > 0) {
+            chip("divine_will", "Silenced", "effect-silenced").dataset.ms = String(st.silencedMs);
+        }
+        if (st.scrambledGuesses > 0) {
+            const n = st.scrambledGuesses;
+            chip("confuse", `Scrambled keys · ${n} guess${n === 1 ? "" : "es"}`, "effect-scrambled");
+        }
+        if (st.cheatReady) {
+            chip("cheat", "Next guess: any letters", "effect-ready");
+        }
+        if (st.feintReady) {
+            chip("feint", "Next guess feints", "effect-ready");
+        }
         st.missilesMs.forEach((ms) => {
             const c = chip("magic_missile", side === "you" ? "Guess before it lands!" : "Missile", "effect-missile");
             c.dataset.ms = String(ms);
@@ -396,6 +477,15 @@ export class Duel {
             const left = Math.max(0, Number(chip.dataset.ms) - elapsed);
             const fill = chip.querySelector<HTMLElement>(".missile-bar span")!;
             fill.style.width = `${100 * (1 - left / MISSILE_FLIGHT_MS)}%`;
+        }
+        for (const chip of popup.root.querySelectorAll<HTMLElement>(".effect-silenced")) {
+            const left = Math.max(0, Number(chip.dataset.ms) - elapsed);
+            chip.lastChild!.textContent = `Silenced ${Math.ceil(left / 1000)}s`;
+        }
+        const deadline = popup.q("#duelDeadline");
+        if (!deadline.hidden) {
+            const left = Math.max(0, Math.ceil((this.state.deadlineMs - elapsed) / 1000));
+            deadline.textContent = `⌛ ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
         }
     }
 
@@ -437,7 +527,8 @@ export class Duel {
                     text = "Wise: your Seeing Eyes moved";
                     this.fx("you", ev.ability, "fx-cast");
                 } else {
-                    text = ev.byYou ? `${name}: ${opp} is stunned` : `${opp}'s ${name} stunned you`;
+                    const [did, didToYou] = PASSIVE_EFFECTS[ev.ability] ?? ["is struck", "struck you"];
+                    text = ev.byYou ? `${name}: ${opp} ${did}` : `${opp}'s ${name} ${didToYou}`;
                     this.fx(target, ev.ability, "fx-slam");
                     this.hit(target);
                 }
@@ -615,6 +706,7 @@ export class Duel {
             idPrefix: "illusion-",
         });
         board.onSubmit = (guess) => this.game.send(ClientIllusionGuess, { guess });
+        board.setKeymap(this.state?.you.keymap ?? "");
         this.board?.setDisabled(true);
         this.illusion = { board, layer };
         board.focus();
@@ -643,13 +735,71 @@ export class Duel {
         }
         ill.board.lock();
         const status = ill.layer.querySelector("#illusionStatus")!;
-        status.textContent = end.won ? "You saw through the illusion!" : `The word was ${end.solution}. You lost ${end.energyLost} energy.`;
-        status.classList.add(end.won ? "won" : "lost");
+        status.textContent = end.purified ? "The illusion fades away."
+            : end.won ? "You saw through the illusion!" : `The word was ${end.solution}. You lost ${end.energyLost} energy.`;
+        status.classList.add(end.won || end.purified ? "won" : "lost");
         this.illusion = null;
         setTimeout(() => {
             ill.layer.remove();
             this.board?.focus();
         }, ILLUSION_END_MS);
+    }
+
+    // Pickpocket: a yellow letter of theirs, revealed for good
+    public handlePickpocket(p: DuelPickpocket) {
+        this.opponent?.showPickpocket(p.row, p.col, p.letter);
+        this.feed(`You pickpocketed a ${p.letter}`, "mine");
+    }
+
+    // Mend took a guess back, yours or theirs
+    public handleGuessRemoved(r: DuelGuessRemoved) {
+        if (this.ended) {
+            return;
+        }
+        if (r.yours) {
+            this.board?.removeGuess(r.row);
+            if (this.out) {
+                this.out = false;
+                this.board?.unlock();
+                this.setYouStatus(DEFAULT_HINT);
+            }
+        } else {
+            this.opponent?.removeGuess(r.row);
+            this.updateOpponentStatus();
+        }
+    }
+
+    // Divine Intervention: the proclamation, and a clean slate if that's
+    // what the gods chose. Everything else follows in other messages.
+    public handleDivine(d: DuelDivine) {
+        if (this.ended) {
+            return;
+        }
+        proclaim(d.banner);
+        this.feed(d.banner.charAt(0) + d.banner.slice(1).toLowerCase(), "divine");
+        if (d.fate === FateCleanSlate) {
+            this.out = false;
+            this.board?.reset(this.start.maxGuesses);
+            this.opponent?.reset(this.start.maxGuesses);
+            this.popup?.q("#duelScry").replaceChildren();
+            this.scried.clear();
+            this.setYouStatus(DEFAULT_HINT);
+            this.updateOpponentStatus();
+        }
+    }
+
+    // The gods revealed a letter of your word and where it goes
+    public handleReveal(r: DuelReveal) {
+        const chips = this.popup?.q("#duelScry");
+        if (!chips) {
+            return;
+        }
+        const chip = document.createElement("span");
+        chip.className = "scry-chip reveal-chip tile-green";
+        chip.textContent = `${ORDINALS[r.col] ?? r.col + 1}: ${r.letter}`;
+        chip.title = `The gods say your word's ${ORDINALS[r.col]} letter is ${r.letter}`;
+        chips.appendChild(chip);
+        this.feed(chip.title, "divine");
     }
 
     private updateOpponentStatus() {
@@ -708,6 +858,8 @@ export class Duel {
             text = end.outcome == DuelWin ? `${name} left the duel.` : "You left the duel.";
         } else if (end.reason == DuelOutOfGuesses) {
             text = `Neither of you found the word.`;
+        } else if (end.reason == DuelTimeUp) {
+            text = "Time ran out. The gods call it a draw.";
         } else {
             text = end.outcome == DuelWin ? `You found the word before ${name}.` : `${name} found the word first.`;
         }

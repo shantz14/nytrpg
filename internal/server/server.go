@@ -17,6 +17,7 @@ import (
 	"nytrpg/internal/config"
 	"nytrpg/internal/game"
 	"nytrpg/internal/netconn"
+	"nytrpg/internal/oracle"
 	"nytrpg/internal/puzzles/wordle"
 	"nytrpg/internal/ranked"
 	"nytrpg/internal/store"
@@ -69,6 +70,14 @@ func New(cfg config.Config) (*Server, error) {
 		duels = duels.WithWord(cfg.DuelWord)
 	}
 	world.Duels = duels
+	switch cfg.Prayers {
+	case config.PrayersClaude:
+		world.Oracle = oracle.NewClaude()
+	case config.PrayersFake:
+		world.Oracle = oracle.Fake{}
+	default:
+		slog.Info("prayers disabled: set ANTHROPIC_API_KEY for the gods to answer")
+	}
 	s.ranked = ranked.NewService(st)
 	world.OnRanked = s.ranked.Record
 	world.History = s.ranked

@@ -61,6 +61,8 @@ func NewServer(t testing.TB) *Server {
 		DBPath:    filepath.Join(t.TempDir(), "test.db"),
 		StaticDir: t.TempDir(),
 		JWTSecret: []byte("test-secret"),
+		// Canned answers, never the network (or anyone's API key)
+		Prayers: config.PrayersFake,
 	}
 	srv, err := server.New(cfg)
 	if err != nil {

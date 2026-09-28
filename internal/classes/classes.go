@@ -38,6 +38,20 @@ const (
 	Illusion       = "illusion"
 	ReshapeReality = "reshape_reality"
 	Wise           = "wise"
+
+	Pickpocket     = "pickpocket"
+	Cheat          = "cheat"
+	Feint          = "feint"
+	UnderTheirNose = "under_their_nose"
+	Confuse        = "confuse"
+	Sneaky         = "sneaky"
+
+	MinorPrayer        = "minor_prayer"
+	Mend               = "mend"
+	Purify             = "purify"
+	MajorPrayer        = "major_prayer"
+	DivineIntervention = "divine_intervention"
+	DivineWill         = "divine_will"
 )
 
 // Something a player casts in a duel for energy
@@ -108,8 +122,40 @@ var all = []Class{
 		Passive: &Passive{ID: Wise, Name: "Wise",
 			Description: "Guesses that find a new green letter move your Seeing Eyes right away."},
 	},
-	{ID: Rogue, Name: "Rogue", Description: "A quick, sly trickster.", Sprite: "rogue.png"},
-	{ID: Cleric, Name: "Cleric", Description: "A healer who calls on divine power.", Sprite: "cleric.png"},
+	{
+		ID: Rogue, Name: "Rogue", Description: "A quick, sly trickster.", Sprite: "rogue.png",
+		Abilities: [AbilitySlots]*Ability{
+			{ID: Pickpocket, Name: "Pickpocket", Cost: 2, Target: protocol.TargetOpponentTile,
+				Description: "Pick a yellow letter in your opponent's guesses and see what it is."},
+			{ID: Cheat, Name: "Cheat", Cost: 5,
+				Description: "Your next guess doesn't have to be a real word."},
+			{ID: Feint, Name: "Feint", Cost: 6, Target: protocol.TargetColors,
+				Description: "Pick the colors your next guess shows your opponent."},
+			{ID: UnderTheirNose, Name: "Under Their Nose", Cost: 7, Target: protocol.TargetColors,
+				Description: "Pick the colors your opponent's next guess shows them. They won't know. If they guess the word, they still win."},
+			{ID: Confuse, Name: "Confuse", Cost: 10,
+				Description: "Scramble every letter on your opponent's keyboard for their next 2 guesses."},
+		},
+		Passive: &Passive{ID: Sneaky, Name: "Sneaky",
+			Description: "Guesses that find a new green letter swap two letters on your opponent's keyboard for their next 2 guesses."},
+	},
+	{
+		ID: Cleric, Name: "Cleric", Description: "A healer who calls on divine power.", Sprite: "cleric.png",
+		Abilities: [AbilitySlots]*Ability{
+			{ID: MinorPrayer, Name: "Minor Prayer", Cost: 2,
+				Description: "Pray to the gods for a riddle about one letter of your word and where it goes. Whichever god hears you will answer in their own way."},
+			{ID: Mend, Name: "Mend", Cost: 3, Target: protocol.TargetOwnRow,
+				Description: "Take back one of your guesses and try again."},
+			{ID: Purify, Name: "Purify", Cost: 4,
+				Description: "Cleanse yourself of every curse: stuns, silence, a scrambled keyboard, missiles, illusions and hidden tricks."},
+			{ID: MajorPrayer, Name: "Major Prayer", Cost: 6,
+				Description: "Pray to the gods for a cryptic riddle about your whole word."},
+			{ID: DivineIntervention, Name: "Divine Intervention", Cost: 10,
+				Description: "Beg the gods to intervene. Something will change. Not even you know what."},
+		},
+		Passive: &Passive{ID: DivineWill, Name: "Divine Will",
+			Description: "Guesses that find a new green letter silence your opponent for 10 seconds: no abilities."},
+	},
 }
 
 var byID = func() map[ID]*Class {
