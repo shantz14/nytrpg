@@ -87,14 +87,15 @@ docker run -p 8080:8080 -e JWT_SECRET=<some long random string> -v $(pwd)/db:/ny
 
 ### Deploying to EC2
 
-`docker-compose.yml` runs the game behind Caddy, which serves HTTPS with a Let's Encrypt
-certificate when `SITE_ADDRESS` is a domain (or plain HTTP on `:80`) and hides `/debug/*`.
+Live at https://nytrpg.isaacschwarz.dev: an Amazon Linux t3.micro-class instance where a
+Cloudflare Tunnel (`cloudflared`, config in `/etc/cloudflared/config.yml`) forwards the domain to
+the app on `127.0.0.1:8080` and returns 404 for `/debug/*`. The instance is too small to build the
+image, so `deploy/update.sh` builds it on your machine and streams it over SSH.
 
-1. Launch an instance (Amazon Linux 2023 or Ubuntu, t3.small or larger; a micro works with the swap
-   the setup script adds). Security group: inbound 22 from your IP, 80 and 443 from anywhere.
-   Attach an Elastic IP so the address survives a stop/start, and point your domain's A record at it.
-2. On the instance: `curl -fsSL https://raw.githubusercontent.com/shantz14/nytrpg/main/deploy/ec2-setup.sh | bash`,
-   log out and back in, fill in `~/nytrpg/.env` (see `.env.example`), then `cd ~/nytrpg && docker compose up -d --build`.
-3. Later deploys, from your machine after pushing to main: `EC2_HOST=ec2-user@<ip> deploy/update.sh`.
+- Deploy: `EC2_HOST=ec2-user@98.89.239.164 deploy/update.sh`
+- Logs: `ssh ... 'cd ~/nytrpg && docker compose logs -f app'`
+- Settings: `~/nytrpg/.env` on the instance (see `.env.example`). The database is `~/nytrpg/db`, so back that directory up.
 
-Logs: `docker compose logs -f app`. The database lives in `~/nytrpg/db`, so back that directory up.
+On a fresh instance, run `deploy/ec2-setup.sh` there first (Docker, compose, swap, `.env`).
+Without a tunnel, set `COMPOSE_PROFILES=caddy` and `SITE_ADDRESS=<domain>` in `.env` and Caddy
+serves HTTPS itself (open ports 80 and 443).

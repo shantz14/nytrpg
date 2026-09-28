@@ -1,8 +1,11 @@
-# Production: the game behind Caddy, which gets a Let's Encrypt certificate
-# for SITE_ADDRESS. Settings come from .env next to this file (see .env.example).
-#   docker compose up -d --build
+# Production. Settings come from .env next to this file (see .env.example).
+#   docker compose up -d
+# The app listens on 127.0.0.1:8080 for a Cloudflare Tunnel (or any proxy on
+# the host). To have Caddy serve HTTPS itself instead, set
+# COMPOSE_PROFILES=caddy and SITE_ADDRESS=<your domain> in .env.
 services:
   app:
+    image: nytrpg:latest
     build: .
     restart: unless-stopped
     environment:
@@ -10,11 +13,12 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
       - ./db:/nytrpg/db
-    expose:
-      - "8080"
+    ports:
+      - "127.0.0.1:8080:8080"
 
   caddy:
     image: caddy:2
+    profiles: [caddy]
     restart: unless-stopped
     depends_on:
       - app
